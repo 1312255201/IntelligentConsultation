@@ -76,6 +76,7 @@
             <p class="remark-text">{{ item.remark || '该就诊人档案可用于后续 AI 导诊、问诊和预约流程。' }}</p>
 
             <div class="action-row">
+              <el-button link @click="goHealthPage(item)">健康档案</el-button>
               <el-button link type="primary" @click="openEditDialog(item)">编辑</el-button>
               <el-button link type="danger" @click="removePatient(item)">删除</el-button>
             </div>
@@ -168,8 +169,10 @@
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { get, post } from '@/net'
 
+const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const dialogVisible = ref(false)
@@ -318,6 +321,13 @@ function removePatient(row) {
       ElMessage.warning(message || '就诊人删除失败')
     })
   }).catch(() => {})
+}
+
+function goHealthPage(row) {
+  router.push({
+    path: '/index/health',
+    query: { patientId: String(row.id) }
+  })
 }
 
 function patientMeta(item) {

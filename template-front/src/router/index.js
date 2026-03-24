@@ -58,6 +58,11 @@ const router = createRouter({
           component: () => import('@/views/index/PatientPage.vue')
         },
         {
+          path: 'health',
+          name: 'index-health',
+          component: () => import('@/views/index/HealthPage.vue')
+        },
+        {
           path: 'overview',
           name: 'index-overview',
           component: () => import('@/views/index/OverviewPage.vue')

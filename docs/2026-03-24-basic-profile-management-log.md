@@ -100,6 +100,52 @@
 - 后端执行 `mvn -q -DskipTests compile` 已通过
 - 前端执行 `npm run build` 已通过
 
+### 1.2 用户端健康档案管理
+
+已完成：
+
+- 按就诊人维护一对一健康档案
+- 支持维护过敏史、既往病史、慢性病史、手术史、家族史
+- 支持维护长期用药、孕期状态、哺乳状态、传染病史
+- 登录后工作台新增 `健康档案` 页面入口
+- 就诊人管理页支持直接跳转到对应就诊人的健康档案
+
+后端接口：
+
+- `GET /api/user/medical-history/list`
+- `GET /api/user/medical-history/detail?patientId=xxx`
+- `POST /api/user/medical-history/save`
+- `GET /api/user/medical-history/delete?patientId=xxx`
+
+相关后端文件：
+
+- `template-backend/src/main/java/cn/gugufish/controller/PatientMedicalHistoryController.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/PatientMedicalHistory.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/PatientMedicalHistoryMapper.java`
+- `template-backend/src/main/java/cn/gugufish/service/PatientMedicalHistoryService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/PatientMedicalHistoryServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/request/PatientMedicalHistorySaveVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/PatientMedicalHistoryVO.java`
+
+相关前端文件：
+
+- `template-front/src/views/index/HealthPage.vue`
+- `template-front/src/views/index/PatientPage.vue`
+- `template-front/src/views/IndexView.vue`
+- `template-front/src/router/index.js`
+
+实现说明：
+
+- 当前健康档案与就诊人是 `一对一` 关系
+- 健康档案保存时要求至少填写一项有效信息，避免产生空档案
+- 删除就诊人时，其健康档案会通过外键级联一起删除
+- 当前阶段先完成基础病史信息维护，结构化健康标签将在后续单独扩展
+
+验证结果：
+
+- 后端执行 `mvn -q -DskipTests compile` 已通过
+- 前端执行 `npm run build` 已通过
+
 ### 2. 管理员端基础框架
 
 已完成：
@@ -476,6 +522,7 @@
 - `db_department`
 - `db_doctor`
 - `db_patient_profile`
+- `db_patient_medical_history`
 - `db_homepage_config`
 - `db_homepage_recommend_doctor`
 - `db_homepage_case`

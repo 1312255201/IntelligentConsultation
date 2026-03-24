@@ -94,6 +94,28 @@ CREATE TABLE IF NOT EXISTS `db_patient_profile` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_patient_medical_history` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `patient_id` int NOT NULL,
+  `allergy_history` text,
+  `past_history` text,
+  `chronic_history` text,
+  `surgery_history` text,
+  `family_history` text,
+  `medication_history` text,
+  `pregnancy_status` varchar(20) NOT NULL DEFAULT 'unknown',
+  `lactation_status` varchar(20) NOT NULL DEFAULT 'unknown',
+  `infectious_history` text,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_patient_medical_history_patient` (`patient_id`),
+  CONSTRAINT `fk_patient_medical_history_patient`
+    FOREIGN KEY (`patient_id`) REFERENCES `db_patient_profile` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_homepage_config` (
   `id` int NOT NULL,
   `hero_title` varchar(100) NOT NULL,
@@ -158,5 +180,6 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
 -- 4. To grant an existing account administrator permissions:
 --    UPDATE db_account SET role = 'admin' WHERE username = 'your_admin_username';
 -- 5. One account can maintain multiple patient profiles for self or family members.
--- 6. Department rows referenced by doctors cannot be deleted until those doctors are removed or reassigned.
--- 7. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.
+-- 6. Each patient profile can maintain one medical history archive for AI triage and consultation intake.
+-- 7. Department rows referenced by doctors cannot be deleted until those doctors are removed or reassigned.
+-- 8. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.

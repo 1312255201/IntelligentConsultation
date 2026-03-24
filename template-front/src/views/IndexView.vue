@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import { House, User, UserFilled } from '@element-plus/icons-vue'
+import { DocumentChecked, House, User, UserFilled } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -27,6 +27,12 @@ const menuItems = [
     icon: UserFilled
   },
   {
+    index: '/index/health',
+    title: '健康档案',
+    description: '按就诊人维护过敏史、既往史、慢病史和长期用药等核心健康信息。',
+    icon: DocumentChecked
+  },
+  {
     index: '/index/overview',
     title: '系统概览',
     description: '查看当前系统建设进度与基础状态。',
@@ -34,5 +40,5 @@ const menuItems = [
   }
 ]
 
-const footerText = '当前阶段已完成基础资料维护、就诊人管理和头像上传能力。'
+const footerText = '当前阶段已完成基础资料维护、就诊人管理、健康档案和头像上传能力。'
 </script>
