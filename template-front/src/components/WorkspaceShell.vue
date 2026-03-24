@@ -24,7 +24,7 @@
         </el-menu-item>
       </el-menu>
 
-      <div class="side-footer">
+      <div v-if="footerText" class="side-footer">
         {{ footerText }}
       </div>
     </aside>
@@ -34,7 +34,7 @@
         <div class="page-meta">
           <div class="page-kicker">{{ pageKicker }}</div>
           <h1>{{ currentItem.title }}</h1>
-          <p>{{ currentItem.description }}</p>
+          <p v-if="currentItem.description">{{ currentItem.description }}</p>
         </div>
 
         <div class="user-panel">

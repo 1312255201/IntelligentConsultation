@@ -1,18 +1,5 @@
 <template>
   <div class="department-page">
-    <section class="hero-card">
-      <div>
-        <span class="section-tag">Department Maintenance</span>
-        <h2>管理员可以在这里统一维护科室信息。</h2>
-        <p>
-          支持新增、编辑、删除和启停科室，后续患者建档、预约挂号和智能问诊分诊都可以直接复用这些基础数据。
-        </p>
-      </div>
-      <el-button type="primary" size="large" round @click="openCreateDialog">
-        新增科室
-      </el-button>
-    </section>
-
     <section class="stat-grid">
       <article class="stat-card">
         <span>科室总数</span>
@@ -237,6 +224,8 @@ function removeDepartment(row) {
     get(`/api/admin/department/delete?id=${row.id}`, () => {
       ElMessage.success('科室删除成功')
       loadDepartments()
+    }, (message) => {
+      ElMessage.warning(message || '科室删除失败')
     })
   }).catch(() => {})
 }
@@ -262,48 +251,12 @@ onMounted(() => loadDepartments())
   gap: 18px;
 }
 
-.hero-card,
 .stat-card,
 .table-card {
   border: 1px solid var(--app-border);
   border-radius: 28px;
   background: var(--app-panel);
   box-shadow: var(--app-shadow);
-}
-
-.hero-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  padding: 28px;
-  background:
-    linear-gradient(135deg, rgba(134, 225, 211, 0.22), rgba(255, 210, 153, 0.22)),
-    var(--app-panel);
-}
-
-.hero-card h2 {
-  margin: 18px 0 12px;
-  font-size: 34px;
-  line-height: 1.2;
-}
-
-.hero-card p {
-  max-width: 820px;
-  margin: 0;
-  color: var(--app-muted);
-  line-height: 1.8;
-}
-
-.section-tag {
-  display: inline-flex;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(19, 73, 80, 0.08);
-  color: #27646d;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .stat-grid {
@@ -350,15 +303,14 @@ onMounted(() => loadDepartments())
 }
 
 @media (max-width: 960px) {
-  .hero-card,
-  .toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .stat-grid,
   .dialog-grid {
     grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .toolbar-actions {

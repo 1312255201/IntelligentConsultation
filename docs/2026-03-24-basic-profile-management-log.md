@@ -218,6 +218,41 @@
 - `template-front/src/views/admin/DepartmentPage.vue`
 - `template-front/src/components/WorkspaceShell.vue`
 
+## 管理员医生管理
+
+本轮新增了管理员医生管理能力，覆盖以下内容：
+
+- 医生与科室绑定
+- 医生照片上传
+- 医生介绍维护
+- 医生专长维护
+- 医生启停状态维护
+- 医生新增、编辑、删除
+
+新增后端接口：
+
+- `GET /api/admin/doctor/list`
+- `POST /api/admin/doctor/create`
+- `POST /api/admin/doctor/update`
+- `GET /api/admin/doctor/delete?id=xxx`
+- `POST /api/admin/doctor/upload-photo`
+
+新增主要文件：
+
+- `template-backend/src/main/java/cn/gugufish/entity/dto/Doctor.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/DoctorMapper.java`
+- `template-backend/src/main/java/cn/gugufish/service/DoctorService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/DoctorServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminDoctorController.java`
+- `template-front/src/views/admin/DoctorPage.vue`
+
+相关调整：
+
+- `sql/mysql57-init.sql` 新增 `db_doctor` 表
+- 删除科室前会先校验该科室下是否仍有绑定医生
+- 管理员前端菜单新增“医生信息维护”
+- 管理员页面移除了原来的大段说明展示区块，只保留实际管理内容
+
 ## 目前的实现约定
 
 - 邮箱修改当前采用“输入新邮箱 + 输入当前密码确认”的方案
