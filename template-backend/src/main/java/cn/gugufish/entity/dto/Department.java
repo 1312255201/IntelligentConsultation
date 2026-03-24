@@ -10,23 +10,20 @@ import lombok.NoArgsConstructor;
 
 import java.util.Date;
 
-/**
- * 数据库中的用户信息
- */
-/**
- * 数据库中的用户信息
- */
 @Data
-@TableName("db_account")
-@AllArgsConstructor
+@TableName("db_department")
 @NoArgsConstructor
-public class Account implements BaseData {
+@AllArgsConstructor
+public class Department implements BaseData {
     @TableId(type = IdType.AUTO)
     Integer id;
-    String username;
-    String password;
-    String email;
-    String role;
-    String avatar;
-    Date registerTime;
+    String name;
+    String code;
+    String description;
+    String location;
+    String phone;
+    Integer sort;
+    Integer status;
+    Date createTime;
+    Date updateTime;
 }

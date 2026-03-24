@@ -1,45 +1,101 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { unauthorized } from "@/net";
+import { resolveHomeRouteByRole, takeAccessRole, unauthorized } from '@/net'
 
 const router = createRouter({
-    history: createWebHistory(import.meta.env.BASE_URL),
-    routes: [
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: '/',
+      name: 'welcome',
+      component: () => import('@/views/WelcomeView.vue'),
+      children: [
         {
-            path: '/',
-            name: 'welcome',
-            component: () => import('@/views/WelcomeView.vue'),
-            children: [
-                {
-                    path: '',
-                    name: 'welcome-login',
-                    component: () => import('@/views/welcome/LoginPage.vue')
-                }, {
-                    path: 'register',
-                    name: 'welcome-register',
-                    component: () => import('@/views/welcome/RegisterPage.vue')
-                }, {
-                    path: 'forget',
-                    name: 'welcome-forget',
-                    component: () => import('@/views/welcome/ForgetPage.vue')
-                }
-            ]
-        }, {
-            path: '/index',
-            name: 'index',
-            component: () => import('@/views/IndexView.vue'),
+          path: '',
+          name: 'welcome-login',
+          component: () => import('@/views/welcome/LoginPage.vue')
+        },
+        {
+          path: 'register',
+          name: 'welcome-register',
+          component: () => import('@/views/welcome/RegisterPage.vue')
+        },
+        {
+          path: 'forget',
+          name: 'welcome-forget',
+          component: () => import('@/views/welcome/ForgetPage.vue')
         }
-    ]
+      ]
+    },
+    {
+      path: '/index',
+      component: () => import('@/views/IndexView.vue'),
+      redirect: '/index/profile',
+      children: [
+        {
+          path: 'profile',
+          name: 'index-profile',
+          component: () => import('@/views/index/ProfilePage.vue')
+        },
+        {
+          path: 'overview',
+          name: 'index-overview',
+          component: () => import('@/views/index/OverviewPage.vue')
+        }
+      ]
+    },
+    {
+      path: '/admin',
+      component: () => import('@/views/AdminView.vue'),
+      redirect: '/admin/department',
+      children: [
+        {
+          path: 'department',
+          name: 'admin-department',
+          component: () => import('@/views/admin/DepartmentPage.vue')
+        },
+        {
+          path: 'profile',
+          name: 'admin-profile',
+          component: () => import('@/views/index/ProfilePage.vue')
+        }
+      ]
+    }
+  ]
 })
 
 router.beforeEach((to, from, next) => {
-    const isUnauthorized = unauthorized()
-    if(to.name.startsWith('welcome') && !isUnauthorized) {
-        next('/index')
-    } else if(to.fullPath.startsWith('/index') && isUnauthorized) {
-        next('/')
-    } else {
-        next()
+  const isUnauthorized = unauthorized()
+  const role = takeAccessRole()
+  const routeName = String(to.name || '')
+
+  if (routeName.startsWith('welcome') && !isUnauthorized) {
+    next(resolveHomeRouteByRole(role))
+    return
+  }
+
+  if (to.path.startsWith('/admin')) {
+    if (isUnauthorized) {
+      next('/')
+      return
     }
+    if (role && role !== 'admin') {
+      next(resolveHomeRouteByRole(role))
+      return
+    }
+  }
+
+  if (to.path.startsWith('/index')) {
+    if (isUnauthorized) {
+      next('/')
+      return
+    }
+    if (role === 'admin') {
+      next(resolveHomeRouteByRole(role))
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

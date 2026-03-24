@@ -54,8 +54,10 @@ public class SecurityConfiguration {
         return http
                 .authorizeHttpRequests(conf -> conf
                         .requestMatchers("/api/auth/**", "/error").permitAll()
+                        .requestMatchers("/images/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .anyRequest().hasAnyRole(Const.ROLE_DEFAULT)
+                        .requestMatchers("/api/admin/**").hasRole(Const.ROLE_ADMIN)
+                        .anyRequest().hasAnyRole(Const.ROLE_DEFAULT, Const.ROLE_ADMIN)
                 )
                 .formLogin(conf -> conf
                         .loginProcessingUrl("/api/auth/login")
