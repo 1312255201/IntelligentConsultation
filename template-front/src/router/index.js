@@ -90,6 +90,26 @@ const router = createRouter({
           component: () => import('@/views/admin/DoctorPage.vue')
         },
         {
+          path: 'doctor-service',
+          name: 'admin-doctor-service',
+          component: () => import('@/views/admin/DoctorServiceTagPage.vue')
+        },
+        {
+          path: 'doctor-schedule',
+          name: 'admin-doctor-schedule',
+          component: () => import('@/views/admin/DoctorSchedulePage.vue')
+        },
+        {
+          path: 'consultation-category',
+          name: 'admin-consultation-category',
+          component: () => import('@/views/admin/ConsultationCategoryPage.vue')
+        },
+        {
+          path: 'consultation-template',
+          name: 'admin-consultation-template',
+          component: () => import('@/views/admin/ConsultationTemplatePage.vue')
+        },
+        {
           path: 'profile',
           name: 'admin-profile',
           component: () => import('@/views/index/ProfilePage.vue')

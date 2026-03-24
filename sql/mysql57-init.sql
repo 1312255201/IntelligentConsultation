@@ -70,6 +70,46 @@ CREATE TABLE IF NOT EXISTS `db_doctor` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_doctor_service_tag` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `doctor_id` int NOT NULL,
+  `tag_code` varchar(50) NOT NULL,
+  `tag_name` varchar(100) NOT NULL,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_doctor_service_tag` (`doctor_id`, `tag_code`),
+  KEY `idx_doctor_service_tag_status_sort` (`status`, `sort`),
+  CONSTRAINT `fk_doctor_service_tag_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_doctor_schedule` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `doctor_id` int NOT NULL,
+  `schedule_date` date NOT NULL,
+  `time_period` varchar(20) NOT NULL,
+  `visit_type` varchar(20) NOT NULL DEFAULT 'both',
+  `max_capacity` int NOT NULL DEFAULT 0,
+  `used_capacity` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `remark` varchar(255) DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_doctor_schedule_slot` (`doctor_id`, `schedule_date`, `time_period`, `visit_type`),
+  KEY `idx_doctor_schedule_date_status` (`schedule_date`, `status`),
+  KEY `idx_doctor_schedule_doctor_date` (`doctor_id`, `schedule_date`),
+  CONSTRAINT `fk_doctor_schedule_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_patient_profile` (
   `id` int NOT NULL AUTO_INCREMENT,
   `account_id` int NOT NULL,
@@ -112,6 +152,72 @@ CREATE TABLE IF NOT EXISTS `db_patient_medical_history` (
   UNIQUE KEY `uk_patient_medical_history_patient` (`patient_id`),
   CONSTRAINT `fk_patient_medical_history_patient`
     FOREIGN KEY (`patient_id`) REFERENCES `db_patient_profile` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_consultation_category` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `department_id` int NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_consultation_category_name` (`name`),
+  UNIQUE KEY `uk_consultation_category_code` (`code`),
+  KEY `idx_consultation_category_department_status` (`department_id`, `status`),
+  KEY `idx_consultation_category_sort` (`sort`),
+  CONSTRAINT `fk_consultation_category_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_consultation_intake_template` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `category_id` int NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `version` int NOT NULL DEFAULT 1,
+  `is_default` tinyint(1) NOT NULL DEFAULT 1,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_consultation_template_name_version` (`category_id`, `name`, `version`),
+  KEY `idx_consultation_template_category_default` (`category_id`, `is_default`, `status`),
+  CONSTRAINT `fk_consultation_template_category`
+    FOREIGN KEY (`category_id`) REFERENCES `db_consultation_category` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_consultation_intake_field` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `template_id` int NOT NULL,
+  `field_code` varchar(50) NOT NULL,
+  `field_label` varchar(100) NOT NULL,
+  `field_type` varchar(30) NOT NULL,
+  `is_required` tinyint(1) NOT NULL DEFAULT 0,
+  `options_json` text,
+  `default_value` varchar(255) DEFAULT NULL,
+  `placeholder` varchar(255) DEFAULT NULL,
+  `help_text` varchar(255) DEFAULT NULL,
+  `condition_rule` varchar(255) DEFAULT NULL,
+  `validation_rule` varchar(255) DEFAULT NULL,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_consultation_field_code` (`template_id`, `field_code`),
+  KEY `idx_consultation_field_template_sort` (`template_id`, `sort`, `status`),
+  CONSTRAINT `fk_consultation_field_template`
+    FOREIGN KEY (`template_id`) REFERENCES `db_consultation_intake_template` (`id`)
     ON DELETE CASCADE
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -181,5 +287,8 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
 --    UPDATE db_account SET role = 'admin' WHERE username = 'your_admin_username';
 -- 5. One account can maintain multiple patient profiles for self or family members.
 -- 6. Each patient profile can maintain one medical history archive for AI triage and consultation intake.
--- 7. Department rows referenced by doctors cannot be deleted until those doctors are removed or reassigned.
--- 8. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.
+-- 7. Doctor service tags and doctor schedules are used for AI triage recommendation and will cascade on doctor deletion.
+-- 8. Department rows referenced by doctors cannot be deleted until those doctors are removed or reassigned.
+-- 9. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.
+-- 10. Consultation categories provide the entry configuration for AI triage scenes and map to base departments.
+-- 11. Intake templates store pre-consultation field configuration, and each category should keep at least one default template for later user-side intake.

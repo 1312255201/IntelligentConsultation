@@ -587,3 +587,196 @@
 - 规则引擎与 AI 结合策略
 - 风控、留痕、审计、后台运营配置建议
 - 建议开发阶段顺序与近期实施路线
+
+## 2026-03-25 基础建设推进
+
+### 1. 医生服务标签管理
+
+已完成：
+
+- 管理员端新增 `医生服务标签` 页面
+- 支持按医生维护服务能力标签
+- 支持标签编码、标签名称、排序、启停状态维护
+- 支持按医生和科室维度检索标签配置
+
+后端接口：
+
+- `GET /api/admin/doctor-service-tag/list`
+- `POST /api/admin/doctor-service-tag/create`
+- `POST /api/admin/doctor-service-tag/update`
+- `GET /api/admin/doctor-service-tag/delete?id=xxx`
+
+相关文件：
+
+- `template-backend/src/main/java/cn/gugufish/entity/dto/DoctorServiceTag.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/DoctorServiceTagMapper.java`
+- `template-backend/src/main/java/cn/gugufish/service/DoctorServiceTagService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/DoctorServiceTagServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminDoctorServiceTagController.java`
+- `template-front/src/views/admin/DoctorServiceTagPage.vue`
+
+实现说明：
+
+- 同一医生下不允许重复配置相同 `tagCode`
+- 标签数据将作为后续 AI 导诊推荐医生时的服务能力标签基础
+
+### 2. 医生排班管理
+
+已完成：
+
+- 管理员端新增 `医生排班管理` 页面
+- 支持按日期、时段、接诊方式维护医生排班
+- 支持最大接诊量、已接诊量、备注、启停状态维护
+- 支持按医生、科室、日期和接诊方式筛选排班
+
+后端接口：
+
+- `GET /api/admin/doctor-schedule/list`
+- `POST /api/admin/doctor-schedule/create`
+- `POST /api/admin/doctor-schedule/update`
+- `GET /api/admin/doctor-schedule/delete?id=xxx`
+
+相关文件：
+
+- `template-backend/src/main/java/cn/gugufish/entity/dto/DoctorSchedule.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/DoctorScheduleMapper.java`
+- `template-backend/src/main/java/cn/gugufish/service/DoctorScheduleService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/DoctorScheduleServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminDoctorScheduleController.java`
+- `template-front/src/views/admin/DoctorSchedulePage.vue`
+
+实现说明：
+
+- 同一医生在相同日期、时段、接诊方式下不允许重复排班
+- 已接诊量不能大于最大接诊量
+- 排班数据将作为后续 AI 导诊医生推荐和预约承载能力判断基础
+
+### 3. 问诊分类管理
+
+已完成：
+
+- 管理员端新增 `问诊分类管理` 页面
+- 支持配置问诊分类名称、编码、默认科室、排序、启停状态
+- 支持按分类名称、编码、默认科室、说明进行检索
+- 支持删除前自动校验是否仍有关联前置模板
+
+后端接口：
+
+- `GET /api/admin/consultation-category/list`
+- `POST /api/admin/consultation-category/create`
+- `POST /api/admin/consultation-category/update`
+- `GET /api/admin/consultation-category/delete?id=xxx`
+
+相关文件：
+
+- `template-backend/src/main/java/cn/gugufish/entity/dto/ConsultationCategory.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/ConsultationCategoryMapper.java`
+- `template-backend/src/main/java/cn/gugufish/service/ConsultationCategoryService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/ConsultationCategoryServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminConsultationCategoryController.java`
+- `template-front/src/views/admin/ConsultationCategoryPage.vue`
+
+实现说明：
+
+- 问诊分类和科室建立了基础映射关系，便于后续 AI 导诊先给出默认分诊方向
+- 同一系统内不允许重复的分类名称和分类编码
+
+### 4. 问诊前置模板管理
+
+已完成：
+
+- 管理员端新增 `前置模板管理` 页面
+- 支持按问诊分类维护前置模板
+- 支持配置模板版本、默认模板标记、启停状态和模板说明
+- 支持在模板内维护动态采集字段列表
+- 支持字段名称、字段编码、字段类型、是否必填、选项、提示文案、显示条件、校验规则等配置
+
+后端接口：
+
+- `GET /api/admin/consultation-template/list`
+- `GET /api/admin/consultation-template/detail?id=xxx`
+- `POST /api/admin/consultation-template/create`
+- `POST /api/admin/consultation-template/update`
+- `GET /api/admin/consultation-template/delete?id=xxx`
+
+相关文件：
+
+- `template-backend/src/main/java/cn/gugufish/entity/dto/ConsultationIntakeTemplate.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/ConsultationIntakeField.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/ConsultationIntakeTemplateMapper.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/ConsultationIntakeFieldMapper.java`
+- `template-backend/src/main/java/cn/gugufish/service/ConsultationIntakeTemplateService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/ConsultationIntakeTemplateServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminConsultationIntakeTemplateController.java`
+- `template-front/src/views/admin/ConsultationTemplatePage.vue`
+
+实现说明：
+
+- 模板字段支持 `input`、`textarea`、`single_select`、`multi_select`、`date`、`number`、`upload`、`switch`
+- 同一模板下不允许重复字段编码
+- 单选和多选字段要求至少配置一个选项
+- 系统会自动保证每个问诊分类至少保留一个默认模板，便于后续用户侧直接装配问诊前置表单
+
+### 5. SQL 初始化补充
+
+本轮新增数据表：
+
+- `db_doctor_service_tag`
+- `db_doctor_schedule`
+- `db_consultation_category`
+- `db_consultation_intake_template`
+- `db_consultation_intake_field`
+
+说明：
+
+- 以上表结构均已写入 `sql/mysql57-init.sql`
+- 设计兼容当前 MySQL 5.7 环境
+- 接口仍保持项目统一约束，仅使用 `GET` 与 `POST`
+
+### 6. 本轮验证
+
+已完成验证：
+
+- 后端执行 `mvn -q -DskipTests compile` 已通过
+- 前端执行 `npm run build` 已通过
+
+### 7. 当前推进状态
+
+AI 导诊基础建设当前已完成：
+
+- 就诊人管理
+- 健康档案管理
+- 医生服务标签管理
+- 医生排班管理
+- 问诊分类管理
+- 问诊前置模板管理
+
+建议下一步优先推进：
+
+- 症状字典管理
+- 身体部位管理
+- 紧急等级字典管理
+- 红旗规则管理
+
+### 8. 演示数据补充
+
+为帮助理解新页面的填写方式，已新增演示数据与说明文档：
+
+- `sql/mysql57-demo-data.sql`
+- `docs/2026-03-25-demo-data-guide.md`
+
+覆盖内容：
+
+- 科室
+- 医生
+- 首页推荐医生
+- 医生服务标签
+- 医生排班
+- 问诊分类
+- 问诊前置模板
+- 模板字段
+
+说明：
+
+- 演示数据脚本可重复执行，尽量避免重复插入
+- 经典案例未自动写入图片数据，建议在后台手动上传真实封面后再配置

@@ -9,7 +9,7 @@
 </template>
 
 <script setup>
-import { HomeFilled, OfficeBuilding, User, UserFilled } from '@element-plus/icons-vue'
+import { Calendar, Document, HomeFilled, OfficeBuilding, Tickets, User, UserFilled } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -30,6 +30,30 @@ const menuItems = [
     title: '医生信息维护',
     description: '',
     icon: UserFilled
+  },
+  {
+    index: '/admin/doctor-service',
+    title: '医生服务标签',
+    description: '',
+    icon: Tickets
+  },
+  {
+    index: '/admin/doctor-schedule',
+    title: '医生排班管理',
+    description: '',
+    icon: Calendar
+  },
+  {
+    index: '/admin/consultation-category',
+    title: '问诊分类管理',
+    description: '',
+    icon: Tickets
+  },
+  {
+    index: '/admin/consultation-template',
+    title: '前置模板管理',
+    description: '',
+    icon: Document
   },
   {
     index: '/admin/profile',
