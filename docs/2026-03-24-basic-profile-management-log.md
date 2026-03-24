@@ -53,6 +53,53 @@
 - `template-front/src/net/index.js`
 - `template-front/src/router/index.js`
 
+### 1.1 用户端就诊人管理
+
+已完成：
+
+- 当前账号维护多个就诊人档案
+- 支持维护本人、子女、父母、配偶、其他关系类型
+- 支持设置默认就诊人
+- 支持就诊人启停状态维护
+- 支持就诊人新增、编辑、删除
+- 登录后工作台新增 `就诊人管理` 页面入口
+
+后端接口：
+
+- `GET /api/user/patient/list`
+- `POST /api/user/patient/create`
+- `POST /api/user/patient/update`
+- `GET /api/user/patient/delete?patientId=xxx`
+
+相关后端文件：
+
+- `template-backend/src/main/java/cn/gugufish/controller/PatientProfileController.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/PatientProfile.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/PatientProfileMapper.java`
+- `template-backend/src/main/java/cn/gugufish/service/PatientProfileService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/PatientProfileServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/request/PatientProfileCreateVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/request/PatientProfileUpdateVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/PatientProfileVO.java`
+
+相关前端文件：
+
+- `template-front/src/views/index/PatientPage.vue`
+- `template-front/src/views/IndexView.vue`
+- `template-front/src/router/index.js`
+
+实现说明：
+
+- 首个就诊人会自动设置为默认就诊人
+- 一个账号仅允许维护一个“本人”就诊人档案
+- 删除默认就诊人后，系统会自动补位下一个默认就诊人
+- 当前阶段先完成就诊人基础资料维护，健康档案将在后续单独扩展
+
+验证结果：
+
+- 后端执行 `mvn -q -DskipTests compile` 已通过
+- 前端执行 `npm run build` 已通过
+
 ### 2. 管理员端基础框架
 
 已完成：
@@ -428,6 +475,7 @@
 - `db_image_store`
 - `db_department`
 - `db_doctor`
+- `db_patient_profile`
 - `db_homepage_config`
 - `db_homepage_recommend_doctor`
 - `db_homepage_case`

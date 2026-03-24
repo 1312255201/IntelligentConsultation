@@ -70,6 +70,30 @@ CREATE TABLE IF NOT EXISTS `db_doctor` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_patient_profile` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `account_id` int NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `gender` varchar(10) NOT NULL DEFAULT 'unknown',
+  `birth_date` date DEFAULT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `id_card` varchar(30) DEFAULT NULL,
+  `relation_type` varchar(20) NOT NULL DEFAULT 'self',
+  `is_self` tinyint(1) NOT NULL DEFAULT 0,
+  `is_default` tinyint(1) NOT NULL DEFAULT 0,
+  `remark` varchar(255) DEFAULT NULL,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_patient_profile_account_status` (`account_id`, `status`),
+  KEY `idx_patient_profile_account_default` (`account_id`, `is_default`),
+  CONSTRAINT `fk_patient_profile_account`
+    FOREIGN KEY (`account_id`) REFERENCES `db_account` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_homepage_config` (
   `id` int NOT NULL,
   `hero_title` varchar(100) NOT NULL,
@@ -133,5 +157,6 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
 -- 3. Avatar paths are stored as relative MinIO object paths such as /avatar/xxxxx.
 -- 4. To grant an existing account administrator permissions:
 --    UPDATE db_account SET role = 'admin' WHERE username = 'your_admin_username';
--- 5. Department rows referenced by doctors cannot be deleted until those doctors are removed or reassigned.
--- 6. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.
+-- 5. One account can maintain multiple patient profiles for self or family members.
+-- 6. Department rows referenced by doctors cannot be deleted until those doctors are removed or reassigned.
+-- 7. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.

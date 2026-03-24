@@ -53,6 +53,11 @@ const router = createRouter({
           component: () => import('@/views/index/ProfilePage.vue')
         },
         {
+          path: 'patient',
+          name: 'index-patient',
+          component: () => import('@/views/index/PatientPage.vue')
+        },
+        {
           path: 'overview',
           name: 'index-overview',
           component: () => import('@/views/index/OverviewPage.vue')
