@@ -143,6 +143,10 @@ function get(url, success, failure = defaultFailure) {
   internalGet(url, authHeader(), success, failure)
 }
 
+function getPublic(url, success, failure = defaultFailure) {
+  internalGet(url, {}, success, failure)
+}
+
 function upload(url, data, success, failure = defaultFailure, error = defaultError) {
   internalPost(url, data, authHeader(), success, failure, error)
 }
@@ -160,7 +164,7 @@ function unauthorized() {
 }
 
 function resolveHomeRouteByRole(role = takeAccessRole()) {
-  return role === 'admin' ? '/admin/department' : '/index/profile'
+  return role === 'admin' ? '/admin/homepage' : '/index/profile'
 }
 
 function resolveImagePath(path) {
@@ -174,6 +178,7 @@ export {
   authHeader,
   backendBaseUrl,
   get,
+  getPublic,
   login,
   logout,
   post,

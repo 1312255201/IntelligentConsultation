@@ -86,6 +86,16 @@ public class ImageServiceImpl extends ServiceImpl<ImageStoreMapper, StoreImage> 
     }
 
     @Override
+    public String uploadHomepageImage(String type, MultipartFile file) throws IOException {
+        try {
+            return this.uploadDirect("/homepage/" + type + "/" + format.format(new Date()) + "/", file);
+        } catch (Exception e) {
+            log.error("棣栭〉鍥剧墖涓婁紶鍑虹幇闂: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    @Override
     public void fetchImageFromMinio(OutputStream stream, String image) throws Exception {
         GetObjectArgs args = GetObjectArgs.builder()
                 .bucket("consultation")

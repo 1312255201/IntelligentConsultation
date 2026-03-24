@@ -6,22 +6,38 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'welcome',
+      name: 'home',
+      component: () => import('@/views/HomeView.vue')
+    },
+    {
+      path: '/login',
+      name: 'welcome-login',
       component: () => import('@/views/WelcomeView.vue'),
       children: [
         {
           path: '',
-          name: 'welcome-login',
           component: () => import('@/views/welcome/LoginPage.vue')
-        },
+        }
+      ]
+    },
+    {
+      path: '/register',
+      name: 'welcome-register',
+      component: () => import('@/views/WelcomeView.vue'),
+      children: [
         {
-          path: 'register',
-          name: 'welcome-register',
+          path: '',
           component: () => import('@/views/welcome/RegisterPage.vue')
-        },
+        }
+      ]
+    },
+    {
+      path: '/forget',
+      name: 'welcome-forget',
+      component: () => import('@/views/WelcomeView.vue'),
+      children: [
         {
-          path: 'forget',
-          name: 'welcome-forget',
+          path: '',
           component: () => import('@/views/welcome/ForgetPage.vue')
         }
       ]
@@ -46,8 +62,13 @@ const router = createRouter({
     {
       path: '/admin',
       component: () => import('@/views/AdminView.vue'),
-      redirect: '/admin/department',
+      redirect: '/admin/homepage',
       children: [
+        {
+          path: 'homepage',
+          name: 'admin-homepage',
+          component: () => import('@/views/admin/HomepageSettingPage.vue')
+        },
         {
           path: 'department',
           name: 'admin-department',
@@ -80,7 +101,7 @@ router.beforeEach((to, from, next) => {
 
   if (to.path.startsWith('/admin')) {
     if (isUnauthorized) {
-      next('/')
+      next('/login')
       return
     }
     if (role && role !== 'admin') {
@@ -91,7 +112,7 @@ router.beforeEach((to, from, next) => {
 
   if (to.path.startsWith('/index')) {
     if (isUnauthorized) {
-      next('/')
+      next('/login')
       return
     }
     if (role === 'admin') {

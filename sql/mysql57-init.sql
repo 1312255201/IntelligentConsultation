@@ -70,6 +70,63 @@ CREATE TABLE IF NOT EXISTS `db_doctor` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_homepage_config` (
+  `id` int NOT NULL,
+  `hero_title` varchar(100) NOT NULL,
+  `hero_subtitle` varchar(255) DEFAULT NULL,
+  `notice_text` varchar(255) DEFAULT NULL,
+  `intro_title` varchar(100) DEFAULT NULL,
+  `intro_content` text,
+  `service_phone` varchar(30) DEFAULT NULL,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_homepage_recommend_doctor` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `doctor_id` int NOT NULL,
+  `display_title` varchar(100) DEFAULT NULL,
+  `recommend_reason` varchar(255) DEFAULT NULL,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_homepage_recommend_doctor` (`doctor_id`),
+  KEY `idx_homepage_recommend_sort_status` (`sort`, `status`),
+  CONSTRAINT `fk_homepage_recommend_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_homepage_case` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `department_id` int NOT NULL,
+  `doctor_id` int DEFAULT NULL,
+  `title` varchar(100) NOT NULL,
+  `cover` varchar(191) NOT NULL,
+  `summary` varchar(500) NOT NULL,
+  `detail` text,
+  `tags` varchar(255) DEFAULT NULL,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_homepage_case_department_status` (`department_id`, `status`),
+  KEY `idx_homepage_case_doctor` (`doctor_id`),
+  KEY `idx_homepage_case_sort` (`sort`),
+  CONSTRAINT `fk_homepage_case_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_homepage_case_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Note:
 -- 1. Password values are stored as BCrypt hashes, not plain text.
 -- 2. Accounts can be created through the existing register page or /api/auth/register.
@@ -77,3 +134,4 @@ CREATE TABLE IF NOT EXISTS `db_doctor` (
 -- 4. To grant an existing account administrator permissions:
 --    UPDATE db_account SET role = 'admin' WHERE username = 'your_admin_username';
 -- 5. Department rows referenced by doctors cannot be deleted until those doctors are removed or reassigned.
+-- 6. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.

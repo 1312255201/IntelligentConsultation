@@ -9,10 +9,16 @@
 </template>
 
 <script setup>
-import { OfficeBuilding, User, UserFilled } from '@element-plus/icons-vue'
+import { HomeFilled, OfficeBuilding, User, UserFilled } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
+  {
+    index: '/admin/homepage',
+    title: '主页设置',
+    description: '',
+    icon: HomeFilled
+  },
   {
     index: '/admin/department',
     title: '科室信息维护',
