@@ -80,6 +80,12 @@ const menuItems = [
     icon: Document
   },
   {
+    index: '/admin/consultation-record',
+    title: '导诊记录中心',
+    description: '查看用户问诊记录、初步分诊结果与规则命中留痕',
+    icon: DataAnalysis
+  },
+  {
     index: '/admin/profile',
     title: '个人信息',
     description: '',

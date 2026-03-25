@@ -135,6 +135,11 @@ const router = createRouter({
           component: () => import('@/views/admin/RedFlagRulePage.vue')
         },
         {
+          path: 'consultation-record',
+          name: 'admin-consultation-record',
+          component: () => import('@/views/admin/ConsultationRecordPage.vue')
+        },
+        {
           path: 'profile',
           name: 'admin-profile',
           component: () => import('@/views/index/ProfilePage.vue')

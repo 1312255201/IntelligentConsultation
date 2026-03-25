@@ -1008,3 +1008,116 @@ AI 导诊基础建设当前已完成：
 - 导诊会话/消息表设计
 - 规则命中日志与推荐解释留痕
 - AI 语义提取接入，用于增强症状识别与科室/医生推荐
+
+## 2026-03-25 导诊记录中心与规则命中留痕
+
+### 1. 本轮目标
+
+在上一轮“用户可提交问诊并得到初步分诊建议”的基础上，继续补齐后台运营能力，让管理员可以查看：
+
+- 每条问诊记录的基础信息
+- 当前记录的初步分诊结果
+- 用户提交的结构化问诊答案
+- 本次分诊命中了哪些红旗规则
+- 哪条规则被作为主规则使用
+
+这样后续继续接入 AI 时，系统就不再是“只给结论、没有依据”的黑盒。
+
+### 2. SQL 补充
+
+`sql/mysql57-init.sql` 新增数据表：
+
+- `db_triage_rule_hit_log`
+
+字段用途说明：
+
+- `consultation_id`：关联问诊记录
+- `rule_id`：关联红旗规则
+- `rule_name` / `rule_code`：保存命中规则快照
+- `trigger_type`：保存命中规则触发方式
+- `triage_level_id` / `triage_level_code` / `triage_level_name`：保存规则对应分诊等级快照
+- `action_type` / `suggestion`：保存规则建议动作快照
+- `matched_summary`：保存本次命中的依据摘要
+- `priority`：保存规则优先级
+- `is_primary`：标记是否为本次分诊采用的主规则
+
+说明：
+
+- 该表用于记录“规则命中留痕”，便于后续运营复盘、规则优化和 AI 接入后的结果解释
+- 历史记录保存快照，避免后续规则被修改后影响历史结果回看
+
+### 3. 后端能力补充
+
+新增主要后端文件：
+
+- `template-backend/src/main/java/cn/gugufish/entity/dto/TriageRuleHitLog.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/TriageRuleHitLogMapper.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/TriageRuleHitLogVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/AdminConsultationRecordVO.java`
+- `template-backend/src/main/java/cn/gugufish/service/ConsultationRecordAdminService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/ConsultationRecordAdminServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminConsultationRecordController.java`
+
+本轮后端补充能力：
+
+- 用户提交问诊后，系统会把本次命中的规则写入 `db_triage_rule_hit_log`
+- 对命中的多条规则进行留痕，并标记主规则
+- 若未命中红旗规则，则在问诊记录中保留“默认分诊策略”说明
+- 管理员可查询导诊记录列表
+- 管理员可查看导诊记录详情、问诊答案和规则命中日志
+
+新增管理员接口：
+
+- `GET /api/admin/consultation-record/list`
+- `GET /api/admin/consultation-record/detail?id=xxx`
+
+### 4. 前端后台页面补充
+
+新增管理员页面：
+
+- `template-front/src/views/admin/ConsultationRecordPage.vue`
+
+并接入：
+
+- `template-front/src/views/AdminView.vue`
+- `template-front/src/router/index.js`
+
+页面能力：
+
+- 导诊记录列表查看
+- 按记录编号、就诊人、标题、问诊分类、分诊等级、状态筛选
+- 查看初步分诊等级与建议动作
+- 查看导诊记录详情
+- 查看规则命中日志
+- 查看用户提交的结构化问诊答案
+
+说明：
+
+- 后台“导诊记录中心”属于运营和复盘页面，重点是把问诊结果和规则依据展示清楚
+- 这一页为后续增加“AI 命中解释”“规则命中日志”“人工纠正记录”预留了直接扩展位置
+
+### 5. 规则留痕实现说明
+
+当前实现策略：
+
+- 问诊提交时，先做初步分诊判断
+- 若命中红旗规则，则把所有命中的规则做快照留痕
+- 依据规则等级优先级与规则优先级选出主规则
+- 主规则决定本次初步分诊的主要结果
+- 详情页展示全部命中规则，后台可直接看到“为什么这样分诊”
+
+### 6. 本轮验证
+
+已完成验证：
+
+- 后端执行 `mvn -q -DskipTests compile` 已通过
+- 前端执行 `npm run build` 已通过
+
+### 7. 当前建议下一步
+
+建议继续优先推进以下方向之一：
+
+- 导诊知识库管理
+- 导诊案例库管理
+- 导诊会话 / 消息留痕
+- AI 语义提取接入

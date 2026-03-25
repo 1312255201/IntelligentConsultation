@@ -15,6 +15,7 @@ import cn.gugufish.entity.dto.PatientProfile;
 import cn.gugufish.entity.dto.RedFlagRule;
 import cn.gugufish.entity.dto.RedFlagRuleSymptom;
 import cn.gugufish.entity.dto.SymptomDict;
+import cn.gugufish.entity.dto.TriageRuleHitLog;
 import cn.gugufish.entity.dto.TriageLevelDict;
 import cn.gugufish.entity.vo.request.ConsultationAnswerSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
@@ -39,6 +40,7 @@ import cn.gugufish.mapper.PatientProfileMapper;
 import cn.gugufish.mapper.RedFlagRuleMapper;
 import cn.gugufish.mapper.RedFlagRuleSymptomMapper;
 import cn.gugufish.mapper.SymptomDictMapper;
+import cn.gugufish.mapper.TriageRuleHitLogMapper;
 import cn.gugufish.mapper.TriageLevelDictMapper;
 import cn.gugufish.service.ConsultationService;
 import com.alibaba.fastjson2.JSON;
@@ -95,6 +97,7 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource DoctorMapper doctorMapper;
     @Resource DoctorScheduleMapper doctorScheduleMapper;
     @Resource DoctorServiceTagMapper doctorServiceTagMapper;
+    @Resource TriageRuleHitLogMapper triageRuleHitLogMapper;
 
     @Override
     public List<ConsultationEntryCategoryVO> listEntryCategories() {
@@ -291,6 +294,12 @@ public class ConsultationServiceImpl implements ConsultationService {
                 TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
                 return "问诊答案保存失败，请稍后重试";
             }
+        }
+
+        String hitLogMessage = saveTriageRuleHitLogs(record.getId(), triage.ruleHits(), now);
+        if (hitLogMessage != null) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return hitLogMessage;
         }
         return null;
     }
@@ -509,7 +518,7 @@ public class ConsultationServiceImpl implements ConsultationService {
                 .orderByAsc("id"));
         TriageLevelDict defaultLevel = pickDefaultTriageLevel(category, levels);
         if (levels.isEmpty()) {
-            return new TriageDecision(null, null, null, null, null, "当前系统尚未配置分诊等级，问诊资料已先保存。", null);
+            return new TriageDecision(null, null, null, null, null, "当前系统尚未配置分诊等级，问诊资料已先保存。", "当前系统尚未配置分诊等级", List.of());
         }
 
         String textCorpus = buildTriageTextCorpus(chiefComplaint, healthSummary, answers);
@@ -545,7 +554,10 @@ public class ConsultationServiceImpl implements ConsultationService {
         Set<Integer> matchedBodyPartIds = extractMatchedBodyPartIds(textCorpus, bodyParts, matchedSymptomIds, symptomMap, bodyPartMap);
         List<RuleMatch> matchedRules = rules.stream()
                 .filter(rule -> matchesRule(rule, ruleSymptomIdsMap.getOrDefault(rule.getId(), List.of()), matchedSymptomIds, matchedBodyPartIds, textCorpus))
-                .map(rule -> new RuleMatch(rule, levelMap.get(rule.getTriageLevelId())))
+                .map(rule -> new RuleMatch(
+                        rule,
+                        levelMap.get(rule.getTriageLevelId()),
+                        buildRuleMatchedSummary(rule, ruleSymptomIdsMap.getOrDefault(rule.getId(), List.of()), matchedSymptomIds, matchedBodyPartIds, symptomMap, bodyPartMap)))
                 .toList();
         if (matchedRules.isEmpty()) return buildDefaultTriageDecision(defaultLevel, category);
 
@@ -567,6 +579,22 @@ public class ConsultationServiceImpl implements ConsultationService {
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .collect(Collectors.joining("；")), 500);
+        List<TriageRuleHitSnapshot> ruleHits = matchedRules.stream()
+                .map(item -> new TriageRuleHitSnapshot(
+                        item.rule().getId(),
+                        item.rule().getRuleName(),
+                        item.rule().getRuleCode(),
+                        item.rule().getTriggerType(),
+                        item.level() == null ? null : item.level().getId(),
+                        item.level() == null ? null : item.level().getCode(),
+                        item.level() == null ? null : item.level().getName(),
+                        trimToNull(item.rule().getActionType()),
+                        trimToNull(item.rule().getSuggestion()),
+                        item.matchedSummary(),
+                        item.rule().getPriority(),
+                        primaryMatch.rule().getId().equals(item.rule().getId()) ? 1 : 0
+                ))
+                .toList();
         return new TriageDecision(
                 level == null ? null : level.getId(),
                 level == null ? null : level.getCode(),
@@ -574,13 +602,14 @@ public class ConsultationServiceImpl implements ConsultationService {
                 level == null ? null : level.getColor(),
                 actionType,
                 suggestion,
-                ruleSummary
+                ruleSummary,
+                ruleHits
         );
     }
 
     private TriageDecision buildDefaultTriageDecision(TriageLevelDict level, ConsultationCategory category) {
         if (level == null) {
-            return new TriageDecision(null, null, null, null, null, "系统尚未完成默认分诊配置，问诊资料已先保存。", null);
+            return new TriageDecision(null, null, null, null, null, "系统尚未完成默认分诊配置，问诊资料已先保存。", "系统未配置默认分诊策略", List.of());
         }
         return new TriageDecision(
                 level.getId(),
@@ -589,7 +618,8 @@ public class ConsultationServiceImpl implements ConsultationService {
                 level.getColor(),
                 defaultActionType(level),
                 defaultTriageSuggestion(level, category),
-                null
+                "未命中红旗规则，已按问诊分类使用默认分诊策略",
+                List.of()
         );
     }
 
@@ -769,6 +799,63 @@ public class ConsultationServiceImpl implements ConsultationService {
         return source.toLowerCase().contains(currentToken.toLowerCase());
     }
 
+    private String buildRuleMatchedSummary(RedFlagRule rule,
+                                           List<Integer> ruleSymptomIds,
+                                           Set<Integer> matchedSymptomIds,
+                                           Set<Integer> matchedBodyPartIds,
+                                           Map<Integer, SymptomDict> symptomMap,
+                                           Map<Integer, BodyPartDict> bodyPartMap) {
+        List<String> segments = new ArrayList<>();
+        if (!ruleSymptomIds.isEmpty()) {
+            String symptomSummary = ruleSymptomIds.stream()
+                    .filter(matchedSymptomIds::contains)
+                    .map(symptomMap::get)
+                    .filter(java.util.Objects::nonNull)
+                    .map(SymptomDict::getName)
+                    .distinct()
+                    .collect(Collectors.joining("、"));
+            if (!isEmptyValue(symptomSummary)) segments.add("命中症状：" + symptomSummary);
+        }
+        if (rule.getBodyPartId() != null && matchedBodyPartIds.contains(rule.getBodyPartId())) {
+            BodyPartDict bodyPart = bodyPartMap.get(rule.getBodyPartId());
+            if (bodyPart != null) segments.add("命中部位：" + bodyPart.getName());
+        }
+        if (!isEmptyValue(rule.getKeywordPattern())) {
+            segments.add("命中文本模式：" + abbreviate(rule.getKeywordPattern(), 80));
+        }
+        if (segments.isEmpty() && !isEmptyValue(rule.getConditionDescription())) {
+            segments.add(abbreviate(rule.getConditionDescription(), 120));
+        }
+        return segments.isEmpty() ? null : abbreviate(String.join("；", segments), 255);
+    }
+
+    private String saveTriageRuleHitLogs(Integer consultationId, List<TriageRuleHitSnapshot> ruleHits, Date now) {
+        if (consultationId == null || ruleHits == null || ruleHits.isEmpty()) return null;
+        for (TriageRuleHitSnapshot snapshot : ruleHits) {
+            TriageRuleHitLog log = new TriageRuleHitLog(
+                    null,
+                    consultationId,
+                    snapshot.ruleId(),
+                    snapshot.ruleName(),
+                    snapshot.ruleCode(),
+                    snapshot.triggerType(),
+                    snapshot.triageLevelId(),
+                    snapshot.triageLevelCode(),
+                    snapshot.triageLevelName(),
+                    snapshot.actionType(),
+                    snapshot.suggestion(),
+                    snapshot.matchedSummary(),
+                    snapshot.priority(),
+                    snapshot.isPrimary(),
+                    now
+            );
+            if (triageRuleHitLogMapper.insert(log) <= 0) {
+                return "分诊规则命中日志保存失败，请稍后重试";
+            }
+        }
+        return null;
+    }
+
     private List<ConsultationRecommendDoctorVO> buildRecommendedDoctors(ConsultationRecord record) {
         if (record.getDepartmentId() == null) return List.of();
         List<Doctor> doctors = doctorMapper.selectList(Wrappers.<Doctor>query()
@@ -919,7 +1006,21 @@ public class ConsultationServiceImpl implements ConsultationService {
     private record NormalizeResult(String value, String message) {
     }
 
-    private record RuleMatch(RedFlagRule rule, TriageLevelDict level) {
+    private record RuleMatch(RedFlagRule rule, TriageLevelDict level, String matchedSummary) {
+    }
+
+    private record TriageRuleHitSnapshot(Integer ruleId,
+                                         String ruleName,
+                                         String ruleCode,
+                                         String triggerType,
+                                         Integer triageLevelId,
+                                         String triageLevelCode,
+                                         String triageLevelName,
+                                         String actionType,
+                                         String suggestion,
+                                         String matchedSummary,
+                                         Integer priority,
+                                         Integer isPrimary) {
     }
 
     private record TriageDecision(Integer levelId,
@@ -928,6 +1029,7 @@ public class ConsultationServiceImpl implements ConsultationService {
                                   String levelColor,
                                   String actionType,
                                   String suggestion,
-                                  String ruleSummary) {
+                                  String ruleSummary,
+                                  List<TriageRuleHitSnapshot> ruleHits) {
     }
 }

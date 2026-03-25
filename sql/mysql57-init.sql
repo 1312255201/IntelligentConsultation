@@ -403,6 +403,40 @@ CREATE TABLE IF NOT EXISTS `db_red_flag_rule_symptom` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_triage_rule_hit_log` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_id` int NOT NULL,
+  `rule_id` int DEFAULT NULL,
+  `rule_name` varchar(100) NOT NULL,
+  `rule_code` varchar(50) DEFAULT NULL,
+  `trigger_type` varchar(30) DEFAULT NULL,
+  `triage_level_id` int DEFAULT NULL,
+  `triage_level_code` varchar(50) DEFAULT NULL,
+  `triage_level_name` varchar(50) DEFAULT NULL,
+  `action_type` varchar(30) DEFAULT NULL,
+  `suggestion` varchar(255) DEFAULT NULL,
+  `matched_summary` varchar(255) DEFAULT NULL,
+  `priority` int NOT NULL DEFAULT 0,
+  `is_primary` tinyint(1) NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_triage_hit_consultation_primary` (`consultation_id`, `is_primary`),
+  KEY `idx_triage_hit_rule` (`rule_id`),
+  KEY `idx_triage_hit_triage_level` (`triage_level_id`),
+  CONSTRAINT `fk_triage_hit_consultation`
+    FOREIGN KEY (`consultation_id`) REFERENCES `db_consultation_record` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_hit_rule`
+    FOREIGN KEY (`rule_id`) REFERENCES `db_red_flag_rule` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_hit_triage_level`
+    FOREIGN KEY (`triage_level_id`) REFERENCES `db_triage_level_dict` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_homepage_config` (
   `id` int NOT NULL,
   `hero_title` varchar(100) NOT NULL,
