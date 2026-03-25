@@ -135,6 +135,11 @@ const router = createRouter({
           component: () => import('@/views/admin/RedFlagRulePage.vue')
         },
         {
+          path: 'triage-knowledge',
+          name: 'admin-triage-knowledge',
+          component: () => import('@/views/admin/TriageKnowledgePage.vue')
+        },
+        {
           path: 'consultation-record',
           name: 'admin-consultation-record',
           component: () => import('@/views/admin/ConsultationRecordPage.vue')

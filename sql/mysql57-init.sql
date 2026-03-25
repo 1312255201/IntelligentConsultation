@@ -437,6 +437,36 @@ CREATE TABLE IF NOT EXISTS `db_triage_rule_hit_log` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_triage_knowledge` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `knowledge_type` varchar(30) NOT NULL,
+  `title` varchar(100) NOT NULL,
+  `content` text NOT NULL,
+  `tags` varchar(255) DEFAULT NULL,
+  `department_id` int DEFAULT NULL,
+  `doctor_id` int DEFAULT NULL,
+  `source_type` varchar(30) NOT NULL DEFAULT 'manual',
+  `version` int NOT NULL DEFAULT 1,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_triage_knowledge_type_title` (`knowledge_type`, `title`),
+  KEY `idx_triage_knowledge_department_status` (`department_id`, `status`),
+  KEY `idx_triage_knowledge_doctor_status` (`doctor_id`, `status`),
+  KEY `idx_triage_knowledge_type_status` (`knowledge_type`, `status`),
+  KEY `idx_triage_knowledge_sort` (`sort`, `id`),
+  CONSTRAINT `fk_triage_knowledge_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_knowledge_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_homepage_config` (
   `id` int NOT NULL,
   `hero_title` varchar(100) NOT NULL,
@@ -508,3 +538,4 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
 -- 10. Consultation categories provide the entry configuration for AI triage scenes and map to base departments.
 -- 11. Intake templates store pre-consultation field configuration, and each category should keep at least one default template for later user-side intake.
 -- 12. Body part, symptom, triage level and red-flag rule dictionaries are the core structured data for rule-based triage and AI-assisted recommendation.
+-- 13. Triage knowledge stores reusable structured triage guidance, service boundaries and case summaries for later AI retrieval and recommendation explanation.

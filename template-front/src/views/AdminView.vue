@@ -9,7 +9,17 @@
 </template>
 
 <script setup>
-import { Calendar, DataAnalysis, Document, HomeFilled, Location, OfficeBuilding, Tickets, User, UserFilled } from '@element-plus/icons-vue'
+import {
+  Calendar,
+  DataAnalysis,
+  Document,
+  HomeFilled,
+  Location,
+  OfficeBuilding,
+  Tickets,
+  User,
+  UserFilled
+} from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -77,6 +87,12 @@ const menuItems = [
     index: '/admin/red-flag',
     title: '红旗规则管理',
     description: '配置高风险触发条件与紧急分诊规则',
+    icon: Document
+  },
+  {
+    index: '/admin/triage-knowledge',
+    title: '导诊知识库管理',
+    description: '维护 AI 导诊和规则解释可复用的知识、指南和案例摘要',
     icon: Document
   },
   {

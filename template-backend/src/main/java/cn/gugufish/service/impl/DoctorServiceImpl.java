@@ -4,12 +4,14 @@ import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.HomepageCase;
 import cn.gugufish.entity.dto.HomepageRecommendDoctor;
+import cn.gugufish.entity.dto.TriageKnowledge;
 import cn.gugufish.entity.vo.request.DoctorCreateVO;
 import cn.gugufish.entity.vo.request.DoctorUpdateVO;
 import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.HomepageCaseMapper;
 import cn.gugufish.mapper.HomepageRecommendDoctorMapper;
+import cn.gugufish.mapper.TriageKnowledgeMapper;
 import cn.gugufish.service.DoctorService;
 import cn.gugufish.service.ImageService;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -34,6 +36,9 @@ public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> impleme
 
     @Resource
     HomepageCaseMapper homepageCaseMapper;
+
+    @Resource
+    TriageKnowledgeMapper triageKnowledgeMapper;
 
     @Override
     public List<Doctor> listDoctors() {
@@ -101,10 +106,13 @@ public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> impleme
         Doctor doctor = this.getById(id);
         if (doctor == null) return "医生不存在";
         if (homepageRecommendDoctorMapper.exists(Wrappers.<HomepageRecommendDoctor>query().eq("doctor_id", id))) {
-            return "当前医生已被首页推荐医生引用，请先在主页设置中解除关联后再删除";
+            return "当前医生已被首页推荐医生引用，请先解除关联后再删除";
         }
         if (homepageCaseMapper.exists(Wrappers.<HomepageCase>query().eq("doctor_id", id))) {
-            return "当前医生已被首页经典案例引用，请先在主页设置中解除关联后再删除";
+            return "当前医生已被首页经典案例引用，请先解除关联后再删除";
+        }
+        if (triageKnowledgeMapper.exists(Wrappers.<TriageKnowledge>query().eq("doctor_id", id))) {
+            return "当前医生已被导诊知识库引用，请先调整知识归属后再删除";
         }
 
         boolean removed = this.removeById(id);
