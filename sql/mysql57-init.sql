@@ -222,6 +222,79 @@ CREATE TABLE IF NOT EXISTS `db_consultation_intake_field` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_consultation_record` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_no` varchar(32) NOT NULL,
+  `account_id` int NOT NULL,
+  `patient_id` int NOT NULL,
+  `patient_name` varchar(50) NOT NULL,
+  `category_id` int NOT NULL,
+  `category_name` varchar(50) NOT NULL,
+  `department_id` int DEFAULT NULL,
+  `department_name` varchar(50) DEFAULT NULL,
+  `template_id` int NOT NULL,
+  `template_name` varchar(100) NOT NULL,
+  `title` varchar(100) NOT NULL,
+  `chief_complaint` varchar(500) DEFAULT NULL,
+  `health_summary` varchar(500) DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'submitted',
+  `answer_count` int NOT NULL DEFAULT 0,
+  `triage_level_id` int DEFAULT NULL,
+  `triage_level_code` varchar(50) DEFAULT NULL,
+  `triage_level_name` varchar(50) DEFAULT NULL,
+  `triage_level_color` varchar(20) DEFAULT NULL,
+  `triage_action_type` varchar(30) DEFAULT NULL,
+  `triage_suggestion` varchar(255) DEFAULT NULL,
+  `triage_rule_summary` varchar(500) DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_consultation_record_no` (`consultation_no`),
+  KEY `idx_consultation_record_account_status` (`account_id`, `status`),
+  KEY `idx_consultation_record_patient` (`patient_id`),
+  KEY `idx_consultation_record_category` (`category_id`),
+  KEY `idx_consultation_record_triage_level` (`triage_level_id`),
+  KEY `idx_consultation_record_create_time` (`create_time`),
+  CONSTRAINT `fk_consultation_record_account`
+    FOREIGN KEY (`account_id`) REFERENCES `db_account` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_record_patient`
+    FOREIGN KEY (`patient_id`) REFERENCES `db_patient_profile` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_record_category`
+    FOREIGN KEY (`category_id`) REFERENCES `db_consultation_category` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_record_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_record_template`
+    FOREIGN KEY (`template_id`) REFERENCES `db_consultation_intake_template` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_consultation_record_answer` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_id` int NOT NULL,
+  `field_code` varchar(50) NOT NULL,
+  `field_label` varchar(100) NOT NULL,
+  `field_type` varchar(30) NOT NULL,
+  `field_value` text,
+  `sort` int NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_consultation_record_answer_consultation_sort` (`consultation_id`, `sort`),
+  CONSTRAINT `fk_consultation_record_answer_consultation`
+    FOREIGN KEY (`consultation_id`) REFERENCES `db_consultation_record` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_body_part_dict` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(50) NOT NULL,

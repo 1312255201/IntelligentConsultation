@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import { DocumentChecked, House, User, UserFilled } from '@element-plus/icons-vue'
+import { DocumentChecked, House, Service, User, UserFilled } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -33,6 +33,12 @@ const menuItems = [
     icon: DocumentChecked
   },
   {
+    index: '/index/consultation',
+    title: '发起问诊',
+    description: '选择问诊分类、装配前置表单并提交当前就诊需求，作为后续智能导诊入口。',
+    icon: Service
+  },
+  {
     index: '/index/overview',
     title: '系统概览',
     description: '查看当前系统建设进度与基础状态。',
@@ -40,5 +46,5 @@ const menuItems = [
   }
 ]
 
-const footerText = '当前阶段已完成基础资料维护、就诊人管理、健康档案和头像上传能力。'
+const footerText = '当前阶段已完成基础资料维护、就诊人管理、健康档案、发起问诊入口与头像上传能力。'
 </script>

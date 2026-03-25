@@ -43,9 +43,11 @@
 <script setup>
 import { Lock, User } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
-import router from '@/router'
+import { useRoute, useRouter } from 'vue-router'
 import { login, resolveHomeRouteByRole } from '@/net'
 
+const router = useRouter()
+const route = useRoute()
 const formRef = ref()
 const form = reactive({
   username: '',
@@ -66,7 +68,8 @@ function userLogin() {
   formRef.value.validate((isValid) => {
     if (!isValid) return
     login(form.username, form.password, form.remember, (data) => {
-      router.push(resolveHomeRouteByRole(data.role))
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+      router.push(redirect.startsWith('/') ? redirect : resolveHomeRouteByRole(data.role))
     })
   })
 }

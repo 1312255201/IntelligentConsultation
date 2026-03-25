@@ -334,7 +334,7 @@ import {
 } from '@element-plus/icons-vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPublic, resolveHomeRouteByRole, resolveImagePath, unauthorized } from '@/net'
+import { getPublic, resolveHomeRouteByRole, resolveImagePath, takeAccessRole, unauthorized } from '@/net'
 
 const router = useRouter()
 const caseDialogVisible = ref(false)
@@ -442,7 +442,16 @@ function goLoginPage() {
 }
 
 function goConsultEntry() {
-  unauthorized() ? router.push('/login') : router.push(resolveHomeRouteByRole())
+  if (unauthorized()) {
+    router.push({
+      path: '/login',
+      query: {
+        redirect: '/index/consultation'
+      }
+    })
+    return
+  }
+  router.push(takeAccessRole() === 'admin' ? resolveHomeRouteByRole() : '/index/consultation')
 }
 
 function scrollTo(id) {

@@ -884,3 +884,127 @@ AI 导诊基础建设当前已完成：
 - 导诊案例库管理
 - 用户侧发起问诊入口与前置资料装配
 - 规则分诊结果页与导诊记录留痕
+
+## 2026-03-25 用户侧发起问诊与初步分诊闭环
+
+### 1. 用户侧问诊入口
+
+本轮继续补齐了用户侧“发起问诊”能力，已支持从登录后的工作台直接进入问诊页，并完成以下闭环：
+
+- 选择问诊分类
+- 选择就诊人
+- 自动读取就诊人健康档案摘要
+- 按分类装配默认前置模板
+- 动态渲染问诊字段并提交
+- 保存问诊记录与问诊答案
+- 查看历史问诊记录详情
+
+新增用户侧页面：
+
+- `template-front/src/views/index/ConsultationPage.vue`
+
+新增前端接入文件：
+
+- `template-front/src/router/index.js`
+- `template-front/src/views/IndexView.vue`
+- `template-front/src/views/HomeView.vue`
+- `template-front/src/views/welcome/LoginPage.vue`
+
+说明：
+
+- 网站首页“立即咨询”等入口已可自然跳转到用户问诊入口
+- 未登录用户会先跳转到登录页，登录成功后再自动回到问诊页
+- 当前动态上传字段阶段性仅支持图片资料上传，复用现有 `/api/image/cache`
+
+### 2. 用户侧问诊接口
+
+新增后端接口：
+
+- `GET /api/user/consultation/category/list`
+- `GET /api/user/consultation/template/default?categoryId=xxx`
+- `GET /api/user/consultation/record/list`
+- `GET /api/user/consultation/record/detail?recordId=xxx`
+- `POST /api/user/consultation/record/create`
+
+新增主要后端文件：
+
+- `template-backend/src/main/java/cn/gugufish/controller/ConsultationController.java`
+- `template-backend/src/main/java/cn/gugufish/service/ConsultationService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/ConsultationServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/ConsultationRecord.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/ConsultationRecordAnswer.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/ConsultationRecordMapper.java`
+- `template-backend/src/main/java/cn/gugufish/mapper/ConsultationRecordAnswerMapper.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/request/ConsultationRecordCreateVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/request/ConsultationAnswerSubmitVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/ConsultationEntryCategoryVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/ConsultationRecordVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/ConsultationRecordAnswerVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/ConsultationRecommendDoctorVO.java`
+
+### 3. 问诊记录留痕与初步分诊
+
+本轮在“能提交问诊资料”的基础上，继续补齐了“能生成导诊结果”的第一版闭环：
+
+- 问诊记录主表保存分诊等级快照
+- 问诊记录保存建议动作、系统建议与命中规则摘要
+- 提交后自动基于红旗规则进行初步风险识别
+- 默认结合问诊分类选择基础分诊等级
+- 详情页展示初步分诊结果、风险提示与推荐科室
+- 详情页展示当前科室下结合排班整理的推荐医生列表
+
+当前规则分诊实现说明：
+
+- 优先使用已配置的红旗规则进行初筛
+- 支持 `keyword_match`、`symptom_match`、`body_part_match`、`combination` 四类规则触发
+- 若未命中高风险规则，则按问诊分类回落到默认分诊等级
+- 推荐医生当前基于“科室 + 启用状态 + 后续排班”进行优先排序
+- 这一步属于规则初筛版本，后续可继续升级为“规则兜底 + AI 语义增强”
+
+### 4. SQL 变更
+
+`sql/mysql57-init.sql` 本轮补充：
+
+- `db_consultation_record`
+- `db_consultation_record_answer`
+
+并在 `db_consultation_record` 中追加以下分诊快照字段：
+
+- `triage_level_id`
+- `triage_level_code`
+- `triage_level_name`
+- `triage_level_color`
+- `triage_action_type`
+- `triage_suggestion`
+- `triage_rule_summary`
+
+说明：
+
+- 问诊答案按字段单独留痕，便于后续继续做规则引擎、AI 提取与审计回放
+- 分诊结果做快照保存，避免后续规则调整后影响历史记录回看
+
+### 5. 前端体验补充
+
+本轮用户侧页面新增以下体验：
+
+- 历史记录列表直接展示初步分诊等级
+- 提交成功后自动打开最新问诊详情
+- 详情页集中展示主诉、健康摘要、初步分诊、风险提示和推荐医生
+- 推荐医生卡片展示医生职称、专长、服务标签与后续排班信息
+
+### 6. 本轮验证
+
+已完成验证：
+
+- 后端执行 `mvn -q -DskipTests compile` 已通过
+- 前端执行 `npm run build` 已通过
+
+### 7. 下一步建议
+
+在本轮闭环基础上，建议下一步优先推进：
+
+- 导诊知识库管理
+- 导诊案例库管理
+- 导诊会话/消息表设计
+- 规则命中日志与推荐解释留痕
+- AI 语义提取接入，用于增强症状识别与科室/医生推荐
