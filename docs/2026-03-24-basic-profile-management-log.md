@@ -780,3 +780,107 @@ AI 导诊基础建设当前已完成：
 
 - 演示数据脚本可重复执行，尽量避免重复插入
 - 经典案例未自动写入图片数据，建议在后台手动上传真实封面后再配置
+
+### 9. AI 导诊字典与红旗规则管理
+
+本轮继续补齐 AI 智能导诊的基础建设，新增了“身体部位字典、症状字典、分诊等级字典、红旗规则管理”这一组后台能力。
+
+已完成：
+
+- 管理员端新增 `身体部位字典` 页面
+- 管理员端新增 `症状字典管理` 页面
+- 管理员端新增 `分诊等级字典` 页面
+- 管理员端新增 `红旗规则管理` 页面
+- 管理员菜单与路由接入上述四个模块
+- 后端新增对应管理接口，继续保持仅使用 `GET` 与 `POST`
+- SQL 初始化脚本新增上述四类基础表结构
+- 演示数据脚本新增部位、症状、分诊等级与红旗规则示例数据
+
+新增数据表：
+
+- `db_body_part_dict`
+- `db_symptom_dict`
+- `db_triage_level_dict`
+- `db_red_flag_rule`
+- `db_red_flag_rule_symptom`
+
+新增后端接口：
+
+- `GET /api/admin/body-part/list`
+- `POST /api/admin/body-part/create`
+- `POST /api/admin/body-part/update`
+- `GET /api/admin/body-part/delete?id=xxx`
+- `GET /api/admin/symptom/list`
+- `POST /api/admin/symptom/create`
+- `POST /api/admin/symptom/update`
+- `GET /api/admin/symptom/delete?id=xxx`
+- `GET /api/admin/triage-level/list`
+- `POST /api/admin/triage-level/create`
+- `POST /api/admin/triage-level/update`
+- `GET /api/admin/triage-level/delete?id=xxx`
+- `GET /api/admin/red-flag/list`
+- `POST /api/admin/red-flag/create`
+- `POST /api/admin/red-flag/update`
+- `GET /api/admin/red-flag/delete?id=xxx`
+
+主要后端文件：
+
+- `template-backend/src/main/java/cn/gugufish/entity/dto/BodyPartDict.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/SymptomDict.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/TriageLevelDict.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/RedFlagRule.java`
+- `template-backend/src/main/java/cn/gugufish/entity/dto/RedFlagRuleSymptom.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminBodyPartDictController.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminSymptomDictController.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminTriageLevelDictController.java`
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminRedFlagRuleController.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/BodyPartDictServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/SymptomDictServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/TriageLevelDictServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/RedFlagRuleServiceImpl.java`
+
+主要前端文件：
+
+- `template-front/src/views/admin/BodyPartDictPage.vue`
+- `template-front/src/views/admin/SymptomDictPage.vue`
+- `template-front/src/views/admin/TriageLevelDictPage.vue`
+- `template-front/src/views/admin/RedFlagRulePage.vue`
+- `template-front/src/views/AdminView.vue`
+- `template-front/src/router/index.js`
+
+实现说明：
+
+- 身体部位支持父子层级维护，可作为后续症状归类和导诊识别的基础结构
+- 症状字典支持标准名称、编码、关键词与别名维护，便于后续做自然语言归一
+- 分诊等级支持颜色、优先级、建议动作维护，便于前端展示与规则排序
+- 红旗规则支持 `symptom_match`、`keyword_match`、`body_part_match`、`combination` 四类触发方式
+- 红旗规则支持关联多个症状，便于表达复合高风险场景
+- 前端表单已补齐与后端一致的关键校验，减少配置错误
+- 演示数据已补充胸痛、呼吸困难、高热、剧烈头痛等示例，方便直接联调页面
+
+### 10. 本轮验证补充
+
+已完成验证：
+
+- 后端执行 `mvn -q -DskipTests compile` 已通过
+- 前端执行 `npm run build` 已通过
+
+当前 AI 导诊基础建设已完成：
+
+- 就诊人管理
+- 健康档案管理
+- 医生服务标签管理
+- 医生排班管理
+- 问诊分类管理
+- 问诊前置模板管理
+- 身体部位字典管理
+- 症状字典管理
+- 分诊等级字典管理
+- 红旗规则管理
+
+建议下一步优先推进：
+
+- 导诊知识库管理
+- 导诊案例库管理
+- 用户侧发起问诊入口与前置资料装配
+- 规则分诊结果页与导诊记录留痕

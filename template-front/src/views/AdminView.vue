@@ -9,7 +9,7 @@
 </template>
 
 <script setup>
-import { Calendar, Document, HomeFilled, OfficeBuilding, Tickets, User, UserFilled } from '@element-plus/icons-vue'
+import { Calendar, DataAnalysis, Document, HomeFilled, Location, OfficeBuilding, Tickets, User, UserFilled } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -53,6 +53,30 @@ const menuItems = [
     index: '/admin/consultation-template',
     title: '前置模板管理',
     description: '',
+    icon: Document
+  },
+  {
+    index: '/admin/body-part',
+    title: '身体部位字典',
+    description: '维护智能导诊识别使用的身体部位层级数据',
+    icon: Location
+  },
+  {
+    index: '/admin/symptom',
+    title: '症状字典管理',
+    description: '维护症状标准词、关键词和别名映射关系',
+    icon: Tickets
+  },
+  {
+    index: '/admin/triage-level',
+    title: '分诊等级字典',
+    description: '维护风险等级、优先级和建议动作',
+    icon: DataAnalysis
+  },
+  {
+    index: '/admin/red-flag',
+    title: '红旗规则管理',
+    description: '配置高风险触发条件与紧急分诊规则',
     icon: Document
   },
   {

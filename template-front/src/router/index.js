@@ -110,6 +110,26 @@ const router = createRouter({
           component: () => import('@/views/admin/ConsultationTemplatePage.vue')
         },
         {
+          path: 'body-part',
+          name: 'admin-body-part',
+          component: () => import('@/views/admin/BodyPartDictPage.vue')
+        },
+        {
+          path: 'symptom',
+          name: 'admin-symptom',
+          component: () => import('@/views/admin/SymptomDictPage.vue')
+        },
+        {
+          path: 'triage-level',
+          name: 'admin-triage-level',
+          component: () => import('@/views/admin/TriageLevelDictPage.vue')
+        },
+        {
+          path: 'red-flag',
+          name: 'admin-red-flag',
+          component: () => import('@/views/admin/RedFlagRulePage.vue')
+        },
+        {
           path: 'profile',
           name: 'admin-profile',
           component: () => import('@/views/index/ProfilePage.vue')

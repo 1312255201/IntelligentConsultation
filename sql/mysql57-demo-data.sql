@@ -732,6 +732,222 @@ JOIN `db_consultation_category` c ON c.id = t.category_id
 WHERE c.code = 'SKIN_ISSUE' AND t.name = '皮肤问题模板' AND t.version = 1
   AND NOT EXISTS (SELECT 1 FROM `db_consultation_intake_field` f WHERE f.template_id = t.id AND f.field_code = 'medicine_used');
 
+-- -------------------------
+-- 14. 身体部位字典
+-- -------------------------
+INSERT INTO `db_body_part_dict`
+(`name`, `code`, `parent_id`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '全身', 'WHOLE_BODY', NULL, '适合承接发热、乏力等全身性症状表达。', 10, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_body_part_dict` WHERE `code` = 'WHOLE_BODY');
+
+INSERT INTO `db_body_part_dict`
+(`name`, `code`, `parent_id`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '头颈部', 'HEAD_NECK', NULL, '适合归类头痛、头晕、咽喉不适等上部相关表达。', 20, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_body_part_dict` WHERE `code` = 'HEAD_NECK');
+
+INSERT INTO `db_body_part_dict`
+(`name`, `code`, `parent_id`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '咽喉', 'THROAT', parent.id, '作为头颈部下级部位，适合咽痛、咽干、吞咽不适等表述。', 30, 1, NOW(), NOW()
+FROM `db_body_part_dict` parent
+WHERE parent.`code` = 'HEAD_NECK'
+  AND NOT EXISTS (SELECT 1 FROM `db_body_part_dict` WHERE `code` = 'THROAT');
+
+INSERT INTO `db_body_part_dict`
+(`name`, `code`, `parent_id`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '胸部', 'CHEST', NULL, '适合胸痛、胸闷、咳嗽、呼吸困难等胸部相关表达。', 40, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_body_part_dict` WHERE `code` = 'CHEST');
+
+INSERT INTO `db_body_part_dict`
+(`name`, `code`, `parent_id`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '腹部', 'ABDOMEN', NULL, '适合腹痛、腹胀、恶心呕吐等消化道相关表达。', 50, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_body_part_dict` WHERE `code` = 'ABDOMEN');
+
+INSERT INTO `db_body_part_dict`
+(`name`, `code`, `parent_id`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '皮肤', 'SKIN', NULL, '适合皮疹、红斑、瘙痒、破溃等皮肤表现。', 60, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_body_part_dict` WHERE `code` = 'SKIN');
+
+-- -------------------------
+-- 15. 症状字典
+-- -------------------------
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '发热', 'FEVER', '发烧,体温高,高热', '持续发热,反复发热', '适合全身性发热相关描述。', 10, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'WHOLE_BODY'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'FEVER');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '乏力', 'FATIGUE', '没劲,没力气,无力', '容易疲劳,浑身无力', '适合全身无力、精神差等表达。', 20, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'WHOLE_BODY'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'FATIGUE');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '剧烈头痛', 'SEVERE_HEADACHE', '头特别痛,头痛厉害,爆炸样头痛', '头痛加重,难以忍受的头痛', '适合作为头痛高风险场景识别症状。', 30, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'HEAD_NECK'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'SEVERE_HEADACHE');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '咽痛', 'SORE_THROAT', '嗓子痛,喉咙痛,吞咽痛', '咽部疼痛,咽喉疼', '适合咽喉不适相关描述。', 40, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'THROAT'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'SORE_THROAT');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '咳嗽', 'COUGH', '咳,咳个不停,咳得厉害', '干咳,咳痰', '适合作为呼吸道常见症状识别。', 50, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'CHEST'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'COUGH');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '胸痛', 'CHEST_PAIN', '胸口痛,心口痛,胸前痛', '胸部刺痛,胸部压痛', '适合作为胸部高风险症状识别。', 60, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'CHEST'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'CHEST_PAIN');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '呼吸困难', 'DYSPNEA', '喘不上气,呼吸费力,气不够', '气短,憋气', '适合作为胸部和呼吸风险症状识别。', 70, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'CHEST'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'DYSPNEA');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '腹痛', 'ABDOMINAL_PAIN', '肚子痛,胃痛,腹部疼', '肚子绞痛,肚子难受', '适合作为腹部不适通用症状。', 80, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'ABDOMEN'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'ABDOMINAL_PAIN');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '呕吐', 'VOMITING', '吐了,反胃呕吐,一直吐', '恶心呕吐,反复呕吐', '适合作为消化道症状补充识别。', 90, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'ABDOMEN'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'VOMITING');
+
+INSERT INTO `db_symptom_dict`
+(`body_part_id`, `name`, `code`, `keywords`, `alias_keywords`, `description`, `sort`, `status`, `create_time`, `update_time`)
+SELECT bp.id, '皮疹', 'RASH', '起疹子,红疹,皮肤起包', '皮肤发红,身上长疹', '适合作为皮肤异常表现识别。', 100, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+WHERE bp.`code` = 'SKIN'
+  AND NOT EXISTS (SELECT 1 FROM `db_symptom_dict` WHERE `code` = 'RASH');
+
+-- -------------------------
+-- 16. 分诊等级字典
+-- -------------------------
+INSERT INTO `db_triage_level_dict`
+(`name`, `code`, `description`, `suggestion`, `color`, `priority`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '立即急诊', 'EMERGENCY', '用于强烈提示存在急危重症风险的场景。', '建议立即前往急诊或呼叫急救，不建议继续等待线上问诊。', '#D03050', 100, 10, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_triage_level_dict` WHERE `code` = 'EMERGENCY');
+
+INSERT INTO `db_triage_level_dict`
+(`name`, `code`, `description`, `suggestion`, `color`, `priority`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '尽快线下就医', 'URGENT', '用于建议尽快前往线下门诊进一步评估的场景。', '建议尽快线下就医，可先完成基础资料补充后安排问诊。', '#F59E0B', 80, 20, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_triage_level_dict` WHERE `code` = 'URGENT');
+
+INSERT INTO `db_triage_level_dict`
+(`name`, `code`, `description`, `suggestion`, `color`, `priority`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '在线咨询', 'ONLINE', '适用于风险相对可控、可先进行线上沟通的场景。', '可先进入在线咨询，由系统推荐合适科室与医生。', '#2F7D6D', 50, 30, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_triage_level_dict` WHERE `code` = 'ONLINE');
+
+INSERT INTO `db_triage_level_dict`
+(`name`, `code`, `description`, `suggestion`, `color`, `priority`, `sort`, `status`, `create_time`, `update_time`)
+SELECT '居家观察', 'OBSERVE', '适用于可先观察、后续持续追踪的低风险场景。', '建议先记录症状变化，如持续加重再发起进一步咨询。', '#7C8EA0', 20, 40, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_triage_level_dict` WHERE `code` = 'OBSERVE');
+
+-- -------------------------
+-- 17. 红旗规则
+-- -------------------------
+INSERT INTO `db_red_flag_rule`
+(`rule_name`, `rule_code`, `trigger_type`, `body_part_id`, `keyword_pattern`, `condition_description`, `triage_level_id`, `suggestion`, `action_type`, `priority`, `status`, `create_time`, `update_time`)
+SELECT '胸痛伴呼吸困难', 'CHEST_PAIN_DYSPNEA', 'combination', bp.id, NULL,
+       '胸部不适同时伴呼吸困难时，应优先评估急症风险。',
+       tl.id, '建议立即前往急诊或呼叫急救，不建议继续等待线上问诊。',
+       'emergency', 100, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+JOIN `db_triage_level_dict` tl ON tl.`code` = 'EMERGENCY'
+WHERE bp.`code` = 'CHEST'
+  AND NOT EXISTS (SELECT 1 FROM `db_red_flag_rule` WHERE `rule_code` = 'CHEST_PAIN_DYSPNEA');
+
+INSERT INTO `db_red_flag_rule`
+(`rule_name`, `rule_code`, `trigger_type`, `body_part_id`, `keyword_pattern`, `condition_description`, `triage_level_id`, `suggestion`, `action_type`, `priority`, `status`, `create_time`, `update_time`)
+SELECT '高热伴抽搐或精神差', 'HIGH_FEVER_ALERT', 'keyword_match', NULL, '高热|39\\.5|抽搐|精神差|意识差',
+       '自由文本出现高热并伴神经系统或精神状态异常表达时，需要尽快线下评估。',
+       tl.id, '建议尽快线下就医，儿童、老人或基础病人群需优先处理。',
+       'offline', 90, 1, NOW(), NOW()
+FROM `db_triage_level_dict` tl
+WHERE tl.`code` = 'URGENT'
+  AND NOT EXISTS (SELECT 1 FROM `db_red_flag_rule` WHERE `rule_code` = 'HIGH_FEVER_ALERT');
+
+INSERT INTO `db_red_flag_rule`
+(`rule_name`, `rule_code`, `trigger_type`, `body_part_id`, `keyword_pattern`, `condition_description`, `triage_level_id`, `suggestion`, `action_type`, `priority`, `status`, `create_time`, `update_time`)
+SELECT '剧烈头痛线下评估', 'SEVERE_HEADACHE_ALERT', 'symptom_match', bp.id, NULL,
+       '当用户明确表达为剧烈头痛时，建议优先线下评估风险。',
+       tl.id, '建议尽快线下就医，必要时结合伴随症状进一步排查。',
+       'offline', 80, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+JOIN `db_triage_level_dict` tl ON tl.`code` = 'URGENT'
+WHERE bp.`code` = 'HEAD_NECK'
+  AND NOT EXISTS (SELECT 1 FROM `db_red_flag_rule` WHERE `rule_code` = 'SEVERE_HEADACHE_ALERT');
+
+INSERT INTO `db_red_flag_rule`
+(`rule_name`, `rule_code`, `trigger_type`, `body_part_id`, `keyword_pattern`, `condition_description`, `triage_level_id`, `suggestion`, `action_type`, `priority`, `status`, `create_time`, `update_time`)
+SELECT '胸部不适优先线下', 'CHEST_DISCOMFORT_OFFLINE', 'body_part_match', bp.id, NULL,
+       '当仅能识别到胸部不适但症状尚不明确时，可先提高线下评估优先级。',
+       tl.id, '建议结合具体症状继续补充资料，必要时优先安排线下就医。',
+       'offline', 60, 1, NOW(), NOW()
+FROM `db_body_part_dict` bp
+JOIN `db_triage_level_dict` tl ON tl.`code` = 'URGENT'
+WHERE bp.`code` = 'CHEST'
+  AND NOT EXISTS (SELECT 1 FROM `db_red_flag_rule` WHERE `rule_code` = 'CHEST_DISCOMFORT_OFFLINE');
+
+INSERT INTO `db_red_flag_rule_symptom` (`rule_id`, `symptom_id`)
+SELECT r.id, s.id
+FROM `db_red_flag_rule` r
+JOIN `db_symptom_dict` s ON s.`code` = 'CHEST_PAIN'
+WHERE r.`rule_code` = 'CHEST_PAIN_DYSPNEA'
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_red_flag_rule_symptom` x
+    WHERE x.`rule_id` = r.id AND x.`symptom_id` = s.id
+  );
+
+INSERT INTO `db_red_flag_rule_symptom` (`rule_id`, `symptom_id`)
+SELECT r.id, s.id
+FROM `db_red_flag_rule` r
+JOIN `db_symptom_dict` s ON s.`code` = 'DYSPNEA'
+WHERE r.`rule_code` = 'CHEST_PAIN_DYSPNEA'
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_red_flag_rule_symptom` x
+    WHERE x.`rule_id` = r.id AND x.`symptom_id` = s.id
+  );
+
+INSERT INTO `db_red_flag_rule_symptom` (`rule_id`, `symptom_id`)
+SELECT r.id, s.id
+FROM `db_red_flag_rule` r
+JOIN `db_symptom_dict` s ON s.`code` = 'SEVERE_HEADACHE'
+WHERE r.`rule_code` = 'SEVERE_HEADACHE_ALERT'
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_red_flag_rule_symptom` x
+    WHERE x.`rule_id` = r.id AND x.`symptom_id` = s.id
+  );
+
 -- =========================================================
 -- 导入完成后建议查看以下页面：
 -- 1. 管理员 > 科室信息维护
@@ -740,6 +956,10 @@ WHERE c.code = 'SKIN_ISSUE' AND t.name = '皮肤问题模板' AND t.version = 1
 -- 4. 管理员 > 医生排班管理
 -- 5. 管理员 > 问诊分类管理
 -- 6. 管理员 > 前置模板管理
--- 7. 网站首页 > 推荐医生展示
+-- 7. 管理员 > 身体部位字典
+-- 8. 管理员 > 症状字典管理
+-- 9. 管理员 > 分诊等级字典
+-- 10. 管理员 > 红旗规则管理
+-- 11. 网站首页 > 推荐医生展示
 -- 说明：经典案例仍建议你手动上传真实封面图后再配置。
 -- =========================================================

@@ -222,6 +222,114 @@ CREATE TABLE IF NOT EXISTS `db_consultation_intake_field` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_body_part_dict` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `parent_id` int DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_body_part_name` (`name`),
+  UNIQUE KEY `uk_body_part_code` (`code`),
+  KEY `idx_body_part_parent_status` (`parent_id`, `status`),
+  KEY `idx_body_part_sort` (`sort`),
+  CONSTRAINT `fk_body_part_parent`
+    FOREIGN KEY (`parent_id`) REFERENCES `db_body_part_dict` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_symptom_dict` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `body_part_id` int NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `keywords` varchar(255) DEFAULT NULL,
+  `alias_keywords` varchar(255) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_symptom_code` (`code`),
+  UNIQUE KEY `uk_symptom_body_part_name` (`body_part_id`, `name`),
+  KEY `idx_symptom_body_part_status` (`body_part_id`, `status`),
+  KEY `idx_symptom_sort` (`sort`),
+  CONSTRAINT `fk_symptom_body_part`
+    FOREIGN KEY (`body_part_id`) REFERENCES `db_body_part_dict` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_triage_level_dict` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `suggestion` varchar(255) DEFAULT NULL,
+  `color` varchar(20) DEFAULT NULL,
+  `priority` int NOT NULL DEFAULT 0,
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_triage_level_name` (`name`),
+  UNIQUE KEY `uk_triage_level_code` (`code`),
+  KEY `idx_triage_level_priority_status` (`priority`, `status`),
+  KEY `idx_triage_level_sort` (`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_red_flag_rule` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `rule_name` varchar(100) NOT NULL,
+  `rule_code` varchar(50) NOT NULL,
+  `trigger_type` varchar(30) NOT NULL,
+  `body_part_id` int DEFAULT NULL,
+  `keyword_pattern` varchar(255) DEFAULT NULL,
+  `condition_description` varchar(255) DEFAULT NULL,
+  `triage_level_id` int NOT NULL,
+  `suggestion` varchar(255) NOT NULL,
+  `action_type` varchar(30) NOT NULL DEFAULT 'offline',
+  `priority` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_red_flag_rule_code` (`rule_code`),
+  KEY `idx_red_flag_rule_priority_status` (`priority`, `status`),
+  KEY `idx_red_flag_rule_triage_level` (`triage_level_id`),
+  KEY `idx_red_flag_rule_body_part` (`body_part_id`),
+  CONSTRAINT `fk_red_flag_rule_triage_level`
+    FOREIGN KEY (`triage_level_id`) REFERENCES `db_triage_level_dict` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_red_flag_rule_body_part`
+    FOREIGN KEY (`body_part_id`) REFERENCES `db_body_part_dict` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_red_flag_rule_symptom` (
+  `rule_id` int NOT NULL,
+  `symptom_id` int NOT NULL,
+  PRIMARY KEY (`rule_id`, `symptom_id`),
+  KEY `idx_red_flag_rule_symptom_symptom` (`symptom_id`),
+  CONSTRAINT `fk_red_flag_rule_symptom_rule`
+    FOREIGN KEY (`rule_id`) REFERENCES `db_red_flag_rule` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_red_flag_rule_symptom_symptom`
+    FOREIGN KEY (`symptom_id`) REFERENCES `db_symptom_dict` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_homepage_config` (
   `id` int NOT NULL,
   `hero_title` varchar(100) NOT NULL,
@@ -292,3 +400,4 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
 -- 9. Homepage case and recommended doctor data reference department/doctor base data and should be cleared first before deleting those records.
 -- 10. Consultation categories provide the entry configuration for AI triage scenes and map to base departments.
 -- 11. Intake templates store pre-consultation field configuration, and each category should keep at least one default template for later user-side intake.
+-- 12. Body part, symptom, triage level and red-flag rule dictionaries are the core structured data for rule-based triage and AI-assisted recommendation.
