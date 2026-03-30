@@ -16,6 +16,8 @@ import cn.gugufish.entity.dto.RedFlagRule;
 import cn.gugufish.entity.dto.RedFlagRuleSymptom;
 import cn.gugufish.entity.dto.SymptomDict;
 import cn.gugufish.entity.dto.TriageRuleHitLog;
+import cn.gugufish.entity.dto.TriageMessage;
+import cn.gugufish.entity.dto.TriageSession;
 import cn.gugufish.entity.dto.TriageLevelDict;
 import cn.gugufish.entity.vo.request.ConsultationAnswerSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
@@ -41,8 +43,11 @@ import cn.gugufish.mapper.RedFlagRuleMapper;
 import cn.gugufish.mapper.RedFlagRuleSymptomMapper;
 import cn.gugufish.mapper.SymptomDictMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
+import cn.gugufish.mapper.TriageMessageMapper;
+import cn.gugufish.mapper.TriageSessionMapper;
 import cn.gugufish.mapper.TriageLevelDictMapper;
 import cn.gugufish.service.ConsultationService;
+import cn.gugufish.service.TriageSessionQueryService;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
@@ -98,6 +103,9 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource DoctorScheduleMapper doctorScheduleMapper;
     @Resource DoctorServiceTagMapper doctorServiceTagMapper;
     @Resource TriageRuleHitLogMapper triageRuleHitLogMapper;
+    @Resource TriageSessionMapper triageSessionMapper;
+    @Resource TriageMessageMapper triageMessageMapper;
+    @Resource TriageSessionQueryService triageSessionQueryService;
 
     @Override
     public List<ConsultationEntryCategoryVO> listEntryCategories() {
@@ -209,6 +217,7 @@ public class ConsultationServiceImpl implements ConsultationService {
         return record.asViewObject(ConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
             vo.setRecommendedDoctors(buildRecommendedDoctors(record));
+            vo.setTriageSession(triageSessionQueryService.detailByConsultationId(id));
         });
     }
 
@@ -300,6 +309,12 @@ public class ConsultationServiceImpl implements ConsultationService {
         if (hitLogMessage != null) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return hitLogMessage;
+        }
+
+        String sessionMessage = saveTriageSession(record, triage, answers, now);
+        if (sessionMessage != null) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return sessionMessage;
         }
         return null;
     }
@@ -827,6 +842,242 @@ public class ConsultationServiceImpl implements ConsultationService {
             segments.add(abbreviate(rule.getConditionDescription(), 120));
         }
         return segments.isEmpty() ? null : abbreviate(String.join("；", segments), 255);
+    }
+
+    private String saveTriageSession(ConsultationRecord record,
+                                     TriageDecision triage,
+                                     List<ConsultationRecordAnswer> answers,
+                                     Date now) {
+        List<TriageMessageDraft> messageDrafts = buildTriageMessages(record, triage, answers);
+        TriageSession session = new TriageSession(
+                null,
+                generateTriageSessionNo(),
+                record.getId(),
+                record.getAccountId(),
+                record.getPatientId(),
+                record.getPatientName(),
+                record.getCategoryId(),
+                record.getCategoryName(),
+                record.getDepartmentId(),
+                record.getDepartmentName(),
+                "consultation_submit",
+                "completed",
+                record.getTriageLevelId(),
+                record.getTriageLevelCode(),
+                record.getTriageLevelName(),
+                record.getTriageActionType(),
+                buildTriageSessionSummary(record),
+                messageDrafts.size(),
+                now,
+                now,
+                now,
+                now
+        );
+        if (triageSessionMapper.insert(session) <= 0) {
+            return "瀵艰瘖浼氳瘽淇濆瓨澶辫触锛岃绋嶅悗閲嶈瘯";
+        }
+
+        for (int i = 0; i < messageDrafts.size(); i++) {
+            TriageMessageDraft draft = messageDrafts.get(i);
+            TriageMessage message = new TriageMessage(
+                    null,
+                    session.getId(),
+                    draft.roleType(),
+                    draft.messageType(),
+                    draft.title(),
+                    draft.content(),
+                    draft.structuredContent(),
+                    (i + 1) * 10,
+                    now
+            );
+            if (triageMessageMapper.insert(message) <= 0) {
+                return "瀵艰瘖浼氳瘽娑堟伅淇濆瓨澶辫触锛岃绋嶅悗閲嶈瘯";
+            }
+        }
+        return null;
+    }
+
+    private List<TriageMessageDraft> buildTriageMessages(ConsultationRecord record,
+                                                         TriageDecision triage,
+                                                         List<ConsultationRecordAnswer> answers) {
+        List<TriageMessageDraft> drafts = new ArrayList<>();
+        drafts.add(new TriageMessageDraft(
+                "user",
+                "intake_summary",
+                "鐢ㄦ埛闂瘖鎽樿",
+                buildIntakeSummaryContent(record, answers),
+                buildIntakeSummaryStructuredContent(record, answers)
+        ));
+        drafts.add(new TriageMessageDraft(
+                "user",
+                "health_summary",
+                "鍋ュ悍妗ｆ鎽樿",
+                isEmptyValue(record.getHealthSummary()) ? "褰撳墠鏈叧鑱斿仴搴锋。妗堟憳瑕佷俊鎭€?" : record.getHealthSummary(),
+                buildHealthSummaryStructuredContent(record)
+        ));
+        drafts.add(new TriageMessageDraft(
+                "system",
+                "triage_result",
+                "绯荤粺鍒嗚瘖缁撴灉",
+                buildTriageSessionSummary(record),
+                buildTriageResultStructuredContent(record)
+        ));
+        if (triage.ruleHits() != null && !triage.ruleHits().isEmpty()) {
+            drafts.add(new TriageMessageDraft(
+                    "rule_engine",
+                    "rule_summary",
+                    "瑙勫垯鍛戒腑鎽樿",
+                    buildRuleSummaryContent(record, triage.ruleHits()),
+                    buildRuleSummaryStructuredContent(triage.ruleHits())
+            ));
+            for (TriageRuleHitSnapshot item : triage.ruleHits()) {
+                drafts.add(new TriageMessageDraft(
+                        "rule_engine",
+                        "rule_hit",
+                        isEmptyValue(item.ruleName()) ? "瑙勫垯鍛戒腑璇︽儏" : item.ruleName(),
+                        buildRuleHitContent(item),
+                        buildRuleHitStructuredContent(item)
+                ));
+            }
+        }
+        return drafts;
+    }
+
+    private String buildIntakeSummaryContent(ConsultationRecord record, List<ConsultationRecordAnswer> answers) {
+        List<String> segments = new ArrayList<>();
+        segments.add("灏辫瘖浜猴細" + record.getPatientName());
+        segments.add("闂瘖鍒嗙被锛? + record.getCategoryName());
+        if (!isEmptyValue(record.getChiefComplaint())) segments.add("涓昏瘔锛? + record.getChiefComplaint());
+        String answerSummary = answers.stream()
+                .filter(item -> !isEmptyValue(item.getFieldValue()))
+                .map(item -> item.getFieldLabel() + "锛? + abbreviate(displayValue(item.getFieldType(), item.getFieldValue()), 60))
+                .limit(6)
+                .collect(Collectors.joining("锛?));
+        if (!isEmptyValue(answerSummary)) segments.add("琛ュ厖璧勬枡锛? + answerSummary);
+        return abbreviate(String.join("锛?, segments), 1000);
+    }
+
+    private String buildIntakeSummaryStructuredContent(ConsultationRecord record, List<ConsultationRecordAnswer> answers) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("consultationNo", record.getConsultationNo());
+        payload.put("patientName", record.getPatientName());
+        payload.put("categoryName", record.getCategoryName());
+        payload.put("departmentName", record.getDepartmentName());
+        payload.put("chiefComplaint", record.getChiefComplaint());
+
+        List<Map<String, Object>> answerPayload = new ArrayList<>();
+        for (ConsultationRecordAnswer answer : answers) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("fieldCode", answer.getFieldCode());
+            item.put("fieldLabel", answer.getFieldLabel());
+            item.put("fieldType", answer.getFieldType());
+            item.put("fieldValue", answer.getFieldValue());
+            item.put("displayValue", displayValue(answer.getFieldType(), answer.getFieldValue()));
+            answerPayload.add(item);
+        }
+        payload.put("answers", answerPayload);
+        return JSON.toJSONString(payload);
+    }
+
+    private String buildHealthSummaryStructuredContent(ConsultationRecord record) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("patientName", record.getPatientName());
+        payload.put("healthSummary", record.getHealthSummary());
+        return JSON.toJSONString(payload);
+    }
+
+    private String buildTriageSessionSummary(ConsultationRecord record) {
+        List<String> segments = new ArrayList<>();
+        segments.add("鍒嗚瘖绛夌骇锛? + (isEmptyValue(record.getTriageLevelName()) ? "寰呯郴缁熻瘎浼?" : record.getTriageLevelName()));
+        segments.add("寤鸿鍔ㄤ綔锛? + triageActionText(record.getTriageActionType()));
+        if (!isEmptyValue(record.getDepartmentName())) segments.add("鍖归厤绉戝锛? + record.getDepartmentName());
+        if (!isEmptyValue(record.getTriageSuggestion())) segments.add("绯荤粺寤鸿锛? + record.getTriageSuggestion());
+        if (!isEmptyValue(record.getTriageRuleSummary())) segments.add("椋庨櫓鎻愮ず锛? + record.getTriageRuleSummary());
+        return abbreviate(String.join("锛?, segments), 1000);
+    }
+
+    private String buildTriageResultStructuredContent(ConsultationRecord record) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("triageLevelId", record.getTriageLevelId());
+        payload.put("triageLevelCode", record.getTriageLevelCode());
+        payload.put("triageLevelName", record.getTriageLevelName());
+        payload.put("triageActionType", record.getTriageActionType());
+        payload.put("triageSuggestion", record.getTriageSuggestion());
+        payload.put("triageRuleSummary", record.getTriageRuleSummary());
+        payload.put("departmentId", record.getDepartmentId());
+        payload.put("departmentName", record.getDepartmentName());
+        return JSON.toJSONString(payload);
+    }
+
+    private String buildRuleSummaryContent(ConsultationRecord record, List<TriageRuleHitSnapshot> ruleHits) {
+        TriageRuleHitSnapshot primary = ruleHits.stream()
+                .filter(item -> item.isPrimary() != null && item.isPrimary() == 1)
+                .findFirst()
+                .orElse(ruleHits.get(0));
+        List<String> segments = new ArrayList<>();
+        segments.add("鍏卞懡涓? " + ruleHits.size() + " 鏉¤鍒?");
+        if (!isEmptyValue(primary.ruleName())) segments.add("涓昏鍒欙細" + primary.ruleName());
+        if (!isEmptyValue(record.getTriageRuleSummary())) segments.add("缁煎悎鎽樿锛? + record.getTriageRuleSummary());
+        return abbreviate(String.join("锛?, segments), 1000);
+    }
+
+    private String buildRuleSummaryStructuredContent(List<TriageRuleHitSnapshot> ruleHits) {
+        List<Map<String, Object>> payload = new ArrayList<>();
+        for (TriageRuleHitSnapshot item : ruleHits) {
+            payload.add(buildRuleHitPayload(item));
+        }
+        return JSON.toJSONString(payload);
+    }
+
+    private String buildRuleHitContent(TriageRuleHitSnapshot item) {
+        List<String> segments = new ArrayList<>();
+        segments.add("瑙﹀彂鏂瑰紡锛? + triggerTypeText(item.triggerType()));
+        if (!isEmptyValue(item.matchedSummary())) segments.add("鍛戒腑渚濇嵁锛? + item.matchedSummary());
+        if (!isEmptyValue(item.triageLevelName())) segments.add("瀵瑰簲绛夌骇锛? + item.triageLevelName());
+        if (!isEmptyValue(item.actionType())) segments.add("寤鸿鍔ㄤ綔锛? + triageActionText(item.actionType()));
+        if (!isEmptyValue(item.suggestion())) segments.add("瑙勫垯寤鸿锛? + item.suggestion());
+        return abbreviate(String.join("锛?, segments), 1000);
+    }
+
+    private String buildRuleHitStructuredContent(TriageRuleHitSnapshot item) {
+        return JSON.toJSONString(buildRuleHitPayload(item));
+    }
+
+    private Map<String, Object> buildRuleHitPayload(TriageRuleHitSnapshot item) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("ruleId", item.ruleId());
+        payload.put("ruleName", item.ruleName());
+        payload.put("ruleCode", item.ruleCode());
+        payload.put("triggerType", item.triggerType());
+        payload.put("triageLevelId", item.triageLevelId());
+        payload.put("triageLevelCode", item.triageLevelCode());
+        payload.put("triageLevelName", item.triageLevelName());
+        payload.put("actionType", item.actionType());
+        payload.put("suggestion", item.suggestion());
+        payload.put("matchedSummary", item.matchedSummary());
+        payload.put("priority", item.priority());
+        payload.put("isPrimary", item.isPrimary());
+        return payload;
+    }
+
+    private String triageActionText(String actionType) {
+        return switch (trimToNull(actionType) == null ? "" : actionType.toLowerCase()) {
+            case "emergency" -> "绔嬪嵆鎬ヨ瘖";
+            case "offline" -> "灏藉揩绾夸笅灏卞尰";
+            case "followup" -> "澶嶈瘖闅忚";
+            case "online" -> "绾夸笂缁х画";
+            default -> "缁х画鍏虫敞";
+        };
+    }
+
+    private String triggerTypeText(String triggerType) {
+        return switch (trimToNull(triggerType) == null ? "" : triggerType.toLowerCase()) {
+            case "symptom_match" -> "鐥囩姸鍖归厤";
+            case "keyword_match" -> "鍏抽敭璇嶅尮閰?";
+            case "body_part_match" -> "閮ㄤ綅鍖归厤";
+            case "combination" -> "缁勫悎瑙勫垯";
+            default -> "鍏朵粬瑙﹀彂";
+        };
     }
 
     private String saveTriageRuleHitLogs(Integer consultationId, List<TriageRuleHitSnapshot> ruleHits, Date now) {

@@ -948,6 +948,133 @@ WHERE r.`rule_code` = 'SEVERE_HEADACHE_ALERT'
     WHERE x.`rule_id` = r.id AND x.`symptom_id` = s.id
   );
 
+-- -------------------------
+-- 15. Triage knowledge demo data
+-- -------------------------
+INSERT INTO `db_triage_knowledge`
+(`knowledge_type`, `title`, `content`, `tags`, `department_id`, `doctor_id`, `source_type`, `version`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'triage_strategy', 'Chest pain offline-first assessment',
+       'When the chief complaint focuses on chest pain, chest tightness, shortness of breath or worsening discomfort, the system should prioritize offline evaluation. If sweating, radiation pain or near-syncope is also present, the urgency level should be raised and online-only guidance should not be the final recommendation.',
+       'chest-pain,offline-first,high-risk', d.id, NULL, 'guideline', 1, 10, 1, NOW(), NOW()
+FROM `db_department` d
+WHERE d.`code` = 'GENERAL_MEDICINE'
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_knowledge`
+    WHERE `knowledge_type` = 'triage_strategy' AND `title` = 'Chest pain offline-first assessment'
+  );
+
+INSERT INTO `db_triage_knowledge`
+(`knowledge_type`, `title`, `content`, `tags`, `department_id`, `doctor_id`, `source_type`, `version`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'department_guide', 'Pediatric fever online triage boundary',
+       'Online pediatric fever triage should first collect temperature, duration, mental status, fluid intake and accompanying symptoms. If the child is very young, obviously lethargic, has persistent high fever or a seizure history, the recommended action should switch to offline care instead of continued online observation.',
+       'pediatrics,fever,boundary', d.id, NULL, 'manual', 1, 20, 1, NOW(), NOW()
+FROM `db_department` d
+WHERE d.`code` = 'PEDIATRICS'
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_knowledge`
+    WHERE `knowledge_type` = 'department_guide' AND `title` = 'Pediatric fever online triage boundary'
+  );
+
+INSERT INTO `db_triage_knowledge`
+(`knowledge_type`, `title`, `content`, `tags`, `department_id`, `doctor_id`, `source_type`, `version`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'doctor_profile', 'Zhou Yaning chronic care profile',
+       'This doctor profile is suitable for hypertension, diabetes and other chronic disease follow-up scenarios. The system should pay special attention to recent indicators, current medication, adherence and newly developed discomfort, and can prioritize follow-up or report-interpretation pathways.',
+       'chronic-followup,report,medication', dep.id, doc.id, 'operation', 1, 30, 1, NOW(), NOW()
+FROM `db_doctor` doc
+JOIN `db_department` dep ON dep.id = doc.department_id
+WHERE dep.`code` = 'INTERNAL_MEDICINE' AND doc.`sort` = 20
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_knowledge`
+    WHERE `knowledge_type` = 'doctor_profile' AND `title` = 'Zhou Yaning chronic care profile'
+  );
+
+INSERT INTO `db_triage_knowledge`
+(`knowledge_type`, `title`, `content`, `tags`, `department_id`, `doctor_id`, `source_type`, `version`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'case_reference', 'Rash with itching case summary',
+       'A user reported recurrent facial rash with itching for one week and uploaded lesion photos. The triage flow should first supplement duration, affected area, self-medication history and exposure clues, then route the case into dermatology online consultation or follow-up review.',
+       'dermatology,case-review,photo', dep.id, doc.id, 'case_review', 1, 40, 1, NOW(), NOW()
+FROM `db_doctor` doc
+JOIN `db_department` dep ON dep.id = doc.department_id
+WHERE dep.`code` = 'DERMATOLOGY' AND doc.`sort` = 50
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_knowledge`
+    WHERE `knowledge_type` = 'case_reference' AND `title` = 'Rash with itching case summary'
+  );
+
+INSERT INTO `db_triage_knowledge`
+(`knowledge_type`, `title`, `content`, `tags`, `department_id`, `doctor_id`, `source_type`, `version`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'service_notice', 'Report interpretation upload reminder',
+       'Before report interpretation starts, users should be reminded to upload complete and clear report files, fill in the report date, mention the most concerning abnormal item and indicate whether symptoms are present. Better input quality directly improves later recommendation accuracy.',
+       'report,upload,service-note', NULL, NULL, 'manual', 1, 50, 1, NOW(), NOW()
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM `db_triage_knowledge`
+  WHERE `knowledge_type` = 'service_notice' AND `title` = 'Report interpretation upload reminder'
+);
+
+-- -------------------------
+-- 16. Triage case reference demo data
+-- -------------------------
+INSERT INTO `db_triage_case_reference`
+(`title`, `chief_complaint`, `symptom_summary`, `triage_result`, `department_id`, `doctor_id`, `risk_level`, `tags`, `source_type`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'Chest pain with dyspnea offline triage case',
+       'Chest pain for 2 hours with shortness of breath and sweating.',
+       'The user reported worsening chest tightness, shortness of breath and obvious sweating. This scenario should first screen for acute cardiopulmonary risk and avoid continuing as a routine online consultation.',
+       'Recommend immediate offline evaluation and prioritize emergency risk screening.',
+       dep.id, doc.id, 'emergency', 'chest-pain,dyspnea,offline-first', 'case_review', 10, 1, NOW(), NOW()
+FROM `db_department` dep
+JOIN `db_doctor` doc ON doc.department_id = dep.id
+WHERE dep.`code` = 'GENERAL_MEDICINE' AND doc.`sort` = 10
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_case_reference`
+    WHERE `title` = 'Chest pain with dyspnea offline triage case'
+  );
+
+INSERT INTO `db_triage_case_reference`
+(`title`, `chief_complaint`, `symptom_summary`, `triage_result`, `department_id`, `doctor_id`, `risk_level`, `tags`, `source_type`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'Child high fever lethargy triage case',
+       'High fever for 1 day with poor mental status.',
+       'This pediatric case highlights that persistent fever combined with lethargy should trigger offline pediatric evaluation instead of simple home observation guidance.',
+       'Recommend urgent offline pediatric assessment and continuous temperature observation.',
+       dep.id, doc.id, 'high', 'pediatrics,fever,mental-status', 'doctor_summary', 20, 1, NOW(), NOW()
+FROM `db_department` dep
+JOIN `db_doctor` doc ON doc.department_id = dep.id
+WHERE dep.`code` = 'PEDIATRICS' AND doc.`sort` = 30
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_case_reference`
+    WHERE `title` = 'Child high fever lethargy triage case'
+  );
+
+INSERT INTO `db_triage_case_reference`
+(`title`, `chief_complaint`, `symptom_summary`, `triage_result`, `department_id`, `doctor_id`, `risk_level`, `tags`, `source_type`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'Chronic disease report follow-up case',
+       'Blood pressure fluctuation with recent report upload.',
+       'The user has a chronic disease history, uploaded a recent report and needs medication and indicator review. This kind of case is suitable for follow-up consultation rather than emergency routing.',
+       'Recommend chronic follow-up review and report interpretation pathway.',
+       dep.id, doc.id, 'medium', 'chronic-followup,report-review,medication', 'operation', 30, 1, NOW(), NOW()
+FROM `db_department` dep
+JOIN `db_doctor` doc ON doc.department_id = dep.id
+WHERE dep.`code` = 'INTERNAL_MEDICINE' AND doc.`sort` = 20
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_case_reference`
+    WHERE `title` = 'Chronic disease report follow-up case'
+  );
+
+INSERT INTO `db_triage_case_reference`
+(`title`, `chief_complaint`, `symptom_summary`, `triage_result`, `department_id`, `doctor_id`, `risk_level`, `tags`, `source_type`, `sort`, `status`, `create_time`, `update_time`)
+SELECT 'Facial rash photo upload triage case',
+       'Recurrent facial rash with itching for one week.',
+       'The user uploaded lesion photos and described repeated itching. The triage focus should supplement affected area, duration, self-medication and exposure history, then direct the case into dermatology consultation.',
+       'Recommend dermatology online consultation and lesion-photo-assisted review.',
+       dep.id, doc.id, 'medium', 'rash,photo,dermatology', 'case_review', 40, 1, NOW(), NOW()
+FROM `db_department` dep
+JOIN `db_doctor` doc ON doc.department_id = dep.id
+WHERE dep.`code` = 'DERMATOLOGY' AND doc.`sort` = 50
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_triage_case_reference`
+    WHERE `title` = 'Facial rash photo upload triage case'
+  );
+
 -- =========================================================
 -- 导入完成后建议查看以下页面：
 -- 1. 管理员 > 科室信息维护

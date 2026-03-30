@@ -34,4 +34,5 @@ public class AdminConsultationRecordVO {
     Date updateTime;
     List<ConsultationRecordAnswerVO> answers;
     List<TriageRuleHitLogVO> ruleHits;
+    TriageSessionVO triageSession;
 }

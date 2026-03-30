@@ -10,6 +10,7 @@ import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
 import cn.gugufish.service.ConsultationRecordAdminService;
+import cn.gugufish.service.TriageSessionQueryService;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,9 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
 
     @Resource
     TriageRuleHitLogMapper triageRuleHitLogMapper;
+
+    @Resource
+    TriageSessionQueryService triageSessionQueryService;
 
     @Override
     public List<AdminConsultationRecordVO> listRecords() {
@@ -63,6 +67,7 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         return record.asViewObject(AdminConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
             vo.setRuleHits(ruleHits);
+            vo.setTriageSession(triageSessionQueryService.detailByConsultationId(id));
         });
     }
 }

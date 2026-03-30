@@ -96,6 +96,12 @@ const menuItems = [
     icon: Document
   },
   {
+    index: '/admin/triage-case',
+    title: '导诊案例库管理',
+    description: '沉淀内部结构化案例，为 AI 检索、推荐解释和复盘分析提供样本',
+    icon: Document
+  },
+  {
     index: '/admin/consultation-record',
     title: '导诊记录中心',
     description: '查看用户问诊记录、初步分诊结果与规则命中留痕',

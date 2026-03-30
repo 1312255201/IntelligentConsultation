@@ -4,6 +4,7 @@ import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.HomepageCase;
 import cn.gugufish.entity.dto.HomepageRecommendDoctor;
+import cn.gugufish.entity.dto.TriageCaseReference;
 import cn.gugufish.entity.dto.TriageKnowledge;
 import cn.gugufish.entity.vo.request.DoctorCreateVO;
 import cn.gugufish.entity.vo.request.DoctorUpdateVO;
@@ -11,6 +12,7 @@ import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.HomepageCaseMapper;
 import cn.gugufish.mapper.HomepageRecommendDoctorMapper;
+import cn.gugufish.mapper.TriageCaseReferenceMapper;
 import cn.gugufish.mapper.TriageKnowledgeMapper;
 import cn.gugufish.service.DoctorService;
 import cn.gugufish.service.ImageService;
@@ -39,6 +41,9 @@ public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> impleme
 
     @Resource
     TriageKnowledgeMapper triageKnowledgeMapper;
+
+    @Resource
+    TriageCaseReferenceMapper triageCaseReferenceMapper;
 
     @Override
     public List<Doctor> listDoctors() {
@@ -113,6 +118,9 @@ public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> impleme
         }
         if (triageKnowledgeMapper.exists(Wrappers.<TriageKnowledge>query().eq("doctor_id", id))) {
             return "当前医生已被导诊知识库引用，请先调整知识归属后再删除";
+        }
+        if (triageCaseReferenceMapper.exists(Wrappers.<TriageCaseReference>query().eq("doctor_id", id))) {
+            return "当前医生已被导诊案例库引用，请先调整案例归属后再删除";
         }
 
         boolean removed = this.removeById(id);

@@ -3,12 +3,14 @@ package cn.gugufish.service.impl;
 import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.HomepageCase;
+import cn.gugufish.entity.dto.TriageCaseReference;
 import cn.gugufish.entity.dto.TriageKnowledge;
 import cn.gugufish.entity.vo.request.DepartmentCreateVO;
 import cn.gugufish.entity.vo.request.DepartmentUpdateVO;
 import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.HomepageCaseMapper;
+import cn.gugufish.mapper.TriageCaseReferenceMapper;
 import cn.gugufish.mapper.TriageKnowledgeMapper;
 import cn.gugufish.service.DepartmentService;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -30,6 +32,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
 
     @Resource
     TriageKnowledgeMapper triageKnowledgeMapper;
+
+    @Resource
+    TriageCaseReferenceMapper triageCaseReferenceMapper;
 
     @Override
     public List<Department> listDepartments() {
@@ -91,6 +96,9 @@ public class DepartmentServiceImpl extends ServiceImpl<DepartmentMapper, Departm
         }
         if (triageKnowledgeMapper.exists(Wrappers.<TriageKnowledge>query().eq("department_id", id))) {
             return "当前科室已被导诊知识库引用，请先调整知识归属后再删除";
+        }
+        if (triageCaseReferenceMapper.exists(Wrappers.<TriageCaseReference>query().eq("department_id", id))) {
+            return "当前科室已被导诊案例库引用，请先调整案例归属后再删除";
         }
         return this.removeById(id) ? null : "科室删除失败，请联系管理员";
     }

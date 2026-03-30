@@ -467,6 +467,111 @@ CREATE TABLE IF NOT EXISTS `db_triage_knowledge` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_triage_case_reference` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `title` varchar(100) NOT NULL,
+  `chief_complaint` varchar(500) NOT NULL,
+  `symptom_summary` text,
+  `triage_result` varchar(500) NOT NULL,
+  `department_id` int NOT NULL,
+  `doctor_id` int DEFAULT NULL,
+  `risk_level` varchar(30) NOT NULL,
+  `tags` varchar(255) DEFAULT NULL,
+  `source_type` varchar(30) NOT NULL DEFAULT 'manual',
+  `sort` int NOT NULL DEFAULT 0,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_triage_case_title` (`title`),
+  KEY `idx_triage_case_department_status` (`department_id`, `status`),
+  KEY `idx_triage_case_doctor_status` (`doctor_id`, `status`),
+  KEY `idx_triage_case_risk_level_status` (`risk_level`, `status`),
+  KEY `idx_triage_case_sort` (`sort`, `id`),
+  CONSTRAINT `fk_triage_case_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_case_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_triage_session` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_no` varchar(32) NOT NULL,
+  `consultation_id` int NOT NULL,
+  `account_id` int NOT NULL,
+  `patient_id` int NOT NULL,
+  `patient_name` varchar(50) NOT NULL,
+  `category_id` int NOT NULL,
+  `category_name` varchar(50) NOT NULL,
+  `department_id` int DEFAULT NULL,
+  `department_name` varchar(50) DEFAULT NULL,
+  `source_type` varchar(30) NOT NULL DEFAULT 'consultation_submit',
+  `status` varchar(30) NOT NULL DEFAULT 'completed',
+  `triage_level_id` int DEFAULT NULL,
+  `triage_level_code` varchar(50) DEFAULT NULL,
+  `triage_level_name` varchar(50) DEFAULT NULL,
+  `triage_action_type` varchar(30) DEFAULT NULL,
+  `triage_summary` varchar(500) DEFAULT NULL,
+  `message_count` int NOT NULL DEFAULT 0,
+  `started_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `ended_time` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_triage_session_no` (`session_no`),
+  UNIQUE KEY `uk_triage_session_consultation` (`consultation_id`),
+  KEY `idx_triage_session_account_create` (`account_id`, `create_time`),
+  KEY `idx_triage_session_patient_create` (`patient_id`, `create_time`),
+  KEY `idx_triage_session_triage_status` (`triage_level_id`, `status`),
+  CONSTRAINT `fk_triage_session_consultation`
+    FOREIGN KEY (`consultation_id`) REFERENCES `db_consultation_record` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_session_account`
+    FOREIGN KEY (`account_id`) REFERENCES `db_account` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_session_patient`
+    FOREIGN KEY (`patient_id`) REFERENCES `db_patient_profile` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_session_category`
+    FOREIGN KEY (`category_id`) REFERENCES `db_consultation_category` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_session_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_session_triage_level`
+    FOREIGN KEY (`triage_level_id`) REFERENCES `db_triage_level_dict` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_triage_message` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_id` int NOT NULL,
+  `role_type` varchar(30) NOT NULL,
+  `message_type` varchar(30) NOT NULL,
+  `title` varchar(100) NOT NULL,
+  `content` text NOT NULL,
+  `structured_content` text,
+  `sort` int NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_triage_message_session_sort` (`session_id`, `sort`),
+  KEY `idx_triage_message_role_type` (`role_type`, `message_type`),
+  CONSTRAINT `fk_triage_message_session`
+    FOREIGN KEY (`session_id`) REFERENCES `db_triage_session` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_homepage_config` (
   `id` int NOT NULL,
   `hero_title` varchar(100) NOT NULL,
@@ -539,3 +644,4 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
 -- 11. Intake templates store pre-consultation field configuration, and each category should keep at least one default template for later user-side intake.
 -- 12. Body part, symptom, triage level and red-flag rule dictionaries are the core structured data for rule-based triage and AI-assisted recommendation.
 -- 13. Triage knowledge stores reusable structured triage guidance, service boundaries and case summaries for later AI retrieval and recommendation explanation.
+-- 14. Triage case references store structured internal examples for later AI retrieval, recommendation explanation and operational review.

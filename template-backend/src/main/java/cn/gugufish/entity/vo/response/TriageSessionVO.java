@@ -6,32 +6,28 @@ import java.util.Date;
 import java.util.List;
 
 @Data
-public class ConsultationRecordVO {
+public class TriageSessionVO {
     Integer id;
-    String consultationNo;
+    String sessionNo;
+    Integer consultationId;
+    Integer accountId;
     Integer patientId;
     String patientName;
     Integer categoryId;
     String categoryName;
     Integer departmentId;
     String departmentName;
-    Integer templateId;
-    String templateName;
-    String title;
-    String chiefComplaint;
-    String healthSummary;
+    String sourceType;
     String status;
-    Integer answerCount;
     Integer triageLevelId;
     String triageLevelCode;
     String triageLevelName;
-    String triageLevelColor;
     String triageActionType;
-    String triageSuggestion;
-    String triageRuleSummary;
+    String triageSummary;
+    Integer messageCount;
+    Date startedTime;
+    Date endedTime;
     Date createTime;
     Date updateTime;
-    List<ConsultationRecordAnswerVO> answers;
-    List<ConsultationRecommendDoctorVO> recommendedDoctors;
-    TriageSessionVO triageSession;
+    List<TriageMessageVO> messages;
 }

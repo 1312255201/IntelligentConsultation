@@ -140,6 +140,11 @@ const router = createRouter({
           component: () => import('@/views/admin/TriageKnowledgePage.vue')
         },
         {
+          path: 'triage-case',
+          name: 'admin-triage-case',
+          component: () => import('@/views/admin/TriageCasePage.vue')
+        },
+        {
           path: 'consultation-record',
           name: 'admin-consultation-record',
           component: () => import('@/views/admin/ConsultationRecordPage.vue')
