@@ -55,6 +55,7 @@ import cn.gugufish.mapper.TriageSessionMapper;
 import cn.gugufish.mapper.TriageLevelDictMapper;
 import cn.gugufish.service.ConsultationService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
+import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageFeedbackService;
@@ -123,6 +124,7 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource TriageResultQueryService triageResultQueryService;
     @Resource TriageFeedbackQueryService triageFeedbackQueryService;
     @Resource ConsultationDoctorConclusionQueryService consultationDoctorConclusionQueryService;
+    @Resource ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
     @Resource ConsultationDoctorHandleQueryService consultationDoctorHandleQueryService;
     @Resource TriageFeedbackService triageFeedbackService;
 
@@ -238,6 +240,7 @@ public class ConsultationServiceImpl implements ConsultationService {
             vo.setRecommendedDoctors(buildRecommendedDoctors(record));
             vo.setDoctorHandle(consultationDoctorHandleQueryService.detailByConsultationId(id));
             vo.setDoctorConclusion(consultationDoctorConclusionQueryService.detailByConsultationId(id));
+            vo.setDoctorFollowUps(consultationDoctorFollowUpQueryService.listByConsultationId(id));
             vo.setTriageSession(triageSessionQueryService.detailByConsultationId(id));
             vo.setTriageResult(triageResultQueryService.detailByConsultationId(id));
             vo.setTriageFeedback(triageFeedbackQueryService.detailByConsultationId(id));

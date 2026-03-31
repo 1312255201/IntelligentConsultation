@@ -301,6 +301,37 @@ CREATE TABLE IF NOT EXISTS `db_consultation_record_answer` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_consultation_doctor_assignment` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_id` int NOT NULL,
+  `doctor_id` int NOT NULL,
+  `doctor_name` varchar(50) NOT NULL,
+  `department_id` int NOT NULL,
+  `department_name` varchar(50) DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'claimed',
+  `claim_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `release_time` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_consultation_doctor_assignment_consultation` (`consultation_id`),
+  KEY `idx_consultation_doctor_assignment_doctor_status` (`doctor_id`, `status`),
+  KEY `idx_consultation_doctor_assignment_department_status` (`department_id`, `status`),
+  KEY `idx_consultation_doctor_assignment_claim_time` (`claim_time`),
+  CONSTRAINT `fk_consultation_doctor_assignment_consultation`
+    FOREIGN KEY (`consultation_id`) REFERENCES `db_consultation_record` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_doctor_assignment_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_doctor_assignment_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_consultation_doctor_handle` (
   `id` int NOT NULL AUTO_INCREMENT,
   `consultation_id` int NOT NULL,
@@ -366,6 +397,41 @@ CREATE TABLE IF NOT EXISTS `db_consultation_doctor_conclusion` (
     ON DELETE RESTRICT
     ON UPDATE CASCADE,
   CONSTRAINT `fk_consultation_doctor_conclusion_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_consultation_doctor_follow_up` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_id` int NOT NULL,
+  `doctor_id` int NOT NULL,
+  `doctor_name` varchar(50) NOT NULL,
+  `department_id` int NOT NULL,
+  `department_name` varchar(50) DEFAULT NULL,
+  `follow_up_type` varchar(20) NOT NULL DEFAULT 'platform',
+  `patient_status` varchar(20) NOT NULL DEFAULT 'stable',
+  `summary` varchar(500) NOT NULL,
+  `advice` varchar(1000) DEFAULT NULL,
+  `next_step` varchar(500) DEFAULT NULL,
+  `need_revisit` tinyint(1) NOT NULL DEFAULT 0,
+  `next_follow_up_date` date DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_consultation_doctor_follow_up_consultation_time` (`consultation_id`, `create_time`),
+  KEY `idx_consultation_doctor_follow_up_doctor_time` (`doctor_id`, `create_time`),
+  KEY `idx_consultation_doctor_follow_up_department_time` (`department_id`, `create_time`),
+  KEY `idx_consultation_doctor_follow_up_next_date` (`next_follow_up_date`),
+  CONSTRAINT `fk_consultation_doctor_follow_up_consultation`
+    FOREIGN KEY (`consultation_id`) REFERENCES `db_consultation_record` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_doctor_follow_up_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_consultation_doctor_follow_up_department`
     FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
     ON DELETE RESTRICT
     ON UPDATE CASCADE

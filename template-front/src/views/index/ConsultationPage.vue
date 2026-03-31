@@ -420,6 +420,31 @@
             </div>
           </div>
 
+          <div class="result-panel">
+            <div class="doctor-recommend-head">
+              <strong>随访记录</strong>
+              <span>如医生在问诊完成后继续跟进，这里会展示后续随访摘要和建议。</span>
+            </div>
+            <div v-if="detailRecord.doctorFollowUps?.length" class="detail-answers">
+              <article v-for="item in detailRecord.doctorFollowUps" :key="item.id" class="detail-answer-card">
+                <div class="chip-row">
+                  <span>{{ followUpTypeLabel(item.followUpType) }}</span>
+                  <span>{{ patientStatusLabel(item.patientStatus) }}</span>
+                  <span>{{ item.doctorName || '-' }}</span>
+                  <span>{{ formatDate(item.createTime) }}</span>
+                  <span v-if="item.needRevisit === 1">需再次随访</span>
+                  <span v-if="item.nextFollowUpDate">下次 {{ formatDate(item.nextFollowUpDate) }}</span>
+                </div>
+                <div class="detail-answer-value">
+                  <p><strong>随访摘要：</strong>{{ item.summary }}</p>
+                  <p><strong>随访建议：</strong>{{ item.advice || '暂无补充建议。' }}</p>
+                  <p><strong>下一步安排：</strong>{{ item.nextStep || '暂无下一步安排。' }}</p>
+                </div>
+              </article>
+            </div>
+            <el-empty v-else description="当前暂无随访记录" />
+          </div>
+
           <div v-if="detailRecord.triageSession" class="feedback-panel">
             <div class="doctor-recommend-head">
               <strong>导诊反馈</strong>
@@ -764,6 +789,24 @@ function dispositionLabel(value) {
 
 function aiConsistencyLabel(value) {
   return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断'
+}
+
+function followUpTypeLabel(value) {
+  return {
+    platform: '平台随访',
+    phone: '电话随访',
+    offline: '线下随访',
+    other: '其他方式'
+  }[value] || '其他方式'
+}
+
+function patientStatusLabel(value) {
+  return {
+    improved: '明显好转',
+    stable: '基本稳定',
+    worsened: '出现加重',
+    other: '其他情况'
+  }[value] || '其他情况'
 }
 
 function triageActionLabel(value) {

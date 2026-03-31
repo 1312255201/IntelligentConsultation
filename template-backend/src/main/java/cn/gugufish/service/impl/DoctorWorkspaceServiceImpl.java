@@ -2,6 +2,7 @@ package cn.gugufish.service.impl;
 
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
 import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
+import cn.gugufish.entity.dto.ConsultationDoctorFollowUp;
 import cn.gugufish.entity.dto.ConsultationDoctorHandle;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
@@ -11,6 +12,7 @@ import cn.gugufish.entity.dto.DoctorSchedule;
 import cn.gugufish.entity.dto.DoctorServiceTag;
 import cn.gugufish.entity.dto.TriageRuleHitLog;
 import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
+import cn.gugufish.entity.vo.request.DoctorConsultationFollowUpSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
@@ -19,6 +21,7 @@ import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
 import cn.gugufish.entity.vo.response.TriageRuleHitLogVO;
 import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
 import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
+import cn.gugufish.mapper.ConsultationDoctorFollowUpMapper;
 import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
 import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
@@ -29,6 +32,7 @@ import cn.gugufish.mapper.DoctorServiceTagMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
 import cn.gugufish.service.ConsultationDoctorAssignmentQueryService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
+import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
 import cn.gugufish.service.DoctorWorkspaceService;
 import cn.gugufish.service.TriageFeedbackQueryService;
@@ -76,6 +80,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
     ConsultationDoctorConclusionMapper consultationDoctorConclusionMapper;
 
     @Resource
+    ConsultationDoctorFollowUpMapper consultationDoctorFollowUpMapper;
+
+    @Resource
     ConsultationRecordAnswerMapper consultationRecordAnswerMapper;
 
     @Resource
@@ -98,6 +105,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
     @Resource
     ConsultationDoctorConclusionQueryService consultationDoctorConclusionQueryService;
+
+    @Resource
+    ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
 
     @Override
     public DoctorWorkbenchVO workbench(int accountId) {
@@ -222,6 +232,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setDoctorAssignment(consultationDoctorAssignmentQueryService.detailByConsultationId(recordId));
             vo.setDoctorHandle(consultationDoctorHandleQueryService.detailByConsultationId(recordId));
             vo.setDoctorConclusion(consultationDoctorConclusionQueryService.detailByConsultationId(recordId));
+            vo.setDoctorFollowUps(consultationDoctorFollowUpQueryService.listByConsultationId(recordId));
             vo.setTriageSession(triageSessionQueryService.detailByConsultationId(recordId));
             vo.setTriageResult(triageResultQueryService.detailByConsultationId(recordId));
             vo.setTriageFeedback(triageFeedbackQueryService.detailByConsultationId(recordId));
@@ -390,6 +401,68 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             return "问诊状态更新失败";
         }
         return null;
+    }
+
+    @Override
+    @Transactional
+    public String submitConsultationFollowUp(int accountId, DoctorConsultationFollowUpSubmitVO vo) {
+        Doctor doctor = validDoctor(accountId);
+        if (doctor == null) return "当前 doctor 账号尚未绑定有效医生档案";
+
+        ConsultationRecord record = consultationRecordMapper.selectById(vo.getConsultationId());
+        if (record == null) return "问诊记录不存在";
+        if (!doctor.getDepartmentId().equals(record.getDepartmentId())) return "当前问诊记录不属于你所在科室";
+        if (!"completed".equals(record.getStatus())) return "仅已完成的问诊单才可追加随访记录";
+
+        ConsultationDoctorHandle handle = findHandle(vo.getConsultationId());
+        if (handle == null || !"completed".equals(handle.getStatus())) {
+            return "当前问诊单尚未完成医生处理，暂不可记录随访";
+        }
+        if (!doctor.getId().equals(handle.getDoctorId())) {
+            return "仅处理该问诊单的医生可追加随访记录";
+        }
+
+        String summary = trimToNull(vo.getSummary());
+        String advice = trimToNull(vo.getAdvice());
+        String nextStep = trimToNull(vo.getNextStep());
+        Integer needRevisit = vo.getNeedRevisit() != null && vo.getNeedRevisit() == 1 ? 1 : 0;
+        String nextFollowUpDateText = trimToNull(vo.getNextFollowUpDate());
+        if (summary == null) return "请填写随访摘要";
+        if (needRevisit == 1 && nextFollowUpDateText == null) return "需要再次随访时请填写下次随访日期";
+
+        Date nextFollowUpDate = null;
+        if (nextFollowUpDateText != null) {
+            try {
+                java.sql.Date parsedDate = java.sql.Date.valueOf(nextFollowUpDateText);
+                if (needRevisit == 1 && parsedDate.toLocalDate().isBefore(LocalDate.now())) {
+                    return "下次随访日期不能早于今天";
+                }
+                nextFollowUpDate = parsedDate;
+            } catch (IllegalArgumentException exception) {
+                return "下次随访日期格式不正确";
+            }
+        }
+
+        Date now = new Date();
+        String departmentName = resolveDepartmentName(doctor, record);
+        ConsultationDoctorFollowUp followUp = new ConsultationDoctorFollowUp(
+                null,
+                vo.getConsultationId(),
+                doctor.getId(),
+                doctor.getName(),
+                doctor.getDepartmentId(),
+                departmentName,
+                trimToNull(vo.getFollowUpType()),
+                trimToNull(vo.getPatientStatus()),
+                summary,
+                advice,
+                nextStep,
+                needRevisit,
+                nextFollowUpDate,
+                now,
+                now
+        );
+        return consultationDoctorFollowUpMapper.insert(followUp) > 0 ? null : "随访记录保存失败";
     }
 
     @Override
