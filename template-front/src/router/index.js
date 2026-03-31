@@ -102,6 +102,11 @@ const router = createRouter({
           component: () => import('@/views/doctor/DoctorSchedulePage.vue')
         },
         {
+          path: 'reply-template',
+          name: 'doctor-reply-template',
+          component: () => import('@/views/doctor/DoctorReplyTemplatePage.vue')
+        },
+        {
           path: 'profile',
           name: 'doctor-profile',
           component: () => import('@/views/index/ProfilePage.vue')

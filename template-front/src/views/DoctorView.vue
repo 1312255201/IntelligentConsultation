@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import { Calendar, DataAnalysis, Document, User } from '@element-plus/icons-vue'
+import { Calendar, ChatLineSquare, DataAnalysis, Document, User } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -31,6 +31,12 @@ const menuItems = [
     title: '我的排班',
     description: '查看近期排班、接诊方式和号源使用情况。',
     icon: Calendar
+  },
+  {
+    index: '/doctor/reply-template',
+    title: '常用回复模板',
+    description: '维护个人常用回复内容，处理问诊和随访时可快捷插入。',
+    icon: ChatLineSquare
   },
   {
     index: '/doctor/profile',

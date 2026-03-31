@@ -129,21 +129,52 @@
                 <h3>医生处理</h3>
                 <p>记录判断摘要、处理建议和随访计划。</p>
               </div>
-              <div v-if="detail.doctorHandle" class="chips">
-                <span>{{ handleStatusLabel(detail.doctorHandle.status) }}</span>
-                <span>接手 {{ formatDate(detail.doctorHandle.receiveTime) }}</span>
-                <span v-if="detail.doctorHandle.completeTime">完成 {{ formatDate(detail.doctorHandle.completeTime) }}</span>
+              <div class="head-actions">
+                <div v-if="detail.doctorHandle" class="chips">
+                  <span>{{ handleStatusLabel(detail.doctorHandle.status) }}</span>
+                  <span>接手 {{ formatDate(detail.doctorHandle.receiveTime) }}</span>
+                  <span v-if="detail.doctorHandle.completeTime">完成 {{ formatDate(detail.doctorHandle.completeTime) }}</span>
+                </div>
+                <el-button text type="primary" @click="openReplyTemplateManager">管理常用模板</el-button>
               </div>
             </div>
             <el-alert v-if="!canEdit" :title="assignmentHint" type="warning" :closable="false" class="notice" />
+            <div v-if="templateLoading" class="template-banner">
+              <span>正在加载个人常用回复模板...</span>
+            </div>
+            <div v-else-if="!replyTemplates.length" class="template-banner">
+              <span>当前还没有个人常用回复模板，可以先维护常见摘要、处理建议和随访话术，后续处理问诊时可直接快捷填入。</span>
+              <el-button link type="primary" @click="openReplyTemplateManager">去维护模板</el-button>
+            </div>
             <el-form label-position="top" :disabled="!canEdit">
               <el-form-item label="医生判断摘要">
+                <div v-if="sceneTemplates('handle_summary').length" class="template-tools">
+                  <el-select v-model="templateSelection.handle_summary" clearable filterable placeholder="选择摘要模板" style="width:240px">
+                    <el-option v-for="item in sceneTemplates('handle_summary')" :key="item.id" :label="item.title" :value="item.id" />
+                  </el-select>
+                  <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'replace')">覆盖填入</el-button>
+                  <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'append')">追加填入</el-button>
+                </div>
                 <el-input v-model="handleForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：当前暂无紧急风险，建议继续线上处理并观察变化。" />
               </el-form-item>
               <el-form-item label="处理建议">
+                <div v-if="sceneTemplates('medical_advice').length" class="template-tools">
+                  <el-select v-model="templateSelection.medical_advice" clearable filterable placeholder="选择处理建议模板" style="width:240px">
+                    <el-option v-for="item in sceneTemplates('medical_advice')" :key="item.id" :label="item.title" :value="item.id" />
+                  </el-select>
+                  <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'replace')">覆盖填入</el-button>
+                  <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'append')">追加填入</el-button>
+                </div>
                 <el-input v-model="handleForm.medicalAdvice" type="textarea" :rows="4" maxlength="4000" show-word-limit placeholder="填写生活建议、用药建议、复诊建议等。" />
               </el-form-item>
               <el-form-item label="随访计划">
+                <div v-if="sceneTemplates('follow_up_plan').length" class="template-tools">
+                  <el-select v-model="templateSelection.follow_up_plan" clearable filterable placeholder="选择随访计划模板" style="width:240px">
+                    <el-option v-for="item in sceneTemplates('follow_up_plan')" :key="item.id" :label="item.title" :value="item.id" />
+                  </el-select>
+                  <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'replace')">覆盖填入</el-button>
+                  <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'append')">追加填入</el-button>
+                </div>
                 <el-input v-model="handleForm.followUpPlan" maxlength="500" show-word-limit placeholder="例如：建议 3 天后复诊，如加重请线下就医。" />
               </el-form-item>
               <el-form-item label="内部备注">
@@ -191,6 +222,13 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="患者指导要点">
+                <div v-if="sceneTemplates('patient_instruction').length" class="template-tools">
+                  <el-select v-model="templateSelection.patient_instruction" clearable filterable placeholder="选择患者指导模板" style="width:240px">
+                    <el-option v-for="item in sceneTemplates('patient_instruction')" :key="item.id" :label="item.title" :value="item.id" />
+                  </el-select>
+                  <el-button text @click="applyTemplateToField('patient_instruction', 'patientInstruction', 'replace')">覆盖填入</el-button>
+                  <el-button text @click="applyTemplateToField('patient_instruction', 'patientInstruction', 'append')">追加填入</el-button>
+                </div>
                 <el-input v-model="conclusionForm.patientInstruction" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：如出现持续高热或呼吸困难，请立即线下就医。" />
               </el-form-item>
             </el-form>
@@ -251,12 +289,33 @@
                 </el-form-item>
               </div>
               <el-form-item label="随访摘要">
+                <div v-if="sceneTemplates('followup_summary').length" class="template-tools">
+                  <el-select v-model="templateSelection.followup_summary" clearable filterable placeholder="选择随访摘要模板" style="width:240px">
+                    <el-option v-for="item in sceneTemplates('followup_summary')" :key="item.id" :label="item.title" :value="item.id" />
+                  </el-select>
+                  <el-button text @click="applyTemplateToField('followup_summary', 'summary', 'replace', 'followUp')">覆盖填入</el-button>
+                  <el-button text @click="applyTemplateToField('followup_summary', 'summary', 'append', 'followUp')">追加填入</el-button>
+                </div>
                 <el-input v-model="followUpForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：患者发热较前缓解，夜间咳嗽仍存在但频次下降。" />
               </el-form-item>
               <el-form-item label="随访建议">
+                <div v-if="sceneTemplates('followup_advice').length" class="template-tools">
+                  <el-select v-model="templateSelection.followup_advice" clearable filterable placeholder="选择随访建议模板" style="width:240px">
+                    <el-option v-for="item in sceneTemplates('followup_advice')" :key="item.id" :label="item.title" :value="item.id" />
+                  </el-select>
+                  <el-button text @click="applyTemplateToField('followup_advice', 'advice', 'replace', 'followUp')">覆盖填入</el-button>
+                  <el-button text @click="applyTemplateToField('followup_advice', 'advice', 'append', 'followUp')">追加填入</el-button>
+                </div>
                 <el-input v-model="followUpForm.advice" type="textarea" :rows="3" maxlength="1000" show-word-limit placeholder="例如：继续按既定方案观察，如 48 小时后仍反复发热建议线下复诊。" />
               </el-form-item>
               <el-form-item label="下一步安排">
+                <div v-if="sceneTemplates('followup_next_step').length" class="template-tools">
+                  <el-select v-model="templateSelection.followup_next_step" clearable filterable placeholder="选择下一步安排模板" style="width:240px">
+                    <el-option v-for="item in sceneTemplates('followup_next_step')" :key="item.id" :label="item.title" :value="item.id" />
+                  </el-select>
+                  <el-button text @click="applyTemplateToField('followup_next_step', 'nextStep', 'replace', 'followUp')">覆盖填入</el-button>
+                  <el-button text @click="applyTemplateToField('followup_next_step', 'nextStep', 'append', 'followUp')">追加填入</el-button>
+                </div>
                 <el-input v-model="followUpForm.nextStep" maxlength="500" show-word-limit placeholder="例如：3 天后再次平台随访，必要时安排线下检查。" />
               </el-form-item>
             </el-form>
@@ -326,6 +385,7 @@ const detailVisible = ref(false)
 const submitLoading = ref(false)
 const assignLoading = ref(false)
 const followUpSubmitting = ref(false)
+const templateLoading = ref(false)
 const submitStatus = ref('')
 const assignType = ref('')
 const keyword = ref('')
@@ -333,10 +393,20 @@ const ownerFilter = ref('all')
 const statusFilter = ref('')
 const records = ref([])
 const detail = ref(null)
+const replyTemplates = ref([])
 const doctor = reactive({ bound: 1, bindingMessage: '', doctorId: null, doctorName: '' })
 const handleForm = reactive({ summary: '', medicalAdvice: '', followUpPlan: '', internalRemark: '' })
 const conclusionForm = reactive({ conditionLevel: '', disposition: '', diagnosisDirection: '', conclusionTags: [], needFollowUp: 0, followUpWithinDays: null, isConsistentWithAi: null, patientInstruction: '' })
 const followUpForm = reactive({ followUpType: 'platform', patientStatus: 'stable', summary: '', advice: '', nextStep: '', needRevisit: 0, nextFollowUpDate: '' })
+const templateSelection = reactive({
+  handle_summary: null,
+  medical_advice: null,
+  follow_up_plan: null,
+  patient_instruction: null,
+  followup_summary: null,
+  followup_advice: null,
+  followup_next_step: null
+})
 
 const filteredRecords = computed(() => records.value.filter(item => {
   const search = keyword.value.trim().toLowerCase()
@@ -370,6 +440,15 @@ const followUpHint = computed(() => {
 })
 
 function refreshAll() { loadDoctor(); loadRecords() }
+function loadReplyTemplates() {
+  templateLoading.value = true
+  get('/api/doctor/reply-template/list', data => {
+    replyTemplates.value = data || []
+    templateLoading.value = false
+  }, () => {
+    templateLoading.value = false
+  })
+}
 function loadDoctor() {
   get('/api/doctor/workbench/summary', data => {
     doctor.bound = data?.bound ?? 0
@@ -433,6 +512,20 @@ function resetFollowUpForm() {
   followUpForm.nextStep = ''
   followUpForm.needRevisit = 0
   followUpForm.nextFollowUpDate = ''
+}
+function sceneTemplates(sceneType) {
+  return replyTemplates.value.filter(item => item.status === 1 && item.sceneType === sceneType)
+}
+function openReplyTemplateManager() {
+  router.push('/doctor/reply-template')
+}
+function applyTemplateToField(sceneType, fieldKey, mode = 'append', formType = 'handle') {
+  const templateId = templateSelection[sceneType]
+  const template = replyTemplates.value.find(item => item.id === templateId)
+  if (!template) return ElMessage.warning('请先选择模板')
+  const form = formType === 'followUp' ? followUpForm : fieldKey in handleForm ? handleForm : conclusionForm
+  const current = `${form[fieldKey] || ''}`.trim()
+  form[fieldKey] = mode === 'replace' || !current ? template.content : `${current}\n${template.content}`
 }
 function submitAssignment(type, id) {
   assignLoading.value = true
@@ -554,11 +647,175 @@ watch(detailVisible, value => {
 })
 watch(() => conclusionForm.needFollowUp, value => { if (value !== 1) conclusionForm.followUpWithinDays = null })
 watch(() => followUpForm.needRevisit, value => { if (value !== 1) followUpForm.nextFollowUpDate = '' })
-onMounted(() => refreshAll())
+onMounted(() => { refreshAll(); loadReplyTemplates() })
 </script>
 
 <style scoped>
-.doctor-page{display:flex;flex-direction:column;gap:18px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}.card{border:1px solid var(--app-border);border-radius:28px;background:var(--app-panel);box-shadow:var(--app-shadow)}.stat{padding:22px 24px}.stat span,.head p,.assignment span{color:var(--app-muted)}.stat strong{display:block;margin-top:14px;font-size:30px}.block,.panel{padding:22px}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:16px}.head h3,.panel h3{margin:0}.head p{margin:6px 0 0;line-height:1.7}.toolbar,.row-actions,.assignment,.chips,.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.drawer-body{display:flex;flex-direction:column;gap:16px}.copy{margin:0;line-height:1.8;color:#41575d}.copy+.copy{margin-top:10px}.list{display:flex;flex-direction:column;gap:12px}.subcard{padding:16px 18px;border-radius:18px;background:rgba(19,73,80,.05)}.subcard strong{display:block;margin-bottom:8px}.image{width:220px;height:150px;border-radius:18px;object-fit:cover;border:1px solid rgba(17,70,77,.08)}.chips span{padding:8px 14px;border-radius:999px;background:rgba(19,73,80,.08);color:#27646d}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}.notice{margin-bottom:16px}
-@media (max-width:1100px){.stats,.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:760px){.stats,.grid{grid-template-columns:1fr}.head,.toolbar,.actions{flex-direction:column;align-items:flex-start}}
+.doctor-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.card {
+  border: 1px solid var(--app-border);
+  border-radius: 28px;
+  background: var(--app-panel);
+  box-shadow: var(--app-shadow);
+}
+
+.stat {
+  padding: 22px 24px;
+}
+
+.stat span,
+.head p,
+.assignment span {
+  color: var(--app-muted);
+}
+
+.stat strong {
+  display: block;
+  margin-top: 14px;
+  font-size: 30px;
+}
+
+.block,
+.panel {
+  padding: 22px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.head h3,
+.panel h3 {
+  margin: 0;
+}
+
+.head p {
+  margin: 6px 0 0;
+  line-height: 1.7;
+}
+
+.toolbar,
+.row-actions,
+.assignment,
+.chips,
+.actions,
+.head-actions,
+.template-tools,
+.template-banner {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.head-actions {
+  justify-content: flex-end;
+}
+
+.drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.copy {
+  margin: 0;
+  line-height: 1.8;
+  color: #41575d;
+}
+
+.copy + .copy {
+  margin-top: 10px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.subcard {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(19, 73, 80, 0.05);
+}
+
+.subcard strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.image {
+  width: 220px;
+  height: 150px;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.chips span {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.notice {
+  margin-bottom: 16px;
+}
+
+.template-banner {
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: rgba(19, 73, 80, 0.05);
+  color: #36555c;
+}
+
+.template-tools {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 1100px) {
+  .stats,
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .stats,
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .head,
+  .toolbar,
+  .actions,
+  .head-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 </style>

@@ -1142,6 +1142,93 @@ WHERE dep.`code` = 'DERMATOLOGY' AND doc.`sort` = 50
     WHERE `title` = 'Facial rash photo upload triage case'
   );
 
+-- -------------------------
+-- 17. Doctor reply template demo data
+-- -------------------------
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'handle_summary', '通用病情判断',
+       '结合当前主诉和已提交资料，暂未见明确急症指征，建议先按线上方案继续观察，并根据症状变化决定是否需要转线下就医。',
+       10, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'handle_summary' AND t.`title` = '通用病情判断'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'medical_advice', '常规观察建议',
+       '建议近期保持规律作息、清淡饮食并记录症状变化；如症状持续加重、出现高热或明显不适，请尽快到线下门诊进一步评估。',
+       20, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'medical_advice' AND t.`title` = '常规观察建议'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'follow_up_plan', '三日复诊计划',
+       '建议 3 天后再次复诊；若中途症状明显加重、体温持续升高或出现新的不适，请提前发起问诊或线下就医。',
+       30, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'follow_up_plan' AND t.`title` = '三日复诊计划'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'patient_instruction', '风险提示',
+       '请继续观察体温、精神状态和主要不适变化；若出现持续高热、呼吸困难、明显嗜睡或疼痛加重，请立即前往线下医院就诊。',
+       40, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'patient_instruction' AND t.`title` = '风险提示'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'followup_summary', '症状缓解随访',
+       '本次随访较前反馈显示主要不适已有缓解，当前整体状态趋于稳定，但仍建议继续观察近期变化。',
+       50, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'followup_summary' AND t.`title` = '症状缓解随访'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'followup_advice', '继续观察建议',
+       '建议继续按既定方案观察，并做好体温、症状频次或相关指标记录；如再次明显加重，请及时复诊。',
+       60, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'followup_advice' AND t.`title` = '继续观察建议'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'followup_next_step', '再次随访安排',
+       '建议 2 到 3 天后继续平台随访，如期间出现新发高风险症状，可提前联系医生或安排线下检查。',
+       70, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'followup_next_step' AND t.`title` = '再次随访安排'
+  );
+
 -- =========================================================
 -- 导入完成后建议查看以下页面：
 -- 1. 管理员 > 科室信息维护
