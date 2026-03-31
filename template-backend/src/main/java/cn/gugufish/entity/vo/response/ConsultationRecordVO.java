@@ -33,6 +33,7 @@ public class ConsultationRecordVO {
     Date updateTime;
     List<ConsultationRecordAnswerVO> answers;
     List<ConsultationRecommendDoctorVO> recommendedDoctors;
+    ConsultationDoctorHandleVO doctorHandle;
     TriageSessionVO triageSession;
     TriageResultVO triageResult;
     TriageFeedbackVO triageFeedback;

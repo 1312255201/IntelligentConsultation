@@ -14,8 +14,8 @@
         <strong>{{ riskCount }}</strong>
       </article>
       <article class="stat-card">
-        <span>已分诊</span>
-        <strong>{{ triagedCount }}</strong>
+        <span>已进入处理</span>
+        <strong>{{ handledCount }}</strong>
       </article>
     </section>
 
@@ -23,16 +23,16 @@
       <div class="panel-head">
         <div>
           <h3>科室问诊列表</h3>
-          <p>当前先按医生所属科室展示问诊记录，便于医生查看用户提交信息、AI 分诊结果与反馈闭环。</p>
+          <p>当前按医生所属科室展示问诊记录，医生可以查看 AI 分诊结果并录入处理意见。</p>
         </div>
         <div class="toolbar">
           <el-input
             v-model="keyword"
             clearable
-            placeholder="搜索就诊人、问诊分类、主诉或状态"
+            placeholder="搜索就诊人、分类、主诉或状态"
             style="width: 320px"
           />
-          <el-button @click="loadRecords">刷新</el-button>
+          <el-button @click="loadRecords()">刷新</el-button>
         </div>
       </div>
 
@@ -40,24 +40,24 @@
         <el-table-column prop="patientName" label="就诊人" min-width="100" />
         <el-table-column prop="categoryName" label="问诊分类" min-width="120" />
         <el-table-column prop="chiefComplaint" label="主诉" min-width="260" show-overflow-tooltip />
-        <el-table-column label="分诊等级" min-width="110">
+        <el-table-column label="分诊等级" min-width="120">
           <template #default="{ row }">
             {{ row.triageLevelName || '待评估' }}
           </template>
         </el-table-column>
-        <el-table-column label="建议动作" min-width="110">
+        <el-table-column label="建议动作" min-width="120">
           <template #default="{ row }">
             {{ triageActionLabel(row.triageActionType) }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" min-width="100">
+        <el-table-column label="状态" min-width="110">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" effect="light">
               {{ statusLabel(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="提交时间" min-width="160">
+        <el-table-column label="提交时间" min-width="170">
           <template #default="{ row }">
             {{ formatDate(row.createTime) }}
           </template>
@@ -75,7 +75,7 @@
     <el-drawer
       v-model="detailVisible"
       title="问诊详情"
-      size="60%"
+      size="66%"
       destroy-on-close
     >
       <div v-loading="detailLoading" class="detail-body">
@@ -103,12 +103,113 @@
           <section class="detail-card">
             <h3>问诊答案</h3>
             <div v-if="detailRecord.answers?.length" class="answer-list">
-              <article v-for="item in detailRecord.answers" :key="`${item.fieldCode}-${item.id || item.fieldLabel}`" class="answer-item">
+              <article
+                v-for="item in detailRecord.answers"
+                :key="`${item.fieldCode}-${item.id || item.fieldLabel}`"
+                class="answer-item"
+              >
                 <strong>{{ item.fieldLabel }}</strong>
-                <p>{{ item.fieldValue || '-' }}</p>
+                <div class="answer-value">
+                  <template v-if="item.fieldType === 'upload' && item.fieldValue">
+                    <img :src="resolveImagePath(item.fieldValue)" :alt="item.fieldLabel" class="answer-image" />
+                  </template>
+                  <template v-else-if="item.fieldType === 'multi_select'">
+                    <div class="chip-row">
+                      <span v-for="tag in parseJsonArray(item.fieldValue)" :key="tag">{{ tag }}</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    {{ displayAnswer(item) }}
+                  </template>
+                </div>
               </article>
             </div>
             <el-empty v-else description="暂无问诊答案" />
+          </section>
+
+          <section class="detail-card">
+            <div class="section-head">
+              <div>
+                <h3>医生处理</h3>
+                <p>在这里记录当前问诊单的判断摘要、处理建议和随访安排。</p>
+              </div>
+              <div v-if="detailRecord.doctorHandle" class="chip-row">
+                <span>{{ handleStatusLabel(detailRecord.doctorHandle.status) }}</span>
+                <span>接手 {{ formatDate(detailRecord.doctorHandle.receiveTime) }}</span>
+                <span v-if="detailRecord.doctorHandle.completeTime">完成 {{ formatDate(detailRecord.doctorHandle.completeTime) }}</span>
+              </div>
+            </div>
+
+            <div v-if="detailRecord.doctorHandle" class="handle-summary">
+              <article>
+                <span>当前处理医生</span>
+                <strong>{{ detailRecord.doctorHandle.doctorName || '-' }}</strong>
+              </article>
+              <article>
+                <span>最后更新时间</span>
+                <strong>{{ formatDate(detailRecord.doctorHandle.updateTime) }}</strong>
+              </article>
+            </div>
+
+            <el-form label-position="top" class="handle-form">
+              <el-form-item label="医生判断摘要">
+                <el-input
+                  v-model="handleForm.summary"
+                  type="textarea"
+                  :rows="3"
+                  maxlength="500"
+                  show-word-limit
+                  placeholder="例如：当前为轻中度上呼吸道症状，暂无紧急风险，建议继续线上处理并观察体温变化。"
+                />
+              </el-form-item>
+              <el-form-item label="处理建议">
+                <el-input
+                  v-model="handleForm.medicalAdvice"
+                  type="textarea"
+                  :rows="5"
+                  maxlength="4000"
+                  show-word-limit
+                  placeholder="可填写生活方式建议、复诊建议、注意事项等。完成处理时建议填写完整。"
+                />
+              </el-form-item>
+              <el-form-item label="随访计划">
+                <el-input
+                  v-model="handleForm.followUpPlan"
+                  maxlength="500"
+                  show-word-limit
+                  placeholder="例如：建议 3 天后复诊，如持续高热或加重请线下就医。"
+                />
+              </el-form-item>
+              <el-form-item label="内部备注">
+                <el-input
+                  v-model="handleForm.internalRemark"
+                  type="textarea"
+                  :rows="2"
+                  maxlength="500"
+                  show-word-limit
+                  placeholder="仅医生和管理员可见，用于内部协作或风险备注。"
+                />
+              </el-form-item>
+            </el-form>
+
+            <div class="handle-actions">
+              <el-button
+                type="warning"
+                plain
+                :loading="handleSubmitting && submittingStatus === 'processing'"
+                :disabled="detailRecord.status === 'completed'"
+                @click="submitHandle('processing')"
+              >
+                标记处理中
+              </el-button>
+              <el-button
+                type="primary"
+                :loading="handleSubmitting && submittingStatus === 'completed'"
+                @click="submitHandle('completed')"
+              >
+                完成处理
+              </el-button>
+            </div>
           </section>
 
           <section class="detail-card">
@@ -122,7 +223,7 @@
               <p class="detail-text">{{ detailRecord.triageResult.reasonText || '暂无分诊说明' }}</p>
               <div v-if="doctorCandidates.length" class="chip-row">
                 <span v-for="item in doctorCandidates" :key="`${item.id}-${item.name}`">
-                  {{ item.name }}<template v-if="item.title"> · {{ item.title }}</template>
+                  {{ item.name }}<template v-if="item.title"> / {{ item.title }}</template>
                 </span>
               </div>
             </div>
@@ -183,9 +284,9 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { get } from '@/net'
+import { get, post, resolveImagePath } from '@/net'
 
 const route = useRoute()
 const router = useRouter()
@@ -193,9 +294,17 @@ const router = useRouter()
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
+const handleSubmitting = ref(false)
+const submittingStatus = ref('')
 const keyword = ref('')
 const records = ref([])
 const detailRecord = ref(null)
+const handleForm = reactive({
+  summary: '',
+  medicalAdvice: '',
+  followUpPlan: '',
+  internalRemark: ''
+})
 
 const filteredRecords = computed(() => {
   const value = keyword.value.trim().toLowerCase()
@@ -214,24 +323,19 @@ const todayCount = computed(() => {
 })
 
 const riskCount = computed(() => records.value.filter(item => ['emergency', 'offline'].includes(item.triageActionType)).length)
-const triagedCount = computed(() => records.value.filter(item => ['triaged', 'processing', 'completed'].includes(item.status)).length)
+const handledCount = computed(() => records.value.filter(item => ['processing', 'completed'].includes(item.status)).length)
 
 const doctorCandidates = computed(() => {
   const source = detailRecord.value?.triageResult?.doctorCandidatesJson
-  if (!source) return []
-  try {
-    const parsed = JSON.parse(source)
-    return Array.isArray(parsed) ? parsed : []
-  } catch (error) {
-    return []
-  }
+  return parseDoctorCandidates(source)
 })
 
-function loadRecords() {
+function loadRecords(callback) {
   loading.value = true
   get('/api/doctor/consultation/list', (data) => {
     records.value = data || []
     loading.value = false
+    callback?.()
     autoOpenFromQuery()
   }, (message) => {
     loading.value = false
@@ -243,7 +347,7 @@ function autoOpenFromQuery() {
   const queryId = Number(route.query.id || 0)
   if (!queryId) return
   const exists = records.value.some(item => item.id === queryId)
-  if (exists) {
+  if (exists && (!detailRecord.value || detailRecord.value.id !== queryId)) {
     openDetail(queryId)
   }
 }
@@ -253,6 +357,7 @@ function openDetail(id) {
   detailVisible.value = true
   get(`/api/doctor/consultation/detail?id=${id}`, (data) => {
     detailRecord.value = data || null
+    syncHandleForm()
     detailLoading.value = false
     if (Number(route.query.id || 0) !== id) {
       router.replace({
@@ -267,12 +372,75 @@ function openDetail(id) {
   })
 }
 
+function syncHandleForm() {
+  const handle = detailRecord.value?.doctorHandle
+  handleForm.summary = handle?.summary || ''
+  handleForm.medicalAdvice = handle?.medicalAdvice || ''
+  handleForm.followUpPlan = handle?.followUpPlan || ''
+  handleForm.internalRemark = handle?.internalRemark || ''
+}
+
+function submitHandle(status) {
+  if (!detailRecord.value?.id) return
+  if (!`${handleForm.summary || ''}`.trim()) {
+    ElMessage.warning('请先填写医生判断摘要')
+    return
+  }
+  if (status === 'completed' && !`${handleForm.medicalAdvice || ''}`.trim()) {
+    ElMessage.warning('完成处理时请填写处理建议')
+    return
+  }
+
+  handleSubmitting.value = true
+  submittingStatus.value = status
+  post('/api/doctor/consultation/handle', {
+    consultationId: detailRecord.value.id,
+    status,
+    summary: `${handleForm.summary || ''}`.trim(),
+    medicalAdvice: `${handleForm.medicalAdvice || ''}`.trim(),
+    followUpPlan: `${handleForm.followUpPlan || ''}`.trim(),
+    internalRemark: `${handleForm.internalRemark || ''}`.trim()
+  }, () => {
+    handleSubmitting.value = false
+    submittingStatus.value = ''
+    ElMessage.success(status === 'completed' ? '医生处理结果已完成保存' : '已标记为处理中')
+    loadRecords(() => openDetail(detailRecord.value.id))
+  }, (message) => {
+    handleSubmitting.value = false
+    submittingStatus.value = ''
+    ElMessage.warning(message || '医生处理结果保存失败，请稍后再试')
+  })
+}
+
+function parseJsonArray(value) {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function parseDoctorCandidates(value) {
+  return parseJsonArray(value).filter(item => item && typeof item === 'object')
+}
+
+function displayAnswer(answer) {
+  if (answer.fieldType === 'switch') return answer.fieldValue === '1' ? '是' : '否'
+  return answer.fieldValue || '-'
+}
+
 function statusLabel(value) {
   if (value === 'submitted') return '已提交'
   if (value === 'triaged') return '已分诊'
   if (value === 'processing') return '处理中'
   if (value === 'completed') return '已完成'
   return value || '未标记'
+}
+
+function handleStatusLabel(value) {
+  return value === 'completed' ? '处理完成' : '处理中'
 }
 
 function statusTagType(value) {
@@ -304,6 +472,7 @@ function formatDate(value) {
 watch(detailVisible, (value) => {
   if (!value) {
     detailRecord.value = null
+    syncHandleForm()
     if (route.query.id) {
       router.replace({ path: '/doctor/consultation' })
     }
@@ -339,7 +508,8 @@ onMounted(() => loadRecords())
   padding: 22px 24px;
 }
 
-.stat-card span {
+.stat-card span,
+.section-head p {
   color: var(--app-muted);
 }
 
@@ -361,7 +531,8 @@ onMounted(() => loadRecords())
   margin-bottom: 18px;
 }
 
-.panel-head h3 {
+.panel-head h3,
+.section-head h3 {
   margin: 0;
   font-size: 22px;
 }
@@ -403,6 +574,19 @@ onMounted(() => loadRecords())
   margin-top: 10px;
 }
 
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-head p {
+  margin: 6px 0 0;
+  line-height: 1.7;
+}
+
 .chip-row {
   display: flex;
   gap: 10px;
@@ -426,7 +610,8 @@ onMounted(() => loadRecords())
 
 .answer-item,
 .message-item,
-.triage-panel {
+.triage-panel,
+.handle-summary article {
   padding: 16px 18px;
   border-radius: 18px;
   background: rgba(19, 73, 80, 0.05);
@@ -438,11 +623,19 @@ onMounted(() => loadRecords())
   margin-bottom: 8px;
 }
 
-.answer-item p,
+.answer-value,
 .message-item p {
   margin: 0;
   color: #41575d;
   line-height: 1.7;
+}
+
+.answer-image {
+  width: 220px;
+  height: 150px;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid rgba(17, 70, 77, 0.08);
 }
 
 .message-head {
@@ -457,20 +650,52 @@ onMounted(() => loadRecords())
   font-size: 13px;
 }
 
+.handle-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.handle-summary span {
+  display: block;
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.handle-summary strong {
+  display: block;
+  margin-top: 8px;
+}
+
+.handle-form {
+  margin-top: 8px;
+}
+
+.handle-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 @media (max-width: 1100px) {
-  .stat-grid {
+  .stat-grid,
+  .handle-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .stat-grid {
+  .stat-grid,
+  .handle-summary {
     grid-template-columns: 1fr;
   }
 
   .panel-head,
   .toolbar,
-  .message-head {
+  .message-head,
+  .section-head,
+  .handle-actions {
     flex-direction: column;
     align-items: flex-start;
   }

@@ -379,6 +379,24 @@
             </div>
           </div>
 
+          <div v-if="detailRecord.doctorHandle" class="result-panel">
+            <div class="doctor-recommend-head">
+              <strong>医生处理结果</strong>
+              <span>查看医生是否已接手当前问诊，以及本次处理建议和随访安排。</span>
+            </div>
+            <div class="session-meta">
+              <span>{{ detailRecord.doctorHandle.doctorName || '未指派医生' }}</span>
+              <span>{{ doctorHandleStatusLabel(detailRecord.doctorHandle.status) }}</span>
+              <span>接手时间 {{ formatDate(detailRecord.doctorHandle.receiveTime) }}</span>
+              <span v-if="detailRecord.doctorHandle.completeTime">完成时间 {{ formatDate(detailRecord.doctorHandle.completeTime) }}</span>
+            </div>
+            <p class="result-copy">{{ detailRecord.doctorHandle.summary || '医生已接手，正在整理处理意见。' }}</p>
+            <div class="summary-panel">
+              <p><strong>处理建议：</strong>{{ detailRecord.doctorHandle.medicalAdvice || '当前暂无详细建议，请稍后查看。' }}</p>
+              <p><strong>随访计划：</strong>{{ detailRecord.doctorHandle.followUpPlan || '当前暂无随访安排。' }}</p>
+            </div>
+          </div>
+
           <div v-if="detailRecord.triageSession" class="feedback-panel">
             <div class="doctor-recommend-head">
               <strong>导诊反馈</strong>
@@ -693,8 +711,14 @@ function fieldTypeLabel(value) {
 function statusLabel(value) {
   return {
     submitted: '已提交',
-    triaged: '已完成初步分诊'
+    triaged: '已分诊',
+    processing: '处理中',
+    completed: '已完成'
   }[value] || value || '-'
+}
+
+function doctorHandleStatusLabel(value) {
+  return value === 'completed' ? '处理完成' : '处理中'
 }
 
 function triageActionLabel(value) {

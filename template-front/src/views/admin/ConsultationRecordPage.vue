@@ -6,12 +6,12 @@
         <strong>{{ records.length }}</strong>
       </article>
       <article class="stat-card">
-        <span>已完成分诊</span>
+        <span>AI 已分诊</span>
         <strong>{{ triagedCount }}</strong>
       </article>
       <article class="stat-card">
-        <span>高优先建议</span>
-        <strong>{{ highPriorityCount }}</strong>
+        <span>医生已处理</span>
+        <strong>{{ completedCount }}</strong>
       </article>
       <article class="stat-card">
         <span>今日新增</span>
@@ -46,7 +46,9 @@
           </el-select>
           <el-select v-model="selectedStatus" clearable style="width: 180px" placeholder="全部状态">
             <el-option label="已提交" value="submitted" />
-            <el-option label="已完成初步分诊" value="triaged" />
+            <el-option label="已分诊" value="triaged" />
+            <el-option label="处理中" value="processing" />
+            <el-option label="已完成" value="completed" />
           </el-select>
         </div>
         <div class="toolbar-actions">
@@ -66,14 +68,9 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="建议动作" min-width="120" align="center">
-          <template #default="{ row }">
-            <el-tag effect="light">{{ triageActionLabel(row.triageActionType) }}</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="状态" width="130" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'triaged' ? 'success' : 'warning'" effect="light">
+            <el-tag :type="statusTagType(row.status)" effect="light">
               {{ statusLabel(row.status) }}
             </el-tag>
           </template>
@@ -93,7 +90,7 @@
 
     <el-dialog
       v-model="detailVisible"
-      title="导诊记录详情"
+      title="问诊记录详情"
       width="1080px"
       destroy-on-close
     >
@@ -112,7 +109,7 @@
                 </span>
               </strong>
             </article>
-            <article><span>提交时间</span><strong>{{ formatDate(detailRecord.createTime) }}</strong></article>
+            <article><span>当前状态</span><strong>{{ statusLabel(detailRecord.status) }}</strong></article>
           </div>
 
           <div class="summary-panel">
@@ -123,10 +120,29 @@
             <p><strong>规则摘要：</strong>{{ detailRecord.triageRuleSummary || '未命中红旗规则，当前为默认分诊结果' }}</p>
           </div>
 
+          <section v-if="detailRecord.doctorHandle" class="detail-section">
+            <div class="section-head">
+              <h3>医生处理归档</h3>
+              <span>查看医生接手情况、处理建议和内部备注。</span>
+            </div>
+            <div class="session-meta">
+              <span>{{ detailRecord.doctorHandle.doctorName || '未指派医生' }}</span>
+              <span>{{ handleStatusLabel(detailRecord.doctorHandle.status) }}</span>
+              <span>接手 {{ formatDate(detailRecord.doctorHandle.receiveTime) }}</span>
+              <span v-if="detailRecord.doctorHandle.completeTime">完成 {{ formatDate(detailRecord.doctorHandle.completeTime) }}</span>
+            </div>
+            <div class="summary-panel">
+              <p><strong>判断摘要：</strong>{{ detailRecord.doctorHandle.summary || '暂无摘要' }}</p>
+              <p><strong>处理建议：</strong>{{ detailRecord.doctorHandle.medicalAdvice || '暂无处理建议' }}</p>
+              <p><strong>随访计划：</strong>{{ detailRecord.doctorHandle.followUpPlan || '暂无随访安排' }}</p>
+              <p><strong>内部备注：</strong>{{ detailRecord.doctorHandle.internalRemark || '暂无内部备注' }}</p>
+            </div>
+          </section>
+
           <section v-if="detailRecord.triageResult" class="detail-section">
             <div class="section-head">
-              <h3>导诊结果归档</h3>
-              <span>查看本次导诊最终归档结果、候选医生与风险摘要</span>
+              <h3>分诊结果归档</h3>
+              <span>查看本次导诊最终归档结果、候选医生与风险摘要。</span>
             </div>
             <div class="session-meta">
               <span>{{ detailRecord.triageResult.triageLevelName || '待评估' }}</span>
@@ -153,7 +169,7 @@
           <section v-if="detailRecord.triageFeedback" class="detail-section">
             <div class="section-head">
               <h3>用户反馈</h3>
-              <span>查看用户对本次导诊的采纳情况和人工纠偏信息</span>
+              <span>查看用户对本次导诊的采纳情况和人工纠偏信息。</span>
             </div>
             <div class="session-meta">
               <span>{{ feedbackAdoptLabel(detailRecord.triageFeedback.isAdopted) }}</span>
@@ -170,7 +186,7 @@
           <section v-if="detailRecord.triageSession" class="detail-section">
             <div class="section-head">
               <h3>导诊留痕</h3>
-              <span>查看本次分诊会话的系统摘要与规则命中消息</span>
+              <span>查看本次分诊会话的系统摘要与规则命中消息。</span>
             </div>
             <div class="session-meta">
               <span>Session {{ detailRecord.triageSession.sessionNo }}</span>
@@ -198,7 +214,7 @@
           <section class="detail-section">
             <div class="section-head">
               <h3>规则命中日志</h3>
-              <span>用于复盘本次初步分诊的依据</span>
+              <span>用于复盘本次初步分诊的依据。</span>
             </div>
             <el-table
               v-if="(detailRecord.ruleHits || []).length"
@@ -228,7 +244,7 @@
           <section class="detail-section">
             <div class="section-head">
               <h3>问诊答案</h3>
-              <span>展示用户提交的结构化问诊资料</span>
+              <span>展示用户提交的结构化问诊资料。</span>
             </div>
             <div class="answer-list">
               <article v-for="answer in detailRecord.answers || []" :key="answer.id" class="answer-card">
@@ -270,11 +286,11 @@ const selectedCategory = ref('')
 const selectedTriageLevel = ref('')
 const selectedStatus = ref('')
 
-const triagedCount = computed(() => records.value.filter(item => item.status === 'triaged').length)
-const highPriorityCount = computed(() => records.value.filter(item => ['emergency', 'offline'].includes(item.triageActionType)).length)
+const triagedCount = computed(() => records.value.filter(item => ['triaged', 'processing', 'completed'].includes(item.status)).length)
+const completedCount = computed(() => records.value.filter(item => item.status === 'completed').length)
 const todayCount = computed(() => {
   const today = new Date().toDateString()
-  return records.value.filter(item => new Date(item.createTime).toDateString() === today).length
+  return records.value.filter(item => item.createTime && new Date(item.createTime).toDateString() === today).length
 })
 const categoryOptions = computed(() => [...new Set(records.value.map(item => item.categoryName).filter(Boolean))])
 const triageLevelOptions = computed(() => [...new Set(records.value.map(item => item.triageLevelName).filter(Boolean))])
@@ -301,7 +317,7 @@ function loadData() {
     loading.value = false
   }, (message) => {
     loading.value = false
-    ElMessage.warning(message || '导诊记录加载失败')
+    ElMessage.warning(message || '问诊记录加载失败')
   })
 }
 
@@ -315,24 +331,30 @@ function openDetail(row) {
   }, (message) => {
     detailLoading.value = false
     detailVisible.value = false
-    ElMessage.warning(message || '导诊记录详情加载失败')
+    ElMessage.warning(message || '问诊记录详情加载失败')
   })
 }
 
 function statusLabel(value) {
   return {
     submitted: '已提交',
-    triaged: '已完成初步分诊'
+    triaged: '已分诊',
+    processing: '处理中',
+    completed: '已完成'
   }[value] || value || '-'
 }
 
-function triageActionLabel(value) {
+function handleStatusLabel(value) {
+  return value === 'completed' ? '处理完成' : '处理中'
+}
+
+function statusTagType(value) {
   return {
-    emergency: '立即急诊',
-    offline: '尽快线下',
-    followup: '复诊随访',
-    online: '线上继续'
-  }[value] || '继续关注'
+    completed: 'success',
+    processing: 'warning',
+    triaged: 'primary',
+    submitted: 'info'
+  }[value] || 'info'
 }
 
 function triggerTypeLabel(value) {
@@ -457,8 +479,7 @@ onMounted(() => loadData())
 
 .stat-card span,
 .section-head span,
-.detail-meta span,
-.doctor-copy span {
+.detail-meta span {
   color: var(--app-muted);
 }
 

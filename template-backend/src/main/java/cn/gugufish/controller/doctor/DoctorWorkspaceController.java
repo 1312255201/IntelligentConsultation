@@ -1,6 +1,7 @@
 package cn.gugufish.controller.doctor;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
 import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
@@ -9,10 +10,13 @@ import cn.gugufish.utils.Const;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,7 +26,7 @@ import java.util.List;
 @Validated
 @RestController
 @RequestMapping("/api/doctor")
-@Tag(name = "Doctor Workspace", description = "医生工作台的概览、问诊和排班查询")
+@Tag(name = "Doctor Workspace", description = "医生工作台概览、问诊处理与排班查询")
 public class DoctorWorkspaceController {
 
     @Resource
@@ -48,6 +52,14 @@ public class DoctorWorkspaceController {
         return record == null
                 ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
                 : RestBean.success(record);
+    }
+
+    @PostMapping("/consultation/handle")
+    @Operation(summary = "提交医生处理结果")
+    public RestBean<Void> submitConsultationHandle(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                   @RequestBody @Valid DoctorConsultationHandleSubmitVO vo) {
+        String message = doctorWorkspaceService.submitConsultationHandle(accountId, vo);
+        return message == null ? RestBean.success() : RestBean.failure(400, message);
     }
 
     @GetMapping("/schedule/list")
