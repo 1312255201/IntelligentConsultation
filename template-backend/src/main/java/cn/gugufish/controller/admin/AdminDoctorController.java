@@ -3,6 +3,7 @@ package cn.gugufish.controller.admin;
 import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.request.DoctorCreateVO;
 import cn.gugufish.entity.vo.request.DoctorUpdateVO;
+import cn.gugufish.entity.vo.response.DoctorAccountOptionVO;
 import cn.gugufish.entity.vo.response.DoctorVO;
 import cn.gugufish.service.DoctorService;
 import cn.gugufish.service.ImageService;
@@ -26,7 +27,7 @@ import java.util.function.Supplier;
 @Validated
 @RestController
 @RequestMapping("/api/admin/doctor")
-@Tag(name = "管理员医生维护", description = "管理员对医生信息进行新增、修改、删除和查询")
+@Tag(name = "Admin Doctor Management", description = "管理员对医生信息进行新增、修改、删除、账号绑定和查询")
 public class AdminDoctorController {
 
     @Resource
@@ -42,6 +43,12 @@ public class AdminDoctorController {
                 .stream()
                 .map(item -> item.asViewObject(DoctorVO.class))
                 .toList());
+    }
+
+    @GetMapping("/account-options")
+    @Operation(summary = "查询医生账号绑定选项")
+    public RestBean<List<DoctorAccountOptionVO>> accountOptions() {
+        return RestBean.success(doctorService.listDoctorAccountOptions());
     }
 
     @PostMapping("/create")
@@ -66,7 +73,7 @@ public class AdminDoctorController {
     @Operation(summary = "上传医生照片")
     public RestBean<String> uploadPhoto(@RequestParam("file") MultipartFile file) throws Exception {
         if (file.getSize() > 1024 * 1024 * 2) {
-            return RestBean.failure(400, "医生照片不能大于2MB");
+            return RestBean.failure(400, "医生照片不能大于 2MB");
         }
         if (file.getContentType() == null || !file.getContentType().startsWith("image/")) {
             return RestBean.failure(400, "医生照片必须是图片格式");

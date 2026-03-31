@@ -123,6 +123,78 @@
             <p><strong>规则摘要：</strong>{{ detailRecord.triageRuleSummary || '未命中红旗规则，当前为默认分诊结果' }}</p>
           </div>
 
+          <section v-if="detailRecord.triageResult" class="detail-section">
+            <div class="section-head">
+              <h3>导诊结果归档</h3>
+              <span>查看本次导诊最终归档结果、候选医生与风险摘要</span>
+            </div>
+            <div class="session-meta">
+              <span>{{ detailRecord.triageResult.triageLevelName || '待评估' }}</span>
+              <span>{{ detailRecord.triageResult.departmentName || '未匹配科室' }}</span>
+              <span>置信度 {{ formatConfidence(detailRecord.triageResult.confidenceScore) }}</span>
+              <span v-if="detailRecord.triageResult.doctorName">推荐医生 {{ detailRecord.triageResult.doctorName }}</span>
+            </div>
+            <div class="summary-panel">
+              <p><strong>结果说明：</strong>{{ detailRecord.triageResult.reasonText || '暂无结果说明' }}</p>
+              <p><strong>风险摘要：</strong>{{ parseJsonArray(detailRecord.triageResult.riskFlagsJson).join('、') || '暂无风险标签' }}</p>
+            </div>
+            <div v-if="parseDoctorCandidates(detailRecord.triageResult.doctorCandidatesJson).length" class="answer-list">
+              <article
+                v-for="item in parseDoctorCandidates(detailRecord.triageResult.doctorCandidatesJson)"
+                :key="item.id || item.name"
+                class="answer-card"
+              >
+                <strong>{{ item.name }}</strong>
+                <div class="answer-value">{{ item.title || '医生' }}</div>
+              </article>
+            </div>
+          </section>
+
+          <section v-if="detailRecord.triageFeedback" class="detail-section">
+            <div class="section-head">
+              <h3>用户反馈</h3>
+              <span>查看用户对本次导诊的采纳情况和人工纠偏信息</span>
+            </div>
+            <div class="session-meta">
+              <span>{{ feedbackAdoptLabel(detailRecord.triageFeedback.isAdopted) }}</span>
+              <span>评分 {{ detailRecord.triageFeedback.userScore }}/5</span>
+              <span v-if="detailRecord.triageFeedback.manualCorrectDepartmentName">修正科室 {{ detailRecord.triageFeedback.manualCorrectDepartmentName }}</span>
+              <span v-if="detailRecord.triageFeedback.manualCorrectDoctorName">修正医生 {{ detailRecord.triageFeedback.manualCorrectDoctorName }}</span>
+            </div>
+            <div class="summary-panel">
+              <p><strong>反馈内容：</strong>{{ detailRecord.triageFeedback.feedbackText || '用户未填写额外说明' }}</p>
+              <p><strong>反馈时间：</strong>{{ formatDate(detailRecord.triageFeedback.updateTime || detailRecord.triageFeedback.createTime) }}</p>
+            </div>
+          </section>
+
+          <section v-if="detailRecord.triageSession" class="detail-section">
+            <div class="section-head">
+              <h3>导诊留痕</h3>
+              <span>查看本次分诊会话的系统摘要与规则命中消息</span>
+            </div>
+            <div class="session-meta">
+              <span>Session {{ detailRecord.triageSession.sessionNo }}</span>
+              <span>{{ triageSessionStatusLabel(detailRecord.triageSession.status) }}</span>
+              <span>{{ detailRecord.triageSession.messageCount || 0 }} messages</span>
+            </div>
+            <div class="session-list">
+              <article
+                v-for="message in detailRecord.triageSession.messages || []"
+                :key="message.id"
+                class="session-card"
+              >
+                <div class="session-card-head">
+                  <div>
+                    <strong>{{ message.title }}</strong>
+                    <span>{{ messageTypeLabel(message.messageType) }}</span>
+                  </div>
+                  <el-tag size="small" effect="light">{{ messageRoleLabel(message.roleType) }}</el-tag>
+                </div>
+                <p>{{ message.content }}</p>
+              </article>
+            </div>
+          </section>
+
           <section class="detail-section">
             <div class="section-head">
               <h3>规则命中日志</h3>
@@ -281,13 +353,58 @@ function triageBadgeStyle(color) {
   }
 }
 
-function parseMultiValue(value) {
+function triageSessionStatusLabel(value) {
+  return {
+    completed: '已完成',
+    in_progress: '进行中',
+    closed: '已关闭'
+  }[value] || value || '-'
+}
+
+function messageRoleLabel(value) {
+  return {
+    user: '用户',
+    system: '系统',
+    rule_engine: '规则引擎'
+  }[value] || value || '-'
+}
+
+function messageTypeLabel(value) {
+  return {
+    intake_summary: '问诊摘要',
+    health_summary: '健康摘要',
+    triage_result: '分诊结果',
+    rule_summary: '规则摘要',
+    rule_hit: '命中详情'
+  }[value] || value || '-'
+}
+
+function feedbackAdoptLabel(value) {
+  return value === 1 ? '已采纳' : '未采纳'
+}
+
+function parseJsonArray(value) {
   if (!value) return []
   try {
-    return JSON.parse(value)
+    const result = JSON.parse(value)
+    return Array.isArray(result) ? result : []
   } catch {
     return []
   }
+}
+
+function parseDoctorCandidates(value) {
+  return parseJsonArray(value).filter(item => item && typeof item === 'object')
+}
+
+function formatConfidence(value) {
+  const number = Number(value)
+  if (Number.isNaN(number) || number <= 0) return '-'
+  return `${Math.round(number * 100)}%`
+}
+
+function parseMultiValue(value) {
+  return parseJsonArray(value)
 }
 
 function displayAnswer(answer) {
@@ -381,7 +498,8 @@ onMounted(() => loadData())
 
 .detail-meta article,
 .summary-panel,
-.answer-card {
+.answer-card,
+.session-card {
   padding: 18px;
 }
 
@@ -420,6 +538,56 @@ onMounted(() => loadData())
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.session-meta,
+.session-card-head {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.session-meta {
+  margin-bottom: 14px;
+}
+
+.session-meta span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.08);
+  color: #48656d;
+  font-size: 12px;
+}
+
+.session-list {
+  display: grid;
+  gap: 14px;
+}
+
+.session-card {
+  border: 1px solid var(--app-border);
+  border-radius: 28px;
+  background: var(--app-panel);
+  box-shadow: var(--app-shadow);
+}
+
+.session-card-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.session-card-head strong {
+  display: block;
+}
+
+.session-card-head span,
+.session-card p {
+  color: var(--app-muted);
+}
+
+.session-card p {
+  margin: 12px 0 0;
+  line-height: 1.8;
 }
 
 .answer-card strong {
@@ -477,7 +645,8 @@ onMounted(() => loadData())
 
 @media (max-width: 760px) {
   .toolbar,
-  .section-head {
+  .section-head,
+  .session-card-head {
     flex-direction: column;
     align-items: flex-start;
   }

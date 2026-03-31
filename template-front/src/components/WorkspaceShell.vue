@@ -42,8 +42,8 @@
             {{ userInitial }}
           </el-avatar>
           <div class="user-text">
-            <strong>{{ profile.username || '加载中...' }}</strong>
-            <span>{{ profile.email || '正在获取用户资料' }}</span>
+            <strong>{{ profile.username || 'Loading...' }}</strong>
+            <span>{{ profile.email || 'Fetching user profile' }}</span>
           </div>
           <el-tag v-if="profile.role" type="success" effect="light">
             {{ profile.role }}
@@ -135,6 +135,13 @@ function patchProfile(nextProfile = {}) {
   Object.assign(profile, nextProfile)
 }
 
+function routeRoleByPath(path = '') {
+  if (path.startsWith('/admin')) return 'admin'
+  if (path.startsWith('/doctor')) return 'doctor'
+  if (path.startsWith('/index')) return 'user'
+  return null
+}
+
 function refreshProfile(showLoading = true) {
   if (showLoading) {
     profileLoading.value = true
@@ -154,9 +161,8 @@ function refreshProfile(showLoading = true) {
 }
 
 function redirectWhenRoleMismatch(role) {
-  if (route.path.startsWith('/admin') && role !== 'admin') {
-    router.replace(resolveHomeRouteByRole(role))
-  } else if (route.path.startsWith('/index') && role === 'admin') {
+  const requiredRole = routeRoleByPath(route.path)
+  if (requiredRole && requiredRole !== role) {
     router.replace(resolveHomeRouteByRole(role))
   }
 }

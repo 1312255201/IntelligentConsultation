@@ -13,6 +13,10 @@
         <span>已绑定科室</span>
         <strong>{{ departmentBoundCount }}</strong>
       </article>
+      <article class="stat-card">
+        <span>已绑定医生账号</span>
+        <strong>{{ accountBoundCount }}</strong>
+      </article>
     </section>
 
     <section class="table-card">
@@ -20,8 +24,8 @@
         <el-input
           v-model="keyword"
           clearable
-          placeholder="搜索医生姓名、职称、专长或科室"
-          style="max-width: 360px"
+          placeholder="搜索医生姓名、职称、专长、科室或绑定账号"
+          style="max-width: 380px"
         />
         <div class="toolbar-actions">
           <el-button @click="loadData">刷新</el-button>
@@ -44,7 +48,16 @@
             {{ departmentName(row.departmentId) }}
           </template>
         </el-table-column>
-        <el-table-column prop="expertise" label="专长" min-width="200" show-overflow-tooltip />
+        <el-table-column label="绑定账号" min-width="220">
+          <template #default="{ row }">
+            <div v-if="accountInfo(row.accountId)" class="account-cell">
+              <strong>{{ accountInfo(row.accountId).username }}</strong>
+              <span>{{ accountInfo(row.accountId).email }}</span>
+            </div>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="expertise" label="专长" min-width="220" show-overflow-tooltip />
         <el-table-column prop="sort" label="排序" width="90" align="center" />
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
@@ -71,7 +84,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEditing ? '编辑医生' : '新增医生'"
-      width="760px"
+      width="820px"
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
@@ -101,7 +114,7 @@
             <el-input v-model="form.name" maxlength="50" placeholder="请输入医生姓名" />
           </el-form-item>
           <el-form-item label="职称" prop="title">
-            <el-input v-model="form.title" maxlength="50" placeholder="例如：主任医师" />
+            <el-input v-model="form.title" maxlength="50" placeholder="例如：副主任医师" />
           </el-form-item>
           <el-form-item label="所属科室" prop="departmentId">
             <el-select v-model="form.departmentId" style="width: 100%" placeholder="请选择科室">
@@ -111,6 +124,22 @@
                 :label="item.name"
                 :value="item.id"
               />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="绑定医生账号">
+            <el-select v-model="form.accountId" clearable filterable style="width: 100%" placeholder="可选，不绑定则医生端无法登录工作台">
+              <el-option
+                v-for="item in availableAccountOptions"
+                :key="item.id"
+                :label="accountOptionLabel(item)"
+                :value="item.id"
+              >
+                <div class="account-option">
+                  <strong>{{ item.username }}</strong>
+                  <span>{{ item.email }}</span>
+                  <small v-if="item.bindDoctorId && item.bindDoctorId !== form.id">已绑定 {{ item.bindDoctorName }}</small>
+                </div>
+              </el-option>
             </el-select>
           </el-form-item>
           <el-form-item label="排序" prop="sort">
@@ -123,7 +152,7 @@
             </el-select>
           </el-form-item>
           <el-form-item label="专长" prop="expertise">
-            <el-input v-model="form.expertise" maxlength="500" placeholder="例如：冠心病、高血压、慢病管理" />
+            <el-input v-model="form.expertise" maxlength="500" placeholder="例如：慢病复诊、报告解读、儿童发热咨询" />
           </el-form-item>
         </div>
         <el-form-item label="医生介绍" prop="introduction">
@@ -160,6 +189,7 @@ const keyword = ref('')
 const formRef = ref()
 const doctors = ref([])
 const departments = ref([])
+const accountOptions = ref([])
 
 const form = reactive(createEmptyForm())
 
@@ -181,35 +211,44 @@ const rules = {
 const uploadAction = computed(() => `${backendBaseUrl()}/api/admin/doctor/upload-photo`)
 const uploadHeaders = computed(() => authHeader())
 const previewPhoto = computed(() => resolveImagePath(form.photo))
+
 const departmentMap = computed(() => {
   const map = new Map()
   departments.value.forEach(item => map.set(item.id, item.name))
   return map
 })
 
+const accountMap = computed(() => {
+  const map = new Map()
+  accountOptions.value.forEach(item => map.set(item.id, item))
+  return map
+})
+
+const availableAccountOptions = computed(() => accountOptions.value.filter(item => !item.bindDoctorId || item.bindDoctorId === form.id))
+
 const filteredDoctors = computed(() => {
   const value = keyword.value.trim().toLowerCase()
   if (!value) return doctors.value
-  return doctors.value.filter(item =>
-    [
-      item.name,
-      item.title,
-      item.expertise,
-      departmentName(item.departmentId)
-    ]
-      .filter(Boolean)
-      .some(text => text.toLowerCase().includes(value))
-  )
+  return doctors.value.filter(item => [
+    item.name,
+    item.title,
+    item.expertise,
+    departmentName(item.departmentId),
+    accountInfo(item.accountId)?.username,
+    accountInfo(item.accountId)?.email
+  ].filter(Boolean).some(text => String(text).toLowerCase().includes(value)))
 })
 
 const enabledCount = computed(() => doctors.value.filter(item => item.status === 1).length)
 const departmentBoundCount = computed(() => doctors.value.filter(item => !!item.departmentId).length)
+const accountBoundCount = computed(() => doctors.value.filter(item => !!item.accountId).length)
 const isEditing = computed(() => !!form.id)
 
 function createEmptyForm() {
   return {
     id: null,
     departmentId: null,
+    accountId: null,
     name: '',
     title: '',
     photo: '',
@@ -220,10 +259,15 @@ function createEmptyForm() {
   }
 }
 
-function loadDepartments(callback) {
+function loadDepartments() {
   get('/api/admin/department/list', (data) => {
     departments.value = data || []
-    callback?.()
+  })
+}
+
+function loadAccountOptions() {
+  get('/api/admin/doctor/account-options', (data) => {
+    accountOptions.value = data || []
   })
 }
 
@@ -239,6 +283,7 @@ function loadDoctors() {
 
 function loadData() {
   loadDepartments()
+  loadAccountOptions()
   loadDoctors()
 }
 
@@ -262,6 +307,7 @@ function submitDoctor() {
 
     const payload = {
       departmentId: form.departmentId,
+      accountId: form.accountId || null,
       name: form.name,
       title: form.title,
       photo: form.photo,
@@ -280,10 +326,10 @@ function submitDoctor() {
       submitting.value = false
       dialogVisible.value = false
       ElMessage.success(isEditing.value ? '医生信息更新成功' : '医生新增成功')
-      loadDoctors()
+      loadData()
     }, (message) => {
       submitting.value = false
-      ElMessage.warning(message || '提交失败，请稍后重试')
+      ElMessage.warning(message || '提交失败，请稍后再试')
     })
   })
 }
@@ -294,7 +340,7 @@ function removeDoctor(row) {
   }).then(() => {
     get(`/api/admin/doctor/delete?id=${row.id}`, () => {
       ElMessage.success('医生删除成功')
-      loadDoctors()
+      loadData()
     }, (message) => {
       ElMessage.warning(message || '医生删除失败')
     })
@@ -333,6 +379,15 @@ function departmentName(id) {
   return departmentMap.value.get(id) || '-'
 }
 
+function accountInfo(id) {
+  return accountMap.value.get(id) || null
+}
+
+function accountOptionLabel(item) {
+  const parts = [item.username, item.email].filter(Boolean)
+  return parts.join(' / ')
+}
+
 function formatDate(value) {
   if (!value) return '-'
   return new Intl.DateTimeFormat('zh-CN', {
@@ -364,7 +419,7 @@ onMounted(() => loadData())
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -434,7 +489,27 @@ onMounted(() => loadData())
   gap: 18px;
 }
 
-@media (max-width: 960px) {
+.account-cell,
+.account-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-cell span,
+.account-option span,
+.account-option small {
+  color: var(--app-muted);
+}
+
+@media (max-width: 1100px) {
+  .stat-grid,
+  .dialog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
   .stat-grid,
   .dialog-grid {
     grid-template-columns: 1fr;

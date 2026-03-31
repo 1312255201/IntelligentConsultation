@@ -164,7 +164,9 @@ function unauthorized() {
 }
 
 function resolveHomeRouteByRole(role = takeAccessRole()) {
-  return role === 'admin' ? '/admin/homepage' : '/index/profile'
+  if (role === 'admin') return '/admin/homepage'
+  if (role === 'doctor') return '/doctor/workbench'
+  return '/index/profile'
 }
 
 function resolveImagePath(path) {

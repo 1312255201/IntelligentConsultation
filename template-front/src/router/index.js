@@ -1,6 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { resolveHomeRouteByRole, takeAccessRole, unauthorized } from '@/net'
 
+function workspaceRoleByPath(path = '') {
+  if (path.startsWith('/admin')) return 'admin'
+  if (path.startsWith('/doctor')) return 'doctor'
+  if (path.startsWith('/index')) return 'user'
+  return null
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -71,6 +78,33 @@ const router = createRouter({
           path: 'overview',
           name: 'index-overview',
           component: () => import('@/views/index/OverviewPage.vue')
+        }
+      ]
+    },
+    {
+      path: '/doctor',
+      component: () => import('@/views/DoctorView.vue'),
+      redirect: '/doctor/workbench',
+      children: [
+        {
+          path: 'workbench',
+          name: 'doctor-workbench',
+          component: () => import('@/views/doctor/DoctorWorkbenchPage.vue')
+        },
+        {
+          path: 'consultation',
+          name: 'doctor-consultation',
+          component: () => import('@/views/doctor/DoctorConsultationPage.vue')
+        },
+        {
+          path: 'schedule',
+          name: 'doctor-schedule',
+          component: () => import('@/views/doctor/DoctorSchedulePage.vue')
+        },
+        {
+          path: 'profile',
+          name: 'doctor-profile',
+          component: () => import('@/views/index/ProfilePage.vue')
         }
       ]
     },
@@ -163,29 +197,19 @@ router.beforeEach((to, from, next) => {
   const isUnauthorized = unauthorized()
   const role = takeAccessRole()
   const routeName = String(to.name || '')
+  const requiredRole = workspaceRoleByPath(to.path)
 
   if (routeName.startsWith('welcome') && !isUnauthorized) {
     next(resolveHomeRouteByRole(role))
     return
   }
 
-  if (to.path.startsWith('/admin')) {
+  if (requiredRole) {
     if (isUnauthorized) {
       next('/login')
       return
     }
-    if (role && role !== 'admin') {
-      next(resolveHomeRouteByRole(role))
-      return
-    }
-  }
-
-  if (to.path.startsWith('/index')) {
-    if (isUnauthorized) {
-      next('/login')
-      return
-    }
-    if (role === 'admin') {
+    if (role !== requiredRole) {
       next(resolveHomeRouteByRole(role))
       return
     }

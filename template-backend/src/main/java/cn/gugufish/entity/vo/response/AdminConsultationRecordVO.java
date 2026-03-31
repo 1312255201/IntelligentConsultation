@@ -35,4 +35,6 @@ public class AdminConsultationRecordVO {
     List<ConsultationRecordAnswerVO> answers;
     List<TriageRuleHitLogVO> ruleHits;
     TriageSessionVO triageSession;
+    TriageResultVO triageResult;
+    TriageFeedbackVO triageFeedback;
 }

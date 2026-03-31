@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS `db_department` (
 CREATE TABLE IF NOT EXISTS `db_doctor` (
   `id` int NOT NULL AUTO_INCREMENT,
   `department_id` int NOT NULL,
+  `account_id` int DEFAULT NULL,
   `name` varchar(50) NOT NULL,
   `title` varchar(50) DEFAULT NULL,
   `photo` varchar(191) DEFAULT NULL,
@@ -62,8 +63,13 @@ CREATE TABLE IF NOT EXISTS `db_doctor` (
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_doctor_account` (`account_id`),
   KEY `idx_doctor_department_status` (`department_id`, `status`),
   KEY `idx_doctor_sort` (`sort`),
+  CONSTRAINT `fk_doctor_account`
+    FOREIGN KEY (`account_id`) REFERENCES `db_account` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
   CONSTRAINT `fk_doctor_department`
     FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
     ON DELETE RESTRICT
@@ -572,6 +578,103 @@ CREATE TABLE IF NOT EXISTS `db_triage_message` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_triage_result` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_id` int NOT NULL,
+  `consultation_id` int NOT NULL,
+  `result_type` varchar(30) NOT NULL DEFAULT 'initial',
+  `triage_level_id` int DEFAULT NULL,
+  `triage_level_code` varchar(50) DEFAULT NULL,
+  `triage_level_name` varchar(50) DEFAULT NULL,
+  `department_id` int DEFAULT NULL,
+  `department_name` varchar(50) DEFAULT NULL,
+  `doctor_id` int DEFAULT NULL,
+  `doctor_name` varchar(50) DEFAULT NULL,
+  `doctor_candidates_json` text,
+  `reason_text` varchar(500) DEFAULT NULL,
+  `risk_flags_json` text,
+  `symptom_extract_json` text,
+  `confidence_score` decimal(5,2) DEFAULT NULL,
+  `is_final` tinyint(1) NOT NULL DEFAULT 1,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_triage_result_session_final` (`session_id`, `is_final`),
+  KEY `idx_triage_result_consultation` (`consultation_id`),
+  KEY `idx_triage_result_department_status` (`department_id`, `status`),
+  KEY `idx_triage_result_doctor_status` (`doctor_id`, `status`),
+  CONSTRAINT `fk_triage_result_session`
+    FOREIGN KEY (`session_id`) REFERENCES `db_triage_session` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_result_consultation`
+    FOREIGN KEY (`consultation_id`) REFERENCES `db_consultation_record` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_result_triage_level`
+    FOREIGN KEY (`triage_level_id`) REFERENCES `db_triage_level_dict` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_result_department`
+    FOREIGN KEY (`department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_result_doctor`
+    FOREIGN KEY (`doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_triage_feedback` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `session_id` int NOT NULL,
+  `consultation_id` int NOT NULL,
+  `account_id` int NOT NULL,
+  `patient_id` int NOT NULL,
+  `user_score` tinyint NOT NULL,
+  `is_adopted` tinyint(1) NOT NULL DEFAULT 1,
+  `feedback_text` varchar(500) DEFAULT NULL,
+  `manual_correct_department_id` int DEFAULT NULL,
+  `manual_correct_department_name` varchar(50) DEFAULT NULL,
+  `manual_correct_doctor_id` int DEFAULT NULL,
+  `manual_correct_doctor_name` varchar(50) DEFAULT NULL,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_triage_feedback_consultation` (`consultation_id`),
+  KEY `idx_triage_feedback_session_status` (`session_id`, `status`),
+  KEY `idx_triage_feedback_account_status` (`account_id`, `status`),
+  KEY `idx_triage_feedback_patient_status` (`patient_id`, `status`),
+  KEY `idx_triage_feedback_department` (`manual_correct_department_id`),
+  KEY `idx_triage_feedback_doctor` (`manual_correct_doctor_id`),
+  CONSTRAINT `fk_triage_feedback_session`
+    FOREIGN KEY (`session_id`) REFERENCES `db_triage_session` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_feedback_consultation`
+    FOREIGN KEY (`consultation_id`) REFERENCES `db_consultation_record` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_feedback_account`
+    FOREIGN KEY (`account_id`) REFERENCES `db_account` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_feedback_patient`
+    FOREIGN KEY (`patient_id`) REFERENCES `db_patient_profile` (`id`)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_feedback_department`
+    FOREIGN KEY (`manual_correct_department_id`) REFERENCES `db_department` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_triage_feedback_doctor`
+    FOREIGN KEY (`manual_correct_doctor_id`) REFERENCES `db_doctor` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_homepage_config` (
   `id` int NOT NULL,
   `hero_title` varchar(100) NOT NULL,
@@ -645,3 +748,4 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
 -- 12. Body part, symptom, triage level and red-flag rule dictionaries are the core structured data for rule-based triage and AI-assisted recommendation.
 -- 13. Triage knowledge stores reusable structured triage guidance, service boundaries and case summaries for later AI retrieval and recommendation explanation.
 -- 14. Triage case references store structured internal examples for later AI retrieval, recommendation explanation and operational review.
+-- 15. Doctor-side login requires an account with role = 'doctor' and a doctor row bound through db_doctor.account_id.

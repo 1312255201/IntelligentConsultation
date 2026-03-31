@@ -8,23 +8,32 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.Date;
 
 @Data
-@TableName("db_doctor")
+@TableName("db_triage_result")
 @NoArgsConstructor
 @AllArgsConstructor
-public class Doctor implements BaseData {
+public class TriageResult implements BaseData {
     @TableId(type = IdType.AUTO)
     Integer id;
+    Integer sessionId;
+    Integer consultationId;
+    String resultType;
+    Integer triageLevelId;
+    String triageLevelCode;
+    String triageLevelName;
     Integer departmentId;
-    Integer accountId;
-    String name;
-    String title;
-    String photo;
-    String introduction;
-    String expertise;
-    Integer sort;
+    String departmentName;
+    Integer doctorId;
+    String doctorName;
+    String doctorCandidatesJson;
+    String reasonText;
+    String riskFlagsJson;
+    String symptomExtractJson;
+    BigDecimal confidenceScore;
+    Integer isFinal;
     Integer status;
     Date createTime;
     Date updateTime;

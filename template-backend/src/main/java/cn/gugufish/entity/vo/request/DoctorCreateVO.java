@@ -13,6 +13,8 @@ public class DoctorCreateVO {
     @NotNull
     @Positive
     Integer departmentId;
+    @Positive
+    Integer accountId;
     @NotBlank
     @Length(max = 50)
     String name;

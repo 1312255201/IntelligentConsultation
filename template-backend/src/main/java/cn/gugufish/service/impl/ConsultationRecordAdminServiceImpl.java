@@ -10,6 +10,8 @@ import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
 import cn.gugufish.service.ConsultationRecordAdminService;
+import cn.gugufish.service.TriageFeedbackQueryService;
+import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
@@ -31,6 +33,12 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
 
     @Resource
     TriageSessionQueryService triageSessionQueryService;
+
+    @Resource
+    TriageResultQueryService triageResultQueryService;
+
+    @Resource
+    TriageFeedbackQueryService triageFeedbackQueryService;
 
     @Override
     public List<AdminConsultationRecordVO> listRecords() {
@@ -68,6 +76,8 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
             vo.setAnswers(answers);
             vo.setRuleHits(ruleHits);
             vo.setTriageSession(triageSessionQueryService.detailByConsultationId(id));
+            vo.setTriageResult(triageResultQueryService.detailByConsultationId(id));
+            vo.setTriageFeedback(triageFeedbackQueryService.detailByConsultationId(id));
         });
     }
 }

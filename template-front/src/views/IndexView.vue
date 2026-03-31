@@ -17,31 +17,31 @@ const menuItems = [
   {
     index: '/index/profile',
     title: '基本信息管理',
-    description: '维护登录密码、联系邮箱与个人头像。',
+    description: '维护登录密码、联系邮箱和个人头像。',
     icon: User
   },
   {
     index: '/index/patient',
     title: '就诊人管理',
-    description: '维护本人及家庭成员就诊档案，后续问诊和导诊都会基于这里的就诊人信息。',
+    description: '维护本人及家庭成员就诊档案，作为后续问诊主体。',
     icon: UserFilled
   },
   {
     index: '/index/health',
     title: '健康档案',
-    description: '按就诊人维护过敏史、既往史、慢病史和长期用药等核心健康信息。',
+    description: '维护过敏史、既往史、慢病史和长期用药信息。',
     icon: DocumentChecked
   },
   {
     index: '/index/consultation',
     title: '发起问诊',
-    description: '选择问诊分类、装配前置表单并提交当前就诊需求，作为后续智能导诊入口。',
+    description: '选择问诊分类、填写前置信息并提交当前诉求。',
     icon: Service
   },
   {
     index: '/index/overview',
     title: '系统概览',
-    description: '查看当前系统建设进度与基础状态。',
+    description: '查看当前系统建设进度和基础能力概览。',
     icon: House
   }
 ]

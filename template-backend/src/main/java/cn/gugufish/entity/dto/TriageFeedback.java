@@ -11,20 +11,23 @@ import lombok.NoArgsConstructor;
 import java.util.Date;
 
 @Data
-@TableName("db_doctor")
+@TableName("db_triage_feedback")
 @NoArgsConstructor
 @AllArgsConstructor
-public class Doctor implements BaseData {
+public class TriageFeedback implements BaseData {
     @TableId(type = IdType.AUTO)
     Integer id;
-    Integer departmentId;
+    Integer sessionId;
+    Integer consultationId;
     Integer accountId;
-    String name;
-    String title;
-    String photo;
-    String introduction;
-    String expertise;
-    Integer sort;
+    Integer patientId;
+    Integer userScore;
+    Integer isAdopted;
+    String feedbackText;
+    Integer manualCorrectDepartmentId;
+    String manualCorrectDepartmentName;
+    Integer manualCorrectDoctorId;
+    String manualCorrectDoctorName;
     Integer status;
     Date createTime;
     Date updateTime;

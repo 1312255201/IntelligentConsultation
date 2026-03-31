@@ -324,6 +324,123 @@
             <p v-if="detailRecord.triageRuleSummary"><strong>风险提示：</strong>{{ detailRecord.triageRuleSummary }}</p>
           </div>
 
+          <div v-if="detailRecord.triageSession" class="session-panel">
+            <div class="doctor-recommend-head">
+              <strong>导诊留痕</strong>
+              <span>保存本次分诊的摘要、系统结果与规则命中过程</span>
+            </div>
+            <div class="session-meta">
+              <span>Session {{ detailRecord.triageSession.sessionNo }}</span>
+              <span>{{ triageSessionStatusLabel(detailRecord.triageSession.status) }}</span>
+              <span>{{ detailRecord.triageSession.messageCount || 0 }} messages</span>
+            </div>
+            <div class="session-message-list">
+              <article
+                v-for="message in detailRecord.triageSession.messages || []"
+                :key="message.id"
+                class="session-message-card"
+              >
+                <div class="session-message-head">
+                  <div>
+                    <strong>{{ message.title }}</strong>
+                    <span>{{ messageTypeLabel(message.messageType) }}</span>
+                  </div>
+                  <el-tag size="small" effect="light">{{ messageRoleLabel(message.roleType) }}</el-tag>
+                </div>
+                <p>{{ message.content }}</p>
+              </article>
+            </div>
+          </div>
+
+          <div v-if="detailRecord.triageResult" class="result-panel">
+            <div class="doctor-recommend-head">
+              <strong>导诊结果归档</strong>
+              <span>保存本次导诊的最终推荐结果，便于后续复盘和 AI 训练使用</span>
+            </div>
+            <div class="session-meta">
+              <span>{{ detailRecord.triageResult.triageLevelName || '待评估' }}</span>
+              <span>{{ detailRecord.triageResult.departmentName || '未匹配科室' }}</span>
+              <span>置信度 {{ formatConfidence(detailRecord.triageResult.confidenceScore) }}</span>
+              <span v-if="detailRecord.triageResult.doctorName">推荐医生 {{ detailRecord.triageResult.doctorName }}</span>
+            </div>
+            <p class="result-copy">{{ detailRecord.triageResult.reasonText || detailRecord.triageSuggestion || '当前暂无更多结果说明' }}</p>
+            <div v-if="parseJsonArray(detailRecord.triageResult.riskFlagsJson).length" class="chip-row">
+              <span v-for="item in parseJsonArray(detailRecord.triageResult.riskFlagsJson)" :key="item">{{ item }}</span>
+            </div>
+            <div v-if="parseDoctorCandidates(detailRecord.triageResult.doctorCandidatesJson).length" class="candidate-list">
+              <article
+                v-for="item in parseDoctorCandidates(detailRecord.triageResult.doctorCandidatesJson)"
+                :key="item.id || item.name"
+                class="candidate-card"
+              >
+                <strong>{{ item.name }}</strong>
+                <span>{{ item.title || '医生' }}</span>
+              </article>
+            </div>
+          </div>
+
+          <div v-if="detailRecord.triageSession" class="feedback-panel">
+            <div class="doctor-recommend-head">
+              <strong>导诊反馈</strong>
+              <span>请告诉系统这次导诊是否有帮助，后续会用于分诊纠偏和效果优化</span>
+            </div>
+            <div v-if="detailRecord.triageFeedback" class="feedback-summary">
+              <span>当前状态：{{ feedbackAdoptLabel(detailRecord.triageFeedback.isAdopted) }}</span>
+              <span>评分：{{ detailRecord.triageFeedback.userScore }}/5</span>
+              <span v-if="detailRecord.triageFeedback.manualCorrectDepartmentName">修正科室：{{ detailRecord.triageFeedback.manualCorrectDepartmentName }}</span>
+              <span v-if="detailRecord.triageFeedback.manualCorrectDoctorName">修正医生：{{ detailRecord.triageFeedback.manualCorrectDoctorName }}</span>
+            </div>
+            <div class="feedback-form">
+              <el-select v-model="feedbackForm.userScore" style="width: 180px" placeholder="选择评分">
+                <el-option v-for="item in [5, 4, 3, 2, 1]" :key="item" :label="`${item} 分`" :value="item" />
+              </el-select>
+              <el-select v-model="feedbackForm.isAdopted" style="width: 180px" placeholder="是否采纳">
+                <el-option label="已采纳" :value="1" />
+                <el-option label="未采纳" :value="0" />
+              </el-select>
+              <el-select
+                v-if="feedbackForm.isAdopted === 0"
+                v-model="feedbackForm.manualCorrectDepartmentId"
+                clearable
+                style="width: 220px"
+                placeholder="修正科室"
+              >
+                <el-option
+                  v-for="item in feedbackOptions.departments || []"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+              <el-select
+                v-if="feedbackForm.isAdopted === 0"
+                v-model="feedbackForm.manualCorrectDoctorId"
+                clearable
+                filterable
+                style="width: 240px"
+                placeholder="修正医生"
+              >
+                <el-option
+                  v-for="item in availableFeedbackDoctors"
+                  :key="item.id"
+                  :label="item.title ? `${item.name} / ${item.title}` : item.name"
+                  :value="item.id"
+                />
+              </el-select>
+              <el-input
+                v-model="feedbackForm.feedbackText"
+                type="textarea"
+                :rows="3"
+                placeholder="可填写为什么采纳或不采纳，也可以补充你更希望被分到哪个科室/医生"
+              />
+              <div class="feedback-actions">
+                <el-button type="primary" :loading="feedbackSubmitting" @click="submitFeedback">
+                  {{ detailRecord.triageFeedback ? '更新反馈' : '提交反馈' }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+
           <div v-if="(detailRecord.recommendedDoctors || []).length" class="doctor-recommend">
             <div class="doctor-recommend-head">
               <strong>推荐医生</strong>
@@ -397,7 +514,16 @@ const submitting = ref(false)
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailRecord = ref(null)
+const feedbackOptions = ref({ departments: [], doctors: [] })
+const feedbackSubmitting = ref(false)
 const formData = reactive({})
+const feedbackForm = reactive({
+  userScore: 5,
+  isAdopted: 1,
+  feedbackText: '',
+  manualCorrectDepartmentId: null,
+  manualCorrectDoctorId: null
+})
 
 const uploadAction = computed(() => `${backendBaseUrl()}/api/image/cache`)
 const uploadHeaders = computed(() => authHeader())
@@ -415,6 +541,12 @@ const visibleFields = computed(() => {
   const fields = template.value?.fields || []
   return fields.filter(field => isFieldVisible(field))
 })
+const availableFeedbackDoctors = computed(() => {
+  const doctors = feedbackOptions.value?.doctors || []
+  return feedbackForm.manualCorrectDepartmentId
+    ? doctors.filter(item => item.departmentId === feedbackForm.manualCorrectDepartmentId)
+    : doctors
+})
 const todayCount = computed(() => {
   const today = new Date().toDateString()
   return records.value.filter(item => new Date(item.createTime).toDateString() === today).length
@@ -424,11 +556,20 @@ watch(activeCategoryId, (value) => {
   if (value) loadTemplate(value)
 })
 
+watch(() => feedbackForm.manualCorrectDepartmentId, (value) => {
+  if (!feedbackForm.manualCorrectDoctorId) return
+  const currentDoctor = (feedbackOptions.value?.doctors || []).find(item => item.id === feedbackForm.manualCorrectDoctorId)
+  if (currentDoctor && value && currentDoctor.departmentId !== value) {
+    feedbackForm.manualCorrectDoctorId = null
+  }
+})
+
 function loadData() {
   loadPatients()
   loadHistories()
   loadCategories()
   loadRecords()
+  loadFeedbackOptions()
 }
 
 function loadPatients() {
@@ -477,6 +618,12 @@ function loadRecords(callback) {
     callback?.(records.value)
   }, () => {
     historyLoading.value = false
+  })
+}
+
+function loadFeedbackOptions() {
+  get('/api/user/consultation/feedback/options', (data) => {
+    feedbackOptions.value = data || { departments: [], doctors: [] }
   })
 }
 
@@ -714,6 +861,7 @@ function openRecordDetail(row) {
   detailRecord.value = null
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
     detailRecord.value = data
+    applyFeedbackForm(data?.triageFeedback)
     detailLoading.value = false
   }, (message) => {
     detailLoading.value = false
@@ -722,13 +870,93 @@ function openRecordDetail(row) {
   })
 }
 
-function parseMultiValue(value) {
+function applyFeedbackForm(feedback) {
+  feedbackForm.userScore = feedback?.userScore || 5
+  feedbackForm.isAdopted = feedback?.isAdopted ?? 1
+  feedbackForm.feedbackText = feedback?.feedbackText || ''
+  feedbackForm.manualCorrectDepartmentId = feedback?.manualCorrectDepartmentId || null
+  feedbackForm.manualCorrectDoctorId = feedback?.manualCorrectDoctorId || null
+}
+
+function submitFeedback() {
+  if (!detailRecord.value?.id) return
+  if (!feedbackForm.userScore) {
+    ElMessage.warning('请先选择评分')
+    return
+  }
+  feedbackSubmitting.value = true
+  post('/api/user/consultation/feedback/submit', {
+    recordId: detailRecord.value.id,
+    userScore: feedbackForm.userScore,
+    isAdopted: feedbackForm.isAdopted,
+    feedbackText: `${feedbackForm.feedbackText || ''}`.trim(),
+    manualCorrectDepartmentId: feedbackForm.isAdopted === 0 ? feedbackForm.manualCorrectDepartmentId : null,
+    manualCorrectDoctorId: feedbackForm.isAdopted === 0 ? feedbackForm.manualCorrectDoctorId : null
+  }, () => {
+    feedbackSubmitting.value = false
+    ElMessage.success('导诊反馈已保存')
+    get(`/api/user/consultation/record/detail?recordId=${detailRecord.value.id}`, (data) => {
+      detailRecord.value = data
+      applyFeedbackForm(data?.triageFeedback)
+    })
+  }, (message) => {
+    feedbackSubmitting.value = false
+    ElMessage.warning(message || '导诊反馈保存失败')
+  })
+}
+
+function triageSessionStatusLabel(value) {
+  return {
+    completed: '已完成',
+    in_progress: '进行中',
+    closed: '已关闭'
+  }[value] || value || '-'
+}
+
+function messageRoleLabel(value) {
+  return {
+    user: '用户',
+    system: '系统',
+    rule_engine: '规则引擎'
+  }[value] || value || '-'
+}
+
+function messageTypeLabel(value) {
+  return {
+    intake_summary: '问诊摘要',
+    health_summary: '健康摘要',
+    triage_result: '分诊结果',
+    rule_summary: '规则摘要',
+    rule_hit: '命中详情'
+  }[value] || value || '-'
+}
+
+function feedbackAdoptLabel(value) {
+  return value === 1 ? '已采纳' : '未采纳'
+}
+
+function parseJsonArray(value) {
   if (!value) return []
   try {
-    return JSON.parse(value)
+    const result = JSON.parse(value)
+    return Array.isArray(result) ? result : []
   } catch {
     return []
   }
+}
+
+function parseDoctorCandidates(value) {
+  return parseJsonArray(value).filter(item => item && typeof item === 'object')
+}
+
+function formatConfidence(value) {
+  const number = Number(value)
+  if (Number.isNaN(number) || number <= 0) return '-'
+  return `${Math.round(number * 100)}%`
+}
+
+function parseMultiValue(value) {
+  return parseJsonArray(value)
 }
 
 function displayAnswer(answer) {
@@ -981,7 +1209,12 @@ onMounted(() => loadData())
 }
 
 .triage-panel,
-.doctor-card {
+.doctor-card,
+.result-panel,
+.feedback-panel,
+.session-panel,
+.session-message-card,
+.candidate-card {
   padding: 18px;
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.72);
@@ -989,12 +1222,16 @@ onMounted(() => loadData())
 }
 
 .triage-panel,
-.doctor-recommend {
+.doctor-recommend,
+.result-panel,
+.feedback-panel,
+.session-panel {
   margin-bottom: 18px;
 }
 
 .triage-grid,
-.doctor-list {
+.doctor-list,
+.candidate-list {
   display: grid;
   gap: 14px;
 }
@@ -1048,6 +1285,96 @@ onMounted(() => loadData())
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.candidate-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.candidate-card strong {
+  display: block;
+}
+
+.candidate-card span,
+.result-copy,
+.feedback-summary span {
+  color: var(--app-muted);
+}
+
+.result-copy {
+  margin: 0 0 14px;
+  line-height: 1.8;
+}
+
+.feedback-summary,
+.feedback-form,
+.feedback-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.feedback-summary,
+.feedback-form {
+  flex-wrap: wrap;
+}
+
+.feedback-summary {
+  margin-bottom: 14px;
+}
+
+.feedback-summary span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.08);
+  font-size: 12px;
+}
+
+.feedback-form :deep(.el-textarea) {
+  width: 100%;
+}
+
+.session-meta,
+.session-message-head {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.session-meta {
+  margin-bottom: 14px;
+}
+
+.session-meta span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.08);
+  color: #48656d;
+  font-size: 12px;
+}
+
+.session-message-list {
+  display: grid;
+  gap: 14px;
+}
+
+.session-message-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.session-message-head strong {
+  display: block;
+}
+
+.session-message-head span,
+.session-message-card p {
+  color: var(--app-muted);
+}
+
+.session-message-card p {
+  margin: 12px 0 0;
+  line-height: 1.8;
+}
+
 .doctor-avatar {
   width: 56px;
   height: 56px;
@@ -1091,7 +1418,8 @@ onMounted(() => loadData())
   .entry-layout,
   .detail-meta,
   .triage-grid,
-  .doctor-list {
+  .doctor-list,
+  .candidate-list {
     grid-template-columns: 1fr;
   }
 }
@@ -1100,7 +1428,9 @@ onMounted(() => loadData())
   .panel-head,
   .patient-top,
   .doctor-recommend-head,
-  .doctor-top {
+  .doctor-top,
+  .session-message-head,
+  .feedback-actions {
     flex-direction: column;
     align-items: flex-start;
   }

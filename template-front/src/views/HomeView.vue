@@ -451,7 +451,8 @@ function goConsultEntry() {
     })
     return
   }
-  router.push(takeAccessRole() === 'admin' ? resolveHomeRouteByRole() : '/index/consultation')
+  const role = takeAccessRole()
+  router.push(role === 'user' ? '/index/consultation' : resolveHomeRouteByRole(role))
 }
 
 function scrollTo(id) {

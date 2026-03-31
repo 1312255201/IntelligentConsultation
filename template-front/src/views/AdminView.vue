@@ -26,91 +26,91 @@ const menuItems = [
   {
     index: '/admin/homepage',
     title: '主页设置',
-    description: '',
+    description: '维护首页展示内容、推荐医生与案例素材。',
     icon: HomeFilled
   },
   {
     index: '/admin/department',
     title: '科室信息维护',
-    description: '',
+    description: '维护科室基础数据，供问诊、挂号和导诊复用。',
     icon: OfficeBuilding
   },
   {
     index: '/admin/doctor',
     title: '医生信息维护',
-    description: '',
+    description: '维护医生档案、照片、专长信息与医生账号绑定。',
     icon: UserFilled
   },
   {
     index: '/admin/doctor-service',
     title: '医生服务标签',
-    description: '',
+    description: '维护医生服务方向和能力标签，支持导诊推荐。',
     icon: Tickets
   },
   {
     index: '/admin/doctor-schedule',
     title: '医生排班管理',
-    description: '',
+    description: '配置医生排班、接诊方式与号源容量。',
     icon: Calendar
   },
   {
     index: '/admin/consultation-category',
     title: '问诊分类管理',
-    description: '',
+    description: '维护问诊入口分类与科室归属关系。',
     icon: Tickets
   },
   {
     index: '/admin/consultation-template',
     title: '前置模板管理',
-    description: '',
+    description: '维护问诊前置采集模板和字段。',
     icon: Document
   },
   {
     index: '/admin/body-part',
     title: '身体部位字典',
-    description: '维护智能导诊识别使用的身体部位层级数据',
+    description: '维护智能导诊识别使用的身体部位数据。',
     icon: Location
   },
   {
     index: '/admin/symptom',
     title: '症状字典管理',
-    description: '维护症状标准词、关键词和别名映射关系',
+    description: '维护症状标准词、别名与匹配关键字。',
     icon: Tickets
   },
   {
     index: '/admin/triage-level',
     title: '分诊等级字典',
-    description: '维护风险等级、优先级和建议动作',
+    description: '维护风险等级、优先级和建议动作。',
     icon: DataAnalysis
   },
   {
     index: '/admin/red-flag',
     title: '红旗规则管理',
-    description: '配置高风险触发条件与紧急分诊规则',
+    description: '配置高风险触发条件和紧急分诊规则。',
     icon: Document
   },
   {
     index: '/admin/triage-knowledge',
     title: '导诊知识库管理',
-    description: '维护 AI 导诊和规则解释可复用的知识、指南和案例摘要',
+    description: '维护 AI 导诊可复用的知识、指南和医生画像。',
     icon: Document
   },
   {
     index: '/admin/triage-case',
     title: '导诊案例库管理',
-    description: '沉淀内部结构化案例，为 AI 检索、推荐解释和复盘分析提供样本',
+    description: '沉淀结构化案例，为检索、推荐和复盘提供样本。',
     icon: Document
   },
   {
     index: '/admin/consultation-record',
     title: '导诊记录中心',
-    description: '查看用户问诊记录、初步分诊结果与规则命中留痕',
+    description: '查看用户问诊记录、分诊结果和反馈闭环。',
     icon: DataAnalysis
   },
   {
     index: '/admin/profile',
     title: '个人信息',
-    description: '',
+    description: '维护管理员账号的邮箱、密码和头像。',
     icon: User
   }
 ]

@@ -1,5 +1,6 @@
 package cn.gugufish.service.impl;
 
+import cn.gugufish.entity.dto.Account;
 import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.HomepageCase;
@@ -8,6 +9,8 @@ import cn.gugufish.entity.dto.TriageCaseReference;
 import cn.gugufish.entity.dto.TriageKnowledge;
 import cn.gugufish.entity.vo.request.DoctorCreateVO;
 import cn.gugufish.entity.vo.request.DoctorUpdateVO;
+import cn.gugufish.entity.vo.response.DoctorAccountOptionVO;
+import cn.gugufish.mapper.AccountMapper;
 import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.HomepageCaseMapper;
@@ -16,6 +19,7 @@ import cn.gugufish.mapper.TriageCaseReferenceMapper;
 import cn.gugufish.mapper.TriageKnowledgeMapper;
 import cn.gugufish.service.DoctorService;
 import cn.gugufish.service.ImageService;
+import cn.gugufish.utils.Const;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
@@ -23,9 +27,15 @@ import org.springframework.stereotype.Service;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> implements DoctorService {
+
+    @Resource
+    AccountMapper accountMapper;
 
     @Resource
     DepartmentMapper departmentMapper;
@@ -53,14 +63,43 @@ public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> impleme
     }
 
     @Override
+    public List<DoctorAccountOptionVO> listDoctorAccountOptions() {
+        List<Account> accounts = accountMapper.selectList(Wrappers.<Account>query()
+                .eq("role", Const.ROLE_DOCTOR)
+                .orderByAsc("register_time")
+                .orderByAsc("id"));
+        if (accounts.isEmpty()) return List.of();
+
+        Map<Integer, Doctor> bindDoctorMap = this.list(Wrappers.<Doctor>query()
+                        .isNotNull("account_id"))
+                .stream()
+                .filter(item -> item.getAccountId() != null)
+                .collect(Collectors.toMap(Doctor::getAccountId, Function.identity(), (left, right) -> left));
+
+        return accounts.stream()
+                .map(item -> {
+                    Doctor bindDoctor = bindDoctorMap.get(item.getId());
+                    DoctorAccountOptionVO vo = item.asViewObject(DoctorAccountOptionVO.class);
+                    vo.setBindDoctorId(bindDoctor == null ? null : bindDoctor.getId());
+                    vo.setBindDoctorName(bindDoctor == null ? null : bindDoctor.getName());
+                    return vo;
+                })
+                .toList();
+    }
+
+    @Override
     public String createDoctor(DoctorCreateVO vo) {
         Department department = departmentMapper.selectById(vo.getDepartmentId());
         if (department == null) return "绑定的科室不存在";
+
+        String accountMessage = validateAccountBinding(vo.getAccountId(), null);
+        if (accountMessage != null) return accountMessage;
 
         Date now = new Date();
         Doctor doctor = new Doctor(
                 null,
                 vo.getDepartmentId(),
+                vo.getAccountId(),
                 vo.getName(),
                 vo.getTitle(),
                 vo.getPhoto(),
@@ -82,12 +121,16 @@ public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> impleme
         Department department = departmentMapper.selectById(vo.getDepartmentId());
         if (department == null) return "绑定的科室不存在";
 
+        String accountMessage = validateAccountBinding(vo.getAccountId(), vo.getId());
+        if (accountMessage != null) return accountMessage;
+
         String oldPhoto = doctor.getPhoto();
         String nextPhoto = vo.getPhoto();
 
         boolean updated = this.update(Wrappers.<Doctor>update()
                 .eq("id", vo.getId())
                 .set("department_id", vo.getDepartmentId())
+                .set("account_id", vo.getAccountId())
                 .set("name", vo.getName())
                 .set("title", vo.getTitle())
                 .set("photo", nextPhoto)
@@ -128,6 +171,21 @@ public class DoctorServiceImpl extends ServiceImpl<DoctorMapper, Doctor> impleme
             return "医生删除失败，请联系管理员";
         }
         imageService.deleteImage(doctor.getPhoto());
+        return null;
+    }
+
+    private String validateAccountBinding(Integer accountId, Integer ignoreDoctorId) {
+        if (accountId == null) return null;
+
+        Account account = accountMapper.selectById(accountId);
+        if (account == null) return "绑定的医生账号不存在";
+        if (!Const.ROLE_DOCTOR.equals(account.getRole())) return "绑定账号不是 doctor 角色";
+
+        Doctor boundDoctor = this.getOne(Wrappers.<Doctor>query()
+                .eq("account_id", accountId)
+                .ne(ignoreDoctorId != null, "id", ignoreDoctorId)
+                .last("limit 1"));
+        if (boundDoctor != null) return "当前医生账号已绑定其他医生档案";
         return null;
     }
 }

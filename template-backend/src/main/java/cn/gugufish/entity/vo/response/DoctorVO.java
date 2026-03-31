@@ -8,6 +8,7 @@ import java.util.Date;
 public class DoctorVO {
     Integer id;
     Integer departmentId;
+    Integer accountId;
     String name;
     String title;
     String photo;

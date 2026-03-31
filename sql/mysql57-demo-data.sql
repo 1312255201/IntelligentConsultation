@@ -112,7 +112,74 @@ WHERE d.`code` = 'DERMATOLOGY'
   );
 
 -- -------------------------
--- 3. 首页推荐医生（可选）
+-- 3. 医生登录账号（演示）
+-- 默认密码：Doctor@123
+-- -------------------------
+INSERT INTO `db_account`
+(`username`, `password`, `email`, `role`, `avatar`, `register_time`)
+SELECT 'doctor_linyuanhang', '$2a$10$CWy..OLIocnoOwSwz7O2uuAGkzjqTjxgsAPjTLOL/svyJ3SK4NxG2', 'doctor_linyuanhang@example.com', 'doctor', NULL, NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_account` WHERE `username` = 'doctor_linyuanhang');
+
+INSERT INTO `db_account`
+(`username`, `password`, `email`, `role`, `avatar`, `register_time`)
+SELECT 'doctor_zhouyaning', '$2a$10$CWy..OLIocnoOwSwz7O2uuAGkzjqTjxgsAPjTLOL/svyJ3SK4NxG2', 'doctor_zhouyaning@example.com', 'doctor', NULL, NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_account` WHERE `username` = 'doctor_zhouyaning');
+
+INSERT INTO `db_account`
+(`username`, `password`, `email`, `role`, `avatar`, `register_time`)
+SELECT 'doctor_chenzhixia', '$2a$10$CWy..OLIocnoOwSwz7O2uuAGkzjqTjxgsAPjTLOL/svyJ3SK4NxG2', 'doctor_chenzhixia@example.com', 'doctor', NULL, NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_account` WHERE `username` = 'doctor_chenzhixia');
+
+INSERT INTO `db_account`
+(`username`, `password`, `email`, `role`, `avatar`, `register_time`)
+SELECT 'doctor_xuqinglan', '$2a$10$CWy..OLIocnoOwSwz7O2uuAGkzjqTjxgsAPjTLOL/svyJ3SK4NxG2', 'doctor_xuqinglan@example.com', 'doctor', NULL, NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_account` WHERE `username` = 'doctor_xuqinglan');
+
+INSERT INTO `db_account`
+(`username`, `password`, `email`, `role`, `avatar`, `register_time`)
+SELECT 'doctor_songlinchuan', '$2a$10$CWy..OLIocnoOwSwz7O2uuAGkzjqTjxgsAPjTLOL/svyJ3SK4NxG2', 'doctor_songlinchuan@example.com', 'doctor', NULL, NOW()
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `db_account` WHERE `username` = 'doctor_songlinchuan');
+
+UPDATE `db_account` SET `role` = 'doctor' WHERE `username` IN (
+  'doctor_linyuanhang',
+  'doctor_zhouyaning',
+  'doctor_chenzhixia',
+  'doctor_xuqinglan',
+  'doctor_songlinchuan'
+);
+
+UPDATE `db_doctor` doc
+JOIN `db_account` acc ON acc.`username` = 'doctor_linyuanhang'
+SET doc.`account_id` = acc.`id`
+WHERE doc.`name` = '林远航' AND doc.`account_id` IS NULL;
+
+UPDATE `db_doctor` doc
+JOIN `db_account` acc ON acc.`username` = 'doctor_zhouyaning'
+SET doc.`account_id` = acc.`id`
+WHERE doc.`name` = '周雅宁' AND doc.`account_id` IS NULL;
+
+UPDATE `db_doctor` doc
+JOIN `db_account` acc ON acc.`username` = 'doctor_chenzhixia'
+SET doc.`account_id` = acc.`id`
+WHERE doc.`name` = '陈知夏' AND doc.`account_id` IS NULL;
+
+UPDATE `db_doctor` doc
+JOIN `db_account` acc ON acc.`username` = 'doctor_xuqinglan'
+SET doc.`account_id` = acc.`id`
+WHERE doc.`name` = '许清岚' AND doc.`account_id` IS NULL;
+
+UPDATE `db_doctor` doc
+JOIN `db_account` acc ON acc.`username` = 'doctor_songlinchuan'
+SET doc.`account_id` = acc.`id`
+WHERE doc.`name` = '宋临川' AND doc.`account_id` IS NULL;
+
+-- -------------------------
+-- 4. 首页推荐医生（可选）
 -- -------------------------
 INSERT INTO `db_homepage_recommend_doctor`
 (`doctor_id`, `display_title`, `recommend_reason`, `sort`, `status`, `create_time`, `update_time`)
