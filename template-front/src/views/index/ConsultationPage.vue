@@ -397,6 +397,29 @@
             </div>
           </div>
 
+          <div v-if="detailRecord.doctorConclusion" class="result-panel">
+            <div class="doctor-recommend-head">
+              <strong>结构化结论</strong>
+              <span>这是医生最终沉淀的标准化结论，可用于后续复诊、统计和系统优化。</span>
+            </div>
+            <div class="session-meta">
+              <span>{{ conditionLevelLabel(detailRecord.doctorConclusion.conditionLevel) }}</span>
+              <span>{{ dispositionLabel(detailRecord.doctorConclusion.disposition) }}</span>
+              <span>{{ aiConsistencyLabel(detailRecord.doctorConclusion.isConsistentWithAi) }}</span>
+              <span>{{ detailRecord.doctorConclusion.needFollowUp === 1 ? '需要随访' : '无需随访' }}</span>
+              <span v-if="detailRecord.doctorConclusion.followUpWithinDays">
+                建议 {{ detailRecord.doctorConclusion.followUpWithinDays }} 天内随访
+              </span>
+            </div>
+            <div class="summary-panel">
+              <p><strong>诊断方向：</strong>{{ detailRecord.doctorConclusion.diagnosisDirection || '暂无明确方向说明。' }}</p>
+              <p><strong>患者指导：</strong>{{ detailRecord.doctorConclusion.patientInstruction || '暂无补充指导。' }}</p>
+            </div>
+            <div v-if="parseJsonArray(detailRecord.doctorConclusion.conclusionTagsJson).length" class="chip-row">
+              <span v-for="item in parseJsonArray(detailRecord.doctorConclusion.conclusionTagsJson)" :key="item">{{ item }}</span>
+            </div>
+          </div>
+
           <div v-if="detailRecord.triageSession" class="feedback-panel">
             <div class="doctor-recommend-head">
               <strong>导诊反馈</strong>
@@ -719,6 +742,28 @@ function statusLabel(value) {
 
 function doctorHandleStatusLabel(value) {
   return value === 'completed' ? '处理完成' : '处理中'
+}
+
+function conditionLevelLabel(value) {
+  return {
+    low: '轻度',
+    medium: '中度',
+    high: '较高风险',
+    critical: '危急'
+  }[value] || '未填写'
+}
+
+function dispositionLabel(value) {
+  return {
+    observe: '继续观察',
+    online_followup: '线上随访',
+    offline_visit: '线下就医',
+    emergency: '立即急诊'
+  }[value] || '未填写'
+}
+
+function aiConsistencyLabel(value) {
+  return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断'
 }
 
 function triageActionLabel(value) {

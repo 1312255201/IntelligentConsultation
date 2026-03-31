@@ -10,6 +10,7 @@ import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
 import cn.gugufish.service.ConsultationRecordAdminService;
+import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageResultQueryService;
@@ -43,6 +44,9 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
 
     @Resource
     ConsultationDoctorHandleQueryService consultationDoctorHandleQueryService;
+
+    @Resource
+    ConsultationDoctorConclusionQueryService consultationDoctorConclusionQueryService;
 
     @Override
     public List<AdminConsultationRecordVO> listRecords() {
@@ -80,6 +84,7 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
             vo.setAnswers(answers);
             vo.setRuleHits(ruleHits);
             vo.setDoctorHandle(consultationDoctorHandleQueryService.detailByConsultationId(id));
+            vo.setDoctorConclusion(consultationDoctorConclusionQueryService.detailByConsultationId(id));
             vo.setTriageSession(triageSessionQueryService.detailByConsultationId(id));
             vo.setTriageResult(triageResultQueryService.detailByConsultationId(id));
             vo.setTriageFeedback(triageFeedbackQueryService.detailByConsultationId(id));

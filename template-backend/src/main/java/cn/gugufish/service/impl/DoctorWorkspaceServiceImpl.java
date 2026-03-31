@@ -1,5 +1,7 @@
 package cn.gugufish.service.impl;
 
+import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
+import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
 import cn.gugufish.entity.dto.ConsultationDoctorHandle;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
@@ -8,12 +10,15 @@ import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.DoctorSchedule;
 import cn.gugufish.entity.dto.DoctorServiceTag;
 import cn.gugufish.entity.dto.TriageRuleHitLog;
+import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
 import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
 import cn.gugufish.entity.vo.response.TriageRuleHitLogVO;
+import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
+import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
 import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
 import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
@@ -22,11 +27,14 @@ import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.DoctorScheduleMapper;
 import cn.gugufish.mapper.DoctorServiceTagMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
+import cn.gugufish.service.ConsultationDoctorAssignmentQueryService;
+import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
 import cn.gugufish.service.DoctorWorkspaceService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -35,7 +43,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
@@ -56,7 +67,13 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
     ConsultationRecordMapper consultationRecordMapper;
 
     @Resource
+    ConsultationDoctorAssignmentMapper consultationDoctorAssignmentMapper;
+
+    @Resource
     ConsultationDoctorHandleMapper consultationDoctorHandleMapper;
+
+    @Resource
+    ConsultationDoctorConclusionMapper consultationDoctorConclusionMapper;
 
     @Resource
     ConsultationRecordAnswerMapper consultationRecordAnswerMapper;
@@ -74,7 +91,13 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
     TriageFeedbackQueryService triageFeedbackQueryService;
 
     @Resource
+    ConsultationDoctorAssignmentQueryService consultationDoctorAssignmentQueryService;
+
+    @Resource
     ConsultationDoctorHandleQueryService consultationDoctorHandleQueryService;
+
+    @Resource
+    ConsultationDoctorConclusionQueryService consultationDoctorConclusionQueryService;
 
     @Override
     public DoctorWorkbenchVO workbench(int accountId) {
@@ -146,12 +169,25 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         Doctor doctor = currentDoctor(accountId);
         if (doctor == null || doctor.getDepartmentId() == null) return List.of();
 
-        return consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
-                        .eq("department_id", doctor.getDepartmentId())
-                        .orderByDesc("create_time")
-                        .orderByDesc("id"))
-                .stream()
-                .map(item -> item.asViewObject(AdminConsultationRecordVO.class))
+        List<ConsultationRecord> records = consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
+                .eq("department_id", doctor.getDepartmentId())
+                .orderByDesc("create_time")
+                .orderByDesc("id"));
+        if (records.isEmpty()) return List.of();
+
+        List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
+        Map<Integer, ConsultationDoctorAssignment> assignmentMap = new HashMap<>();
+        consultationDoctorAssignmentMapper.selectList(Wrappers.<ConsultationDoctorAssignment>query()
+                        .in("consultation_id", consultationIds))
+                .forEach(item -> assignmentMap.put(item.getConsultationId(), item));
+
+        return records.stream()
+                .map(item -> item.asViewObject(AdminConsultationRecordVO.class, vo -> {
+                    ConsultationDoctorAssignment assignment = assignmentMap.get(item.getId());
+                    if (assignment != null) {
+                        vo.setDoctorAssignment(assignment.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorAssignmentVO.class));
+                    }
+                }))
                 .toList();
     }
 
@@ -183,7 +219,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         return record.asViewObject(AdminConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
             vo.setRuleHits(ruleHits);
+            vo.setDoctorAssignment(consultationDoctorAssignmentQueryService.detailByConsultationId(recordId));
             vo.setDoctorHandle(consultationDoctorHandleQueryService.detailByConsultationId(recordId));
+            vo.setDoctorConclusion(consultationDoctorConclusionQueryService.detailByConsultationId(recordId));
             vo.setTriageSession(triageSessionQueryService.detailByConsultationId(recordId));
             vo.setTriageResult(triageResultQueryService.detailByConsultationId(recordId));
             vo.setTriageFeedback(triageFeedbackQueryService.detailByConsultationId(recordId));
@@ -192,15 +230,67 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
     @Override
     @Transactional
-    public String submitConsultationHandle(int accountId, DoctorConsultationHandleSubmitVO vo) {
-        Doctor doctor = currentDoctor(accountId);
-        if (doctor == null) return "当前 doctor 账号尚未绑定医生档案";
-        if (doctor.getStatus() == null || doctor.getStatus() != 1) return "当前医生档案已停用，暂无法提交处理结果";
-        if (doctor.getDepartmentId() == null) return "当前医生档案未配置科室，暂无法处理问诊";
+    public String claimConsultation(int accountId, DoctorConsultationAssignSubmitVO vo) {
+        Doctor doctor = validDoctor(accountId);
+        if (doctor == null) return "当前 doctor 账号尚未绑定有效医生档案";
 
         ConsultationRecord record = consultationRecordMapper.selectById(vo.getConsultationId());
         if (record == null) return "问诊记录不存在";
-        if (record.getDepartmentId() == null || !doctor.getDepartmentId().equals(record.getDepartmentId())) {
+        if (!doctor.getDepartmentId().equals(record.getDepartmentId())) return "当前问诊记录不属于你所在科室";
+        if ("completed".equals(record.getStatus())) return "已完成的问诊单不能再次认领";
+
+        ConsultationDoctorHandle handle = findHandle(vo.getConsultationId());
+        if (handle != null && handle.getDoctorId() != null && !handle.getDoctorId().equals(doctor.getId())) {
+            return "该问诊单已由医生 " + handle.getDoctorName() + " 进入处理流程";
+        }
+
+        String departmentName = resolveDepartmentName(doctor, record);
+        return ensureClaimed(vo.getConsultationId(), doctor, departmentName, new Date(), false);
+    }
+
+    @Override
+    @Transactional
+    public String releaseConsultation(int accountId, DoctorConsultationAssignSubmitVO vo) {
+        Doctor doctor = validDoctor(accountId);
+        if (doctor == null) return "当前 doctor 账号尚未绑定有效医生档案";
+
+        ConsultationRecord record = consultationRecordMapper.selectById(vo.getConsultationId());
+        if (record == null) return "问诊记录不存在";
+        if (!doctor.getDepartmentId().equals(record.getDepartmentId())) return "当前问诊记录不属于你所在科室";
+        if ("completed".equals(record.getStatus())) return "已完成的问诊单不能释放";
+
+        ConsultationDoctorAssignment assignment = findAssignment(vo.getConsultationId());
+        if (assignment == null || !"claimed".equals(assignment.getStatus())) {
+            return "当前问诊单尚未被认领";
+        }
+        if (!doctor.getId().equals(assignment.getDoctorId())) {
+            return "只能释放自己认领的问诊单";
+        }
+
+        ConsultationDoctorHandle handle = findHandle(vo.getConsultationId());
+        if (handle != null && ("processing".equals(handle.getStatus()) || "completed".equals(handle.getStatus()))) {
+            return "已进入处理流程的问诊单不能释放";
+        }
+
+        Date now = new Date();
+        assignment.setStatus("released");
+        assignment.setReleaseTime(now);
+        assignment.setUpdateTime(now);
+        if (consultationDoctorAssignmentMapper.updateById(assignment) <= 0) {
+            return "问诊单释放失败";
+        }
+        return null;
+    }
+
+    @Override
+    @Transactional
+    public String submitConsultationHandle(int accountId, DoctorConsultationHandleSubmitVO vo) {
+        Doctor doctor = validDoctor(accountId);
+        if (doctor == null) return "当前 doctor 账号尚未绑定有效医生档案";
+
+        ConsultationRecord record = consultationRecordMapper.selectById(vo.getConsultationId());
+        if (record == null) return "问诊记录不存在";
+        if (!doctor.getDepartmentId().equals(record.getDepartmentId())) {
             return "当前问诊记录不属于你所在科室，无法提交处理结果";
         }
 
@@ -210,22 +300,45 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         String followUpPlan = trimToNull(vo.getFollowUpPlan());
         String internalRemark = trimToNull(vo.getInternalRemark());
 
+        String conditionLevel = trimToNull(vo.getConditionLevel());
+        String disposition = trimToNull(vo.getDisposition());
+        String diagnosisDirection = trimToNull(vo.getDiagnosisDirection());
+        List<String> conclusionTags = normalizeConclusionTags(vo.getConclusionTags());
+        Integer needFollowUp = vo.getNeedFollowUp() == null ? 0 : vo.getNeedFollowUp();
+        Integer followUpWithinDays = vo.getFollowUpWithinDays();
+        Integer isConsistentWithAi = vo.getIsConsistentWithAi();
+        String patientInstruction = trimToNull(vo.getPatientInstruction());
+
+        if (needFollowUp != 1) {
+            followUpWithinDays = null;
+        }
+
         if (summary == null) return "请填写医生判断摘要";
         if ("completed".equals(status) && medicalAdvice == null) return "完成处理时请填写处理建议";
+        if ("completed".equals(status) && conditionLevel == null) return "完成处理时请填写病情等级";
+        if ("completed".equals(status) && disposition == null) return "完成处理时请填写处理去向";
+        if ("completed".equals(status) && isConsistentWithAi == null) return "完成处理时请填写是否与 AI 建议一致";
+        if ("completed".equals(status) && needFollowUp == 1 && followUpWithinDays == null) {
+            return "需要随访时请填写随访时效";
+        }
 
-        ConsultationDoctorHandle handle = consultationDoctorHandleMapper.selectOne(Wrappers.<ConsultationDoctorHandle>query()
-                .eq("consultation_id", vo.getConsultationId())
-                .last("limit 1"));
+        ConsultationDoctorAssignment assignment = findAssignment(vo.getConsultationId());
+        if (assignment != null && "claimed".equals(assignment.getStatus()) && !doctor.getId().equals(assignment.getDoctorId())) {
+            return "该问诊单已由医生 " + assignment.getDoctorName() + " 认领";
+        }
+
+        ConsultationDoctorHandle handle = findHandle(vo.getConsultationId());
         if (handle != null && handle.getDoctorId() != null && !handle.getDoctorId().equals(doctor.getId())) {
-            return "该问诊单已由医生 " + handle.getDoctorName() + " 接手处理";
+            return "该问诊单已由医生 " + handle.getDoctorName() + " 进入处理流程";
         }
         if (handle != null && "completed".equals(handle.getStatus()) && "processing".equals(status)) {
             return "已完成的问诊单不能回退到处理中";
         }
 
         Date now = new Date();
-        Department department = departmentMapper.selectById(doctor.getDepartmentId());
-        String departmentName = department == null ? record.getDepartmentName() : department.getName();
+        String departmentName = resolveDepartmentName(doctor, record);
+        String claimMessage = ensureClaimed(vo.getConsultationId(), doctor, departmentName, now, true);
+        if (claimMessage != null) return claimMessage;
 
         if (handle == null) {
             handle = new ConsultationDoctorHandle(
@@ -259,14 +372,17 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             handle.setFollowUpPlan(followUpPlan);
             handle.setInternalRemark(internalRemark);
             if (handle.getReceiveTime() == null) handle.setReceiveTime(now);
-            if ("completed".equals(status)) {
-                handle.setCompleteTime(now);
-            }
+            if ("completed".equals(status)) handle.setCompleteTime(now);
             handle.setUpdateTime(now);
             if (consultationDoctorHandleMapper.updateById(handle) <= 0) {
                 return "医生处理结果更新失败";
             }
         }
+
+        String conclusionMessage = saveDoctorConclusion(vo.getConsultationId(), doctor, departmentName, status,
+                conditionLevel, disposition, diagnosisDirection, conclusionTags, needFollowUp,
+                followUpWithinDays, isConsistentWithAi, patientInstruction, now);
+        if (conclusionMessage != null) return conclusionMessage;
 
         record.setStatus(status);
         record.setUpdateTime(now);
@@ -292,6 +408,164 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 .toList();
     }
 
+    private String saveDoctorConclusion(int consultationId,
+                                        Doctor doctor,
+                                        String departmentName,
+                                        String status,
+                                        String conditionLevel,
+                                        String disposition,
+                                        String diagnosisDirection,
+                                        List<String> conclusionTags,
+                                        Integer needFollowUp,
+                                        Integer followUpWithinDays,
+                                        Integer isConsistentWithAi,
+                                        String patientInstruction,
+                                        Date now) {
+        ConsultationDoctorConclusion conclusion = consultationDoctorConclusionMapper.selectOne(Wrappers.<ConsultationDoctorConclusion>query()
+                .eq("consultation_id", consultationId)
+                .last("limit 1"));
+
+        boolean shouldSave = conclusion != null
+                || "completed".equals(status)
+                || hasAnyConclusionData(conditionLevel, disposition, diagnosisDirection, conclusionTags,
+                needFollowUp, followUpWithinDays, isConsistentWithAi, patientInstruction);
+
+        if (!shouldSave) return null;
+
+        String tagsJson = conclusionTags.isEmpty() ? null : JSON.toJSONString(conclusionTags);
+        if (conclusion == null) {
+            conclusion = new ConsultationDoctorConclusion(
+                    null,
+                    consultationId,
+                    doctor.getId(),
+                    doctor.getName(),
+                    doctor.getDepartmentId(),
+                    departmentName,
+                    conditionLevel,
+                    disposition,
+                    diagnosisDirection,
+                    tagsJson,
+                    needFollowUp,
+                    followUpWithinDays,
+                    isConsistentWithAi,
+                    patientInstruction,
+                    now,
+                    now
+            );
+            if (consultationDoctorConclusionMapper.insert(conclusion) <= 0) {
+                return "医生结构化结论保存失败";
+            }
+        } else {
+            conclusion.setDoctorId(doctor.getId());
+            conclusion.setDoctorName(doctor.getName());
+            conclusion.setDepartmentId(doctor.getDepartmentId());
+            conclusion.setDepartmentName(departmentName);
+            conclusion.setConditionLevel(conditionLevel);
+            conclusion.setDisposition(disposition);
+            conclusion.setDiagnosisDirection(diagnosisDirection);
+            conclusion.setConclusionTagsJson(tagsJson);
+            conclusion.setNeedFollowUp(needFollowUp);
+            conclusion.setFollowUpWithinDays(followUpWithinDays);
+            conclusion.setIsConsistentWithAi(isConsistentWithAi);
+            conclusion.setPatientInstruction(patientInstruction);
+            conclusion.setUpdateTime(now);
+            if (consultationDoctorConclusionMapper.updateById(conclusion) <= 0) {
+                return "医生结构化结论更新失败";
+            }
+        }
+        return null;
+    }
+
+    private String ensureClaimed(int consultationId,
+                                 Doctor doctor,
+                                 String departmentName,
+                                 Date now,
+                                 boolean silentWhenOwnedBySelf) {
+        ConsultationDoctorAssignment assignment = findAssignment(consultationId);
+        if (assignment == null) {
+            assignment = new ConsultationDoctorAssignment(
+                    null,
+                    consultationId,
+                    doctor.getId(),
+                    doctor.getName(),
+                    doctor.getDepartmentId(),
+                    departmentName,
+                    "claimed",
+                    now,
+                    null,
+                    now,
+                    now
+            );
+            if (consultationDoctorAssignmentMapper.insert(assignment) <= 0) {
+                return "问诊认领失败";
+            }
+            return null;
+        }
+
+        if ("claimed".equals(assignment.getStatus()) && doctor.getId().equals(assignment.getDoctorId())) {
+            return silentWhenOwnedBySelf ? null : "当前问诊单已由你认领";
+        }
+        if ("claimed".equals(assignment.getStatus()) && !doctor.getId().equals(assignment.getDoctorId())) {
+            return "当前问诊单已由医生 " + assignment.getDoctorName() + " 认领";
+        }
+
+        assignment.setDoctorId(doctor.getId());
+        assignment.setDoctorName(doctor.getName());
+        assignment.setDepartmentId(doctor.getDepartmentId());
+        assignment.setDepartmentName(departmentName);
+        assignment.setStatus("claimed");
+        assignment.setClaimTime(now);
+        assignment.setReleaseTime(null);
+        assignment.setUpdateTime(now);
+        if (consultationDoctorAssignmentMapper.updateById(assignment) <= 0) {
+            return "问诊认领失败";
+        }
+        return null;
+    }
+
+    private Doctor validDoctor(int accountId) {
+        Doctor doctor = currentDoctor(accountId);
+        if (doctor == null) return null;
+        if (doctor.getStatus() == null || doctor.getStatus() != 1) return null;
+        if (doctor.getDepartmentId() == null) return null;
+        return doctor;
+    }
+
+    private ConsultationDoctorAssignment findAssignment(int consultationId) {
+        return consultationDoctorAssignmentMapper.selectOne(Wrappers.<ConsultationDoctorAssignment>query()
+                .eq("consultation_id", consultationId)
+                .last("limit 1"));
+    }
+
+    private ConsultationDoctorHandle findHandle(int consultationId) {
+        return consultationDoctorHandleMapper.selectOne(Wrappers.<ConsultationDoctorHandle>query()
+                .eq("consultation_id", consultationId)
+                .last("limit 1"));
+    }
+
+    private String resolveDepartmentName(Doctor doctor, ConsultationRecord record) {
+        Department department = departmentMapper.selectById(doctor.getDepartmentId());
+        return department == null ? record.getDepartmentName() : department.getName();
+    }
+
+    private boolean hasAnyConclusionData(String conditionLevel,
+                                         String disposition,
+                                         String diagnosisDirection,
+                                         List<String> conclusionTags,
+                                         Integer needFollowUp,
+                                         Integer followUpWithinDays,
+                                         Integer isConsistentWithAi,
+                                         String patientInstruction) {
+        return conditionLevel != null
+                || disposition != null
+                || diagnosisDirection != null
+                || (conclusionTags != null && !conclusionTags.isEmpty())
+                || (needFollowUp != null && needFollowUp == 1)
+                || followUpWithinDays != null
+                || isConsistentWithAi != null
+                || patientInstruction != null;
+    }
+
     private Doctor currentDoctor(int accountId) {
         return doctorMapper.selectOne(Wrappers.<Doctor>query()
                 .eq("account_id", accountId)
@@ -309,6 +583,16 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
     private boolean isSameDay(Date date, LocalDate day) {
         if (date == null) return false;
         return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate().equals(day);
+    }
+
+    private List<String> normalizeConclusionTags(List<String> source) {
+        if (source == null || source.isEmpty()) return List.of();
+        return source.stream()
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(8)
+                .toList();
     }
 
     private String trimToNull(String value) {

@@ -34,6 +34,7 @@ public class ConsultationRecordVO {
     List<ConsultationRecordAnswerVO> answers;
     List<ConsultationRecommendDoctorVO> recommendedDoctors;
     ConsultationDoctorHandleVO doctorHandle;
+    ConsultationDoctorConclusionVO doctorConclusion;
     TriageSessionVO triageSession;
     TriageResultVO triageResult;
     TriageFeedbackVO triageFeedback;

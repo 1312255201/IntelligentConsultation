@@ -23,7 +23,7 @@
       <div class="panel-head">
         <div>
           <h3>科室问诊列表</h3>
-          <p>当前按医生所属科室展示问诊记录，医生可以查看 AI 分诊结果并录入处理意见。</p>
+          <p>当前按医生所属科室展示问诊记录，医生可以查看 AI 分诊结果、录入处理意见，并沉淀结构化结论。</p>
         </div>
         <div class="toolbar">
           <el-input
@@ -75,7 +75,7 @@
     <el-drawer
       v-model="detailVisible"
       title="问诊详情"
-      size="66%"
+      size="68%"
       destroy-on-close
     >
       <div v-loading="detailLoading" class="detail-body">
@@ -191,6 +191,86 @@
                 />
               </el-form-item>
             </el-form>
+          </section>
+
+          <section class="detail-card">
+            <div class="section-head">
+              <div>
+                <h3>结构化结论</h3>
+                <p>这部分会作为后续 AI 对比分析、统计复盘和知识沉淀的标准化数据。</p>
+              </div>
+              <div v-if="detailRecord.doctorConclusion" class="chip-row">
+                <span>{{ conditionLevelLabel(detailRecord.doctorConclusion.conditionLevel) }}</span>
+                <span>{{ dispositionLabel(detailRecord.doctorConclusion.disposition) }}</span>
+                <span>{{ aiConsistencyLabel(detailRecord.doctorConclusion.isConsistentWithAi) }}</span>
+              </div>
+            </div>
+
+            <el-form label-position="top" class="handle-form">
+              <div class="conclusion-grid">
+                <el-form-item label="病情等级">
+                  <el-select v-model="conclusionForm.conditionLevel" clearable placeholder="请选择病情等级">
+                    <el-option v-for="item in conditionLevelOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="处理去向">
+                  <el-select v-model="conclusionForm.disposition" clearable placeholder="请选择处理去向">
+                    <el-option v-for="item in dispositionOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="是否与 AI 建议一致">
+                  <el-select v-model="conclusionForm.isConsistentWithAi" clearable placeholder="请选择">
+                    <el-option label="一致" :value="1" />
+                    <el-option label="不一致" :value="0" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="是否需要随访">
+                  <el-switch
+                    v-model="conclusionForm.needFollowUp"
+                    :active-value="1"
+                    :inactive-value="0"
+                    inline-prompt
+                    active-text="需要"
+                    inactive-text="不需要"
+                  />
+                </el-form-item>
+                <el-form-item v-if="conclusionForm.needFollowUp === 1" label="建议随访时效（天）">
+                  <el-input-number v-model="conclusionForm.followUpWithinDays" :min="1" :max="365" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="诊断方向">
+                  <el-input
+                    v-model="conclusionForm.diagnosisDirection"
+                    maxlength="100"
+                    show-word-limit
+                    placeholder="例如：上呼吸道感染倾向 / 过敏性皮炎倾向"
+                  />
+                </el-form-item>
+              </div>
+
+              <el-form-item label="结论标签">
+                <el-select
+                  v-model="conclusionForm.conclusionTags"
+                  multiple
+                  collapse-tags
+                  collapse-tags-tooltip
+                  filterable
+                  placeholder="选择一个或多个结论标签"
+                >
+                  <el-option v-for="item in conclusionTagOptions" :key="item" :label="item" :value="item" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="患者指导要点">
+                <el-input
+                  v-model="conclusionForm.patientInstruction"
+                  type="textarea"
+                  :rows="3"
+                  maxlength="500"
+                  show-word-limit
+                  placeholder="例如：如出现持续高热、呼吸困难或精神状态变差，请立即线下就医。"
+                />
+              </el-form-item>
+            </el-form>
 
             <div class="handle-actions">
               <el-button
@@ -291,6 +371,33 @@ import { get, post, resolveImagePath } from '@/net'
 const route = useRoute()
 const router = useRouter()
 
+const conditionLevelOptions = [
+  { label: '轻度', value: 'low' },
+  { label: '中度', value: 'medium' },
+  { label: '较高风险', value: 'high' },
+  { label: '危急', value: 'critical' }
+]
+
+const dispositionOptions = [
+  { label: '继续观察', value: 'observe' },
+  { label: '线上随访', value: 'online_followup' },
+  { label: '线下就医', value: 'offline_visit' },
+  { label: '立即急诊', value: 'emergency' }
+]
+
+const conclusionTagOptions = [
+  '适合居家观察',
+  '建议线下检查',
+  '建议药物评估',
+  '需要复诊随访',
+  '过敏风险',
+  '发热监测',
+  '皮肤护理',
+  '慢病管理',
+  '儿童重点观察',
+  '女性健康随访'
+]
+
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
@@ -304,6 +411,16 @@ const handleForm = reactive({
   medicalAdvice: '',
   followUpPlan: '',
   internalRemark: ''
+})
+const conclusionForm = reactive({
+  conditionLevel: '',
+  disposition: '',
+  diagnosisDirection: '',
+  conclusionTags: [],
+  needFollowUp: 0,
+  followUpWithinDays: null,
+  isConsistentWithAi: null,
+  patientInstruction: ''
 })
 
 const filteredRecords = computed(() => {
@@ -324,11 +441,7 @@ const todayCount = computed(() => {
 
 const riskCount = computed(() => records.value.filter(item => ['emergency', 'offline'].includes(item.triageActionType)).length)
 const handledCount = computed(() => records.value.filter(item => ['processing', 'completed'].includes(item.status)).length)
-
-const doctorCandidates = computed(() => {
-  const source = detailRecord.value?.triageResult?.doctorCandidatesJson
-  return parseDoctorCandidates(source)
-})
+const doctorCandidates = computed(() => parseDoctorCandidates(detailRecord.value?.triageResult?.doctorCandidatesJson))
 
 function loadRecords(callback) {
   loading.value = true
@@ -357,7 +470,7 @@ function openDetail(id) {
   detailVisible.value = true
   get(`/api/doctor/consultation/detail?id=${id}`, (data) => {
     detailRecord.value = data || null
-    syncHandleForm()
+    syncForms()
     detailLoading.value = false
     if (Number(route.query.id || 0) !== id) {
       router.replace({
@@ -372,12 +485,22 @@ function openDetail(id) {
   })
 }
 
-function syncHandleForm() {
+function syncForms() {
   const handle = detailRecord.value?.doctorHandle
   handleForm.summary = handle?.summary || ''
   handleForm.medicalAdvice = handle?.medicalAdvice || ''
   handleForm.followUpPlan = handle?.followUpPlan || ''
   handleForm.internalRemark = handle?.internalRemark || ''
+
+  const conclusion = detailRecord.value?.doctorConclusion
+  conclusionForm.conditionLevel = conclusion?.conditionLevel || ''
+  conclusionForm.disposition = conclusion?.disposition || ''
+  conclusionForm.diagnosisDirection = conclusion?.diagnosisDirection || ''
+  conclusionForm.conclusionTags = parseJsonArray(conclusion?.conclusionTagsJson).filter(Boolean)
+  conclusionForm.needFollowUp = conclusion?.needFollowUp === 1 ? 1 : 0
+  conclusionForm.followUpWithinDays = conclusion?.followUpWithinDays || null
+  conclusionForm.isConsistentWithAi = conclusion?.isConsistentWithAi ?? null
+  conclusionForm.patientInstruction = conclusion?.patientInstruction || ''
 }
 
 function submitHandle(status) {
@@ -390,6 +513,22 @@ function submitHandle(status) {
     ElMessage.warning('完成处理时请填写处理建议')
     return
   }
+  if (status === 'completed' && !conclusionForm.conditionLevel) {
+    ElMessage.warning('完成处理时请填写病情等级')
+    return
+  }
+  if (status === 'completed' && !conclusionForm.disposition) {
+    ElMessage.warning('完成处理时请填写处理去向')
+    return
+  }
+  if (status === 'completed' && conclusionForm.isConsistentWithAi === null) {
+    ElMessage.warning('完成处理时请填写是否与 AI 建议一致')
+    return
+  }
+  if (status === 'completed' && conclusionForm.needFollowUp === 1 && !conclusionForm.followUpWithinDays) {
+    ElMessage.warning('需要随访时请填写建议随访时效')
+    return
+  }
 
   handleSubmitting.value = true
   submittingStatus.value = status
@@ -399,11 +538,19 @@ function submitHandle(status) {
     summary: `${handleForm.summary || ''}`.trim(),
     medicalAdvice: `${handleForm.medicalAdvice || ''}`.trim(),
     followUpPlan: `${handleForm.followUpPlan || ''}`.trim(),
-    internalRemark: `${handleForm.internalRemark || ''}`.trim()
+    internalRemark: `${handleForm.internalRemark || ''}`.trim(),
+    conditionLevel: conclusionForm.conditionLevel || null,
+    disposition: conclusionForm.disposition || null,
+    diagnosisDirection: `${conclusionForm.diagnosisDirection || ''}`.trim(),
+    conclusionTags: conclusionForm.conclusionTags || [],
+    needFollowUp: conclusionForm.needFollowUp,
+    followUpWithinDays: conclusionForm.needFollowUp === 1 ? conclusionForm.followUpWithinDays : null,
+    isConsistentWithAi: conclusionForm.isConsistentWithAi,
+    patientInstruction: `${conclusionForm.patientInstruction || ''}`.trim()
   }, () => {
     handleSubmitting.value = false
     submittingStatus.value = ''
-    ElMessage.success(status === 'completed' ? '医生处理结果已完成保存' : '已标记为处理中')
+    ElMessage.success(status === 'completed' ? '医生处理结果和结构化结论已完成保存' : '已标记为处理中')
     loadRecords(() => openDetail(detailRecord.value.id))
   }, (message) => {
     handleSubmitting.value = false
@@ -458,6 +605,28 @@ function triageActionLabel(value) {
   return '继续关注'
 }
 
+function conditionLevelLabel(value) {
+  return {
+    low: '轻度',
+    medium: '中度',
+    high: '较高风险',
+    critical: '危急'
+  }[value] || '未填写'
+}
+
+function dispositionLabel(value) {
+  return {
+    observe: '继续观察',
+    online_followup: '线上随访',
+    offline_visit: '线下就医',
+    emergency: '立即急诊'
+  }[value] || '未填写'
+}
+
+function aiConsistencyLabel(value) {
+  return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断'
+}
+
 function formatDate(value) {
   if (!value) return '-'
   return new Intl.DateTimeFormat('zh-CN', {
@@ -472,10 +641,16 @@ function formatDate(value) {
 watch(detailVisible, (value) => {
   if (!value) {
     detailRecord.value = null
-    syncHandleForm()
+    syncForms()
     if (route.query.id) {
       router.replace({ path: '/doctor/consultation' })
     }
+  }
+})
+
+watch(() => conclusionForm.needFollowUp, (value) => {
+  if (value !== 1) {
+    conclusionForm.followUpWithinDays = null
   }
 })
 
@@ -672,6 +847,12 @@ onMounted(() => loadRecords())
   margin-top: 8px;
 }
 
+.conclusion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
 .handle-actions {
   display: flex;
   justify-content: flex-end;
@@ -680,14 +861,16 @@ onMounted(() => loadRecords())
 
 @media (max-width: 1100px) {
   .stat-grid,
-  .handle-summary {
+  .handle-summary,
+  .conclusion-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   .stat-grid,
-  .handle-summary {
+  .handle-summary,
+  .conclusion-grid {
     grid-template-columns: 1fr;
   }
 

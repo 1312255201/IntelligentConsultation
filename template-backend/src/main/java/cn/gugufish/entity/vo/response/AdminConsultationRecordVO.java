@@ -34,7 +34,9 @@ public class AdminConsultationRecordVO {
     Date updateTime;
     List<ConsultationRecordAnswerVO> answers;
     List<TriageRuleHitLogVO> ruleHits;
+    ConsultationDoctorAssignmentVO doctorAssignment;
     ConsultationDoctorHandleVO doctorHandle;
+    ConsultationDoctorConclusionVO doctorConclusion;
     TriageSessionVO triageSession;
     TriageResultVO triageResult;
     TriageFeedbackVO triageFeedback;

@@ -139,6 +139,29 @@
             </div>
           </section>
 
+          <section v-if="detailRecord.doctorConclusion" class="detail-section">
+            <div class="section-head">
+              <h3>结构化结论</h3>
+              <span>查看医生沉淀的标准化结论，用于后续 AI 对比分析和统计复盘。</span>
+            </div>
+            <div class="session-meta">
+              <span>{{ conditionLevelLabel(detailRecord.doctorConclusion.conditionLevel) }}</span>
+              <span>{{ dispositionLabel(detailRecord.doctorConclusion.disposition) }}</span>
+              <span>{{ aiConsistencyLabel(detailRecord.doctorConclusion.isConsistentWithAi) }}</span>
+              <span>{{ detailRecord.doctorConclusion.needFollowUp === 1 ? '需要随访' : '无需随访' }}</span>
+              <span v-if="detailRecord.doctorConclusion.followUpWithinDays">
+                {{ detailRecord.doctorConclusion.followUpWithinDays }} 天内随访
+              </span>
+            </div>
+            <div class="summary-panel">
+              <p><strong>诊断方向：</strong>{{ detailRecord.doctorConclusion.diagnosisDirection || '未填写' }}</p>
+              <p><strong>患者指导：</strong>{{ detailRecord.doctorConclusion.patientInstruction || '暂无患者指导要点' }}</p>
+            </div>
+            <div v-if="parseJsonArray(detailRecord.doctorConclusion.conclusionTagsJson).length" class="chip-row">
+              <span v-for="item in parseJsonArray(detailRecord.doctorConclusion.conclusionTagsJson)" :key="item">{{ item }}</span>
+            </div>
+          </section>
+
           <section v-if="detailRecord.triageResult" class="detail-section">
             <div class="section-head">
               <h3>分诊结果归档</h3>
@@ -346,6 +369,28 @@ function statusLabel(value) {
 
 function handleStatusLabel(value) {
   return value === 'completed' ? '处理完成' : '处理中'
+}
+
+function conditionLevelLabel(value) {
+  return {
+    low: '轻度',
+    medium: '中度',
+    high: '较高风险',
+    critical: '危急'
+  }[value] || '未填写'
+}
+
+function dispositionLabel(value) {
+  return {
+    observe: '继续观察',
+    online_followup: '线上随访',
+    offline_visit: '线下就医',
+    emergency: '立即急诊'
+  }[value] || '未填写'
+}
+
+function aiConsistencyLabel(value) {
+  return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断'
 }
 
 function statusTagType(value) {

@@ -1,6 +1,7 @@
 package cn.gugufish.controller.doctor;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
@@ -26,7 +27,7 @@ import java.util.List;
 @Validated
 @RestController
 @RequestMapping("/api/doctor")
-@Tag(name = "Doctor Workspace", description = "医生工作台概览、问诊处理与排班查询")
+@Tag(name = "Doctor Workspace", description = "医生工作台概览、问诊认领处理与排班查询")
 public class DoctorWorkspaceController {
 
     @Resource
@@ -52,6 +53,22 @@ public class DoctorWorkspaceController {
         return record == null
                 ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
                 : RestBean.success(record);
+    }
+
+    @PostMapping("/consultation/claim")
+    @Operation(summary = "认领问诊单")
+    public RestBean<Void> claimConsultation(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                            @RequestBody @Valid DoctorConsultationAssignSubmitVO vo) {
+        String message = doctorWorkspaceService.claimConsultation(accountId, vo);
+        return message == null ? RestBean.success() : RestBean.failure(400, message);
+    }
+
+    @PostMapping("/consultation/release")
+    @Operation(summary = "释放问诊单")
+    public RestBean<Void> releaseConsultation(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                              @RequestBody @Valid DoctorConsultationAssignSubmitVO vo) {
+        String message = doctorWorkspaceService.releaseConsultation(accountId, vo);
+        return message == null ? RestBean.success() : RestBean.failure(400, message);
     }
 
     @PostMapping("/consultation/handle")
