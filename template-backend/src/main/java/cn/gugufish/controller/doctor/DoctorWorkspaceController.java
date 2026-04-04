@@ -1,12 +1,15 @@
 package cn.gugufish.controller.doctor;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationFollowUpSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
+import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
 import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
+import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.DoctorWorkspaceService;
 import cn.gugufish.utils.Const;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,6 +37,9 @@ public class DoctorWorkspaceController {
     @Resource
     DoctorWorkspaceService doctorWorkspaceService;
 
+    @Resource
+    ConsultationMessageService consultationMessageService;
+
     @GetMapping("/workbench/summary")
     @Operation(summary = "查询医生工作台概览")
     public RestBean<DoctorWorkbenchVO> workbench(@RequestAttribute(Const.ATTR_USER_ID) int accountId) {
@@ -54,6 +60,24 @@ public class DoctorWorkspaceController {
         return record == null
                 ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
                 : RestBean.success(record);
+    }
+
+    @GetMapping("/consultation/message/list")
+    @Operation(summary = "查询问诊沟通消息")
+    public RestBean<List<ConsultationMessageVO>> consultationMessages(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                                      @RequestParam @Positive int recordId) {
+        List<ConsultationMessageVO> messages = consultationMessageService.listDoctorMessages(accountId, recordId);
+        return messages == null
+                ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
+                : RestBean.success(messages);
+    }
+
+    @PostMapping("/consultation/message/send")
+    @Operation(summary = "发送问诊沟通消息")
+    public RestBean<Void> sendConsultationMessage(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                  @RequestBody @Valid ConsultationMessageSendVO vo) {
+        String message = consultationMessageService.sendDoctorMessage(accountId, vo);
+        return message == null ? RestBean.success() : RestBean.failure(400, message);
     }
 
     @PostMapping("/consultation/claim")

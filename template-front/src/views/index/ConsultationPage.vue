@@ -352,6 +352,80 @@
             </div>
           </div>
 
+          <div class="result-panel">
+            <div class="doctor-recommend-head">
+              <strong>医患沟通</strong>
+              <span>可在这里补充病情变化、检查图片和恢复情况，医生接手后会继续查看。</span>
+            </div>
+            <el-alert
+              v-if="messageSendHint"
+              :title="messageSendHint"
+              type="info"
+              :closable="false"
+              class="conversation-alert"
+            />
+            <div v-loading="messageLoading" class="conversation-board">
+              <div v-if="consultationMessages.length" class="conversation-list">
+                <article
+                  v-for="item in consultationMessages"
+                  :key="item.id"
+                  :class="['conversation-card', { mine: isUserMessage(item) }]"
+                >
+                  <div class="conversation-meta">
+                    <strong>{{ messageSenderLabel(item) }}</strong>
+                    <span>{{ formatDate(item.createTime) }}</span>
+                  </div>
+                  <p v-if="item.content" class="conversation-content">{{ item.content }}</p>
+                  <div v-if="messageAttachments(item).length" class="conversation-image-list">
+                    <img
+                      v-for="path in messageAttachments(item)"
+                      :key="path"
+                      :src="resolveImagePath(path)"
+                      alt="消息附件"
+                      class="conversation-image"
+                    />
+                  </div>
+                </article>
+              </div>
+              <el-empty v-else description="当前还没有沟通消息" />
+            </div>
+            <div class="conversation-composer">
+              <el-input
+                v-model="messageDraft.content"
+                type="textarea"
+                :rows="3"
+                maxlength="2000"
+                show-word-limit
+                :disabled="!canSendMessage"
+                placeholder="可补充症状变化、上传检查图片，或向医生说明当前恢复情况。"
+              />
+              <div v-if="messageDraft.attachments.length" class="conversation-attachments">
+                <article v-for="(path, index) in messageDraft.attachments" :key="path" class="conversation-attachment-item">
+                  <img :src="resolveImagePath(path)" alt="待发送附件" class="conversation-image" />
+                  <div class="conversation-attachment-actions">
+                    <span>图片 {{ index + 1 }}</span>
+                    <el-button link type="danger" @click="removeMessageAttachment(index)">移除</el-button>
+                  </div>
+                </article>
+              </div>
+              <div class="conversation-toolbar">
+                <el-upload
+                  :action="uploadAction"
+                  :headers="uploadHeaders"
+                  :show-file-list="false"
+                  accept="image/*"
+                  :before-upload="beforeMessageUpload"
+                  :disabled="!canSendMessage || messageDraft.attachments.length >= 6"
+                  :on-success="handleMessageUploadSuccess"
+                >
+                  <el-button plain :disabled="!canSendMessage || messageDraft.attachments.length >= 6">上传沟通图片</el-button>
+                </el-upload>
+                <span class="conversation-tip">支持文字和图片，单次最多 6 张。</span>
+                <el-button type="primary" :loading="messageSending" :disabled="!canSendMessage" @click="sendConsultationMessage">发送给医生</el-button>
+              </div>
+            </div>
+          </div>
+
           <div v-if="detailRecord.triageResult" class="result-panel">
             <div class="doctor-recommend-head">
               <strong>导诊结果归档</strong>
@@ -580,9 +654,13 @@ const submitting = ref(false)
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailRecord = ref(null)
+const consultationMessages = ref([])
+const messageLoading = ref(false)
+const messageSending = ref(false)
 const feedbackOptions = ref({ departments: [], doctors: [] })
 const feedbackSubmitting = ref(false)
 const formData = reactive({})
+const messageDraft = reactive({ content: '', attachments: [] })
 const feedbackForm = reactive({
   userScore: 5,
   isAdopted: 1,
@@ -606,6 +684,12 @@ const currentHealthSummary = computed(() => buildHealthSummary(currentHistory.va
 const visibleFields = computed(() => {
   const fields = template.value?.fields || []
   return fields.filter(field => isFieldVisible(field))
+})
+const canSendMessage = computed(() => !!detailRecord.value)
+const messageSendHint = computed(() => {
+  if (!detailRecord.value) return ''
+  if (detailRecord.value.doctorHandle?.doctorName) return `当前由医生 ${detailRecord.value.doctorHandle.doctorName} 跟进，可继续补充资料或反馈恢复情况。`
+  return '如需补充症状、检查图片或恢复情况，可在这里留言，医生接诊后会继续查看。'
 })
 const availableFeedbackDoctors = computed(() => {
   const doctors = feedbackOptions.value?.doctors || []
@@ -971,14 +1055,109 @@ function openRecordDetail(row) {
   detailVisible.value = true
   detailLoading.value = true
   detailRecord.value = null
+  consultationMessages.value = []
+  messageLoading.value = false
+  messageSending.value = false
+  resetMessageDraft()
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
     detailRecord.value = data
     applyFeedbackForm(data?.triageFeedback)
+    loadConsultationMessages(row.id)
     detailLoading.value = false
   }, (message) => {
     detailLoading.value = false
     detailVisible.value = false
     ElMessage.warning(message || '问诊记录详情加载失败')
+  })
+}
+
+function loadConsultationMessages(recordId = detailRecord.value?.id) {
+  if (!recordId) return
+  messageLoading.value = true
+  get(`/api/user/consultation/message/list?recordId=${recordId}`, (data) => {
+    consultationMessages.value = data || []
+    messageLoading.value = false
+  }, (message) => {
+    consultationMessages.value = []
+    messageLoading.value = false
+    ElMessage.warning(message || '问诊沟通消息加载失败')
+  })
+}
+
+function resetMessageDraft() {
+  messageDraft.content = ''
+  messageDraft.attachments = []
+}
+
+function messageAttachments(message) {
+  return Array.isArray(message?.attachments) && message.attachments.length
+    ? message.attachments
+    : parseJsonArray(message?.attachmentsJson)
+}
+
+function isUserMessage(message) {
+  return message?.senderType === 'user'
+}
+
+function messageSenderLabel(message) {
+  if (message?.senderType === 'user') return message.senderName || detailRecord.value?.patientName || '患者'
+  const roleName = message?.senderRoleName ? ` · ${message.senderRoleName}` : ''
+  return `${message?.senderName || '医生'}${roleName}`
+}
+
+function beforeMessageUpload(file) {
+  const isImage = `${file.type || ''}`.startsWith('image/')
+  const isLt5M = file.size / 1024 / 1024 <= 5
+  if (!isImage) {
+    ElMessage.error('当前阶段仅支持上传图片资料')
+    return false
+  }
+  if (!isLt5M) {
+    ElMessage.error('上传图片不能超过 5MB')
+    return false
+  }
+  if (messageDraft.attachments.length >= 6) {
+    ElMessage.warning('单次最多上传 6 张图片')
+    return false
+  }
+  return true
+}
+
+function handleMessageUploadSuccess(response) {
+  if (response?.code !== 200) {
+    ElMessage.error(response?.message || '消息图片上传失败')
+    return
+  }
+  if (!response?.data || messageDraft.attachments.includes(response.data) || messageDraft.attachments.length >= 6) return
+  messageDraft.attachments = [...messageDraft.attachments, response.data]
+  ElMessage.success('沟通图片上传成功')
+}
+
+function removeMessageAttachment(index) {
+  messageDraft.attachments.splice(index, 1)
+}
+
+function sendConsultationMessage() {
+  const recordId = detailRecord.value?.id
+  if (!recordId) return
+  const content = `${messageDraft.content || ''}`.trim()
+  if (!content && !messageDraft.attachments.length) {
+    ElMessage.warning('请先输入消息内容或上传图片')
+    return
+  }
+  messageSending.value = true
+  post('/api/user/consultation/message/send', {
+    recordId,
+    content,
+    attachments: messageDraft.attachments
+  }, () => {
+    messageSending.value = false
+    resetMessageDraft()
+    ElMessage.success('消息已发送')
+    loadConsultationMessages(recordId)
+  }, (message) => {
+    messageSending.value = false
+    ElMessage.warning(message || '问诊消息发送失败')
   })
 }
 
@@ -1086,6 +1265,16 @@ function formatDate(value) {
     minute: '2-digit'
   }).format(new Date(value))
 }
+
+watch(detailVisible, (value) => {
+  if (!value) {
+    detailRecord.value = null
+    consultationMessages.value = []
+    messageLoading.value = false
+    messageSending.value = false
+    resetMessageDraft()
+  }
+})
 
 onMounted(() => loadData())
 </script>
@@ -1444,6 +1633,89 @@ onMounted(() => loadData())
   width: 100%;
 }
 
+.conversation-alert {
+  margin-bottom: 14px;
+}
+
+.conversation-board {
+  margin-bottom: 14px;
+}
+
+.conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.conversation-card {
+  max-width: 82%;
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(15, 102, 101, 0.1);
+  background: rgba(15, 102, 101, 0.05);
+}
+
+.conversation-card.mine {
+  align-self: flex-end;
+  background: rgba(15, 102, 101, 0.12);
+}
+
+.conversation-meta,
+.conversation-toolbar,
+.conversation-attachment-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.conversation-meta span,
+.conversation-tip,
+.conversation-attachment-actions span {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.conversation-content {
+  margin: 10px 0 0;
+  line-height: 1.8;
+  color: #41575d;
+  white-space: pre-wrap;
+}
+
+.conversation-image-list,
+.conversation-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.conversation-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conversation-attachment-item {
+  width: 140px;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(15, 102, 101, 0.05);
+}
+
+.conversation-image {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
 .session-meta,
 .session-message-head {
   display: flex;
@@ -1542,7 +1814,10 @@ onMounted(() => loadData())
   .doctor-recommend-head,
   .doctor-top,
   .session-message-head,
-  .feedback-actions {
+  .feedback-actions,
+  .conversation-meta,
+  .conversation-toolbar,
+  .conversation-attachment-actions {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -1550,6 +1825,10 @@ onMounted(() => loadData())
   .panel-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .conversation-card {
+    max-width: 100%;
   }
 }
 </style>
