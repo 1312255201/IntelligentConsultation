@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import { DocumentChecked, House, Service, User, UserFilled } from '@element-plus/icons-vue'
+import { ChatDotRound, DocumentChecked, House, Service, User, UserFilled } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -39,6 +39,12 @@ const menuItems = [
     icon: Service
   },
   {
+    index: '/index/triage',
+    title: 'AI 导诊工作区',
+    description: '集中查看 AI 导诊会话、导诊结果和推荐医生，并继续补充病情。',
+    icon: ChatDotRound
+  },
+  {
     index: '/index/overview',
     title: '系统概览',
     description: '查看当前系统建设进度和基础能力概览。',
@@ -46,5 +52,5 @@ const menuItems = [
   }
 ]
 
-const footerText = '当前阶段已完成基础资料维护、就诊人管理、健康档案、发起问诊入口与头像上传能力。'
+const footerText = '当前阶段已完成基础资料维护、就诊人管理、健康档案、发起问诊入口与 AI 导诊会话基础能力。'
 </script>

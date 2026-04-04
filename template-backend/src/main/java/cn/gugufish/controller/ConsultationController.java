@@ -3,6 +3,7 @@ package cn.gugufish.controller;
 import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
+import cn.gugufish.entity.vo.request.ConsultationTriageMessageSendVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageFeedbackSubmitVO;
 import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
 import cn.gugufish.entity.vo.response.ConsultationEntryCategoryVO;
@@ -11,6 +12,7 @@ import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordVO;
 import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.ConsultationService;
+import cn.gugufish.service.ConsultationTriageChatService;
 import cn.gugufish.utils.Const;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,6 +42,9 @@ public class ConsultationController {
 
     @Resource
     ConsultationMessageService consultationMessageService;
+
+    @Resource
+    ConsultationTriageChatService consultationTriageChatService;
 
     @GetMapping("/category/list")
     @Operation(summary = "查询可发起的问诊分类列表")
@@ -81,6 +86,13 @@ public class ConsultationController {
     public RestBean<Void> sendMessage(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                       @RequestBody @Valid ConsultationMessageSendVO vo) {
         return this.messageHandle(() -> consultationMessageService.sendUserMessage(id, vo));
+    }
+
+    @PostMapping("/triage/message/send")
+    @Operation(summary = "继续与 AI 导诊交互")
+    public RestBean<Void> sendTriageMessage(@RequestAttribute(Const.ATTR_USER_ID) int id,
+                                            @RequestBody @Valid ConsultationTriageMessageSendVO vo) {
+        return this.messageHandle(() -> consultationTriageChatService.sendUserMessage(id, vo));
     }
 
     @PostMapping("/record/create")

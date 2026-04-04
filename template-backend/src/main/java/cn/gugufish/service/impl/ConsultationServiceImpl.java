@@ -57,6 +57,7 @@ import cn.gugufish.service.ConsultationService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
+import cn.gugufish.service.ConsultationAiEnrichmentService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageFeedbackService;
 import cn.gugufish.service.TriageResultQueryService;
@@ -67,6 +68,8 @@ import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
@@ -126,6 +129,7 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationDoctorConclusionQueryService consultationDoctorConclusionQueryService;
     @Resource ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
     @Resource ConsultationDoctorHandleQueryService consultationDoctorHandleQueryService;
+    @Resource ConsultationAiEnrichmentService consultationAiEnrichmentService;
     @Resource TriageFeedbackService triageFeedbackService;
 
     @Override
@@ -353,6 +357,7 @@ public class ConsultationServiceImpl implements ConsultationService {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return resultMessage;
         }
+        triggerAiTriageEnrichment(record.getId());
         return null;
     }
 
@@ -972,6 +977,26 @@ public class ConsultationServiceImpl implements ConsultationService {
                 now
         );
         return triageResultMapper.insert(result) > 0 ? null : "导诊结果保存失败，请稍后重试";
+    }
+
+    private void triggerAiTriageEnrichment(Integer consultationId) {
+        if (consultationId == null) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        consultationAiEnrichmentService.enrichInitialTriage(consultationId);
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+            return;
+        }
+        try {
+            consultationAiEnrichmentService.enrichInitialTriage(consultationId);
+        } catch (Exception ignored) {
+        }
     }
 
     private String buildTriageResultReason(ConsultationRecord record) {

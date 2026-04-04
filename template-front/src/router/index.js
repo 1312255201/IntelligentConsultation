@@ -75,6 +75,11 @@ const router = createRouter({
           component: () => import('@/views/index/ConsultationPage.vue')
         },
         {
+          path: 'triage',
+          name: 'index-triage',
+          component: () => import('@/views/index/ConsultationTriagePage.vue')
+        },
+        {
           path: 'overview',
           name: 'index-overview',
           component: () => import('@/views/index/OverviewPage.vue')

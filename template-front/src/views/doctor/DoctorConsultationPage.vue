@@ -423,6 +423,76 @@
           </section>
 
           <section class="card panel">
+            <div class="head">
+              <div>
+                <h3>AI 导诊上下文</h3>
+                <p>医生接诊前可直接查看 AI 导诊解释、候选医生和完整导诊留痕，减少接手成本。</p>
+              </div>
+              <div v-if="detail.triageSession" class="chips">
+                <span>Session {{ detail.triageSession.sessionNo || '-' }}</span>
+                <span>{{ triageSessionStatusLabel(detail.triageSession.status) }}</span>
+                <span>{{ detail.triageSession.messageCount || 0 }} 条消息</span>
+              </div>
+            </div>
+
+            <template v-if="detail.triageResult">
+              <div class="subcard">
+                <p class="copy"><strong>结果说明：</strong>{{ detail.triageResult.reasonText || '暂无分诊说明' }}</p>
+                <p class="copy"><strong>风险标签：</strong>{{ parseJsonArray(detail.triageResult.riskFlagsJson).join('、') || '暂无风险标签' }}</p>
+                <p class="copy"><strong>置信度：</strong>{{ formatConfidence(detail.triageResult.confidenceScore) }}</p>
+              </div>
+
+              <div v-if="triageDoctorCandidates.length" class="triage-doctor-list">
+                <article v-for="item in triageDoctorCandidates" :key="item.id || item.name" class="subcard triage-doctor-card">
+                  <img v-if="item.photo" :src="resolveImagePath(item.photo)" :alt="item.name" class="triage-doctor-avatar" />
+                  <div v-else class="triage-doctor-avatar triage-doctor-avatar-fallback">{{ (item.name || '医').slice(0, 1) }}</div>
+                  <div class="triage-doctor-copy">
+                    <strong>{{ item.name || '未命名医生' }}</strong>
+                    <span>{{ item.title || '在线医生' }}</span>
+                    <p class="copy">{{ item.expertise || '暂无擅长信息' }}</p>
+                    <small>{{ item.nextScheduleText || '暂无后续排班' }}</small>
+                  </div>
+                </article>
+              </div>
+            </template>
+
+            <div v-if="detail.triageSession?.messages?.length" class="triage-session-list">
+              <article
+                v-for="message in triageSessionMessages"
+                :key="message.id"
+                :class="['triage-session-card', { user: message.roleType === 'user', assistant: message.roleType === 'assistant' }]"
+              >
+                <div class="triage-session-head">
+                  <div>
+                    <strong>{{ message.title }}</strong>
+                    <span>{{ messageTypeLabel(message.messageType) }}</span>
+                  </div>
+                  <el-tag size="small" effect="light">{{ messageRoleLabel(message.roleType) }}</el-tag>
+                </div>
+                <p class="triage-session-content">{{ message.content }}</p>
+                <div v-if="message.insight" class="triage-session-insight">
+                  <div class="triage-session-insight-meta">
+                    <span v-if="message.insight.recommendedVisitType">建议方式：{{ message.insight.recommendedVisitType }}</span>
+                    <span v-if="message.insight.recommendedDepartmentName">建议科室：{{ message.insight.recommendedDepartmentName }}</span>
+                    <span v-if="message.insight.confidenceText">置信度：{{ message.insight.confidenceText }}</span>
+                  </div>
+                  <p v-if="message.insight.doctorRecommendationReason" class="triage-session-insight-copy">
+                    <strong>推荐依据：</strong>{{ message.insight.doctorRecommendationReason }}
+                  </p>
+                  <div v-if="message.insight.recommendedDoctors.length" class="triage-session-insight-tags">
+                    <span v-for="item in message.insight.recommendedDoctors" :key="item">{{ item }}</span>
+                  </div>
+                  <div v-if="message.insight.riskFlags.length" class="triage-session-insight-tags danger">
+                    <span v-for="item in message.insight.riskFlags" :key="item">{{ item }}</span>
+                  </div>
+                </div>
+                <small>{{ formatDate(message.createTime) }}</small>
+              </article>
+            </div>
+            <el-empty v-else description="暂无 AI 导诊留痕" />
+          </section>
+
+          <section class="card panel">
             <h3>规则命中</h3>
             <el-table v-if="detail.ruleHits?.length" :data="detail.ruleHits" border>
               <el-table-column prop="ruleName" label="规则名称" min-width="160" />
@@ -456,6 +526,7 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
+import { resolveTriageMessageInsight } from '@/triage/insight'
 
 const route = useRoute()
 const router = useRouter()
@@ -511,6 +582,11 @@ const canClaimCurrent = computed(() => canClaim(detail.value))
 const canReleaseCurrent = computed(() => canRelease(detail.value))
 const canEdit = computed(() => doctor.bound === 1 && !claimedByOther(detail.value?.doctorAssignment))
 const canSendMessage = computed(() => doctor.bound === 1 && !!detail.value && !claimedByOther(detail.value?.doctorAssignment))
+const triageDoctorCandidates = computed(() => parseDoctorCandidates(detail.value?.triageResult?.doctorCandidatesJson))
+const triageSessionMessages = computed(() => (detail.value?.triageSession?.messages || []).map(message => ({
+  ...message,
+  insight: resolveTriageMessageInsight(message)
+})))
 const canSubmitFollowUp = computed(() => doctor.bound === 1
   && detail.value?.status === 'completed'
   && detail.value?.doctorHandle?.status === 'completed'
@@ -808,16 +884,36 @@ function assignmentTagType(assignment) {
   return assignment.doctorId === doctor.doctorId ? 'success' : 'warning'
 }
 function parseJsonArray(value) { try { const parsed = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed : [] } catch { return [] } }
+function parseDoctorCandidates(value) { return parseJsonArray(value).filter(item => item && typeof item === 'object') }
 function displayAnswer(answer) { return answer.fieldType === 'switch' ? (answer.fieldValue === '1' ? '是' : '否') : (answer.fieldValue || '-') }
 function statusLabel(value) { return ({ submitted: '已提交', triaged: '已分诊', processing: '处理中', completed: '已完成' })[value] || value || '-' }
 function handleStatusLabel(value) { return value === 'completed' ? '处理完成' : '处理中' }
 function statusTagType(value) { return ({ submitted: 'info', triaged: 'primary', processing: 'warning', completed: 'success' })[value] || 'info' }
 function triageActionLabel(value) { return ({ emergency: '立即急诊', offline: '尽快线下就医', followup: '复诊随访', online: '线上继续' })[value] || '继续关注' }
+function triageSessionStatusLabel(value) { return ({ completed: '已完成', in_progress: '进行中', closed: '已关闭' })[value] || value || '-' }
+function messageRoleLabel(value) { return ({ user: '患者', assistant: 'AI 导诊', system: '系统', rule_engine: '规则引擎' })[value] || value || '-' }
+function messageTypeLabel(value) {
+  return ({
+    intake_summary: '问诊摘要',
+    health_summary: '健康摘要',
+    triage_result: '分诊结果',
+    rule_summary: '规则摘要',
+    rule_hit: '命中详情',
+    ai_triage_summary: 'AI 导诊建议',
+    ai_followup_questions: 'AI 建议补充',
+    ai_user_followup: '患者补充',
+    ai_chat_reply: 'AI 导诊回复'
+  })[value] || value || '-'
+}
 function conditionLevelLabel(value) { return ({ low: '轻度', medium: '中度', high: '较高风险', critical: '危急' })[value] || '未填写' }
 function dispositionLabel(value) { return ({ observe: '继续观察', online_followup: '线上随访', offline_visit: '线下就医', emergency: '立即急诊' })[value] || '未填写' }
 function aiConsistencyLabel(value) { return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断' }
 function followUpTypeLabel(value) { return ({ platform: '平台随访', phone: '电话随访', offline: '线下随访', other: '其他方式' })[value] || '其他方式' }
 function patientStatusLabel(value) { return ({ improved: '明显好转', stable: '基本稳定', worsened: '出现加重', other: '其他情况' })[value] || '其他情况' }
+function formatConfidence(value) {
+  const number = Number(value)
+  return Number.isNaN(number) || number <= 0 ? '-' : `${Math.round(number * 100)}%`
+}
 function formatDate(value) {
   if (!value) return '-'
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
@@ -943,6 +1039,128 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   background: rgba(19, 73, 80, 0.05);
 }
 
+.triage-doctor-list,
+.triage-session-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.triage-doctor-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.triage-doctor-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.triage-doctor-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid rgba(17, 70, 77, 0.08);
+  background: rgba(15, 102, 101, 0.08);
+}
+
+.triage-doctor-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f6665;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.triage-doctor-copy {
+  flex: 1;
+}
+
+.triage-doctor-copy strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.triage-doctor-copy span,
+.triage-doctor-copy small {
+  color: var(--app-muted);
+}
+
+.triage-session-card {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(19, 73, 80, 0.1);
+  background: rgba(19, 73, 80, 0.05);
+}
+
+.triage-session-card.user {
+  background: rgba(15, 102, 101, 0.12);
+}
+
+.triage-session-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.triage-session-head strong {
+  display: block;
+}
+
+.triage-session-head span,
+.triage-session-card small {
+  color: var(--app-muted);
+}
+
+.triage-session-content {
+  margin: 12px 0 8px;
+  line-height: 1.8;
+  color: #41575d;
+  white-space: pre-wrap;
+}
+
+.triage-session-insight {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(15, 102, 101, 0.06);
+  border: 1px solid rgba(15, 102, 101, 0.1);
+}
+
+.triage-session-insight-meta,
+.triage-session-insight-tags {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.triage-session-insight-meta span,
+.triage-session-insight-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.1);
+  color: #48656d;
+  font-size: 12px;
+}
+
+.triage-session-insight-copy {
+  margin: 10px 0 0;
+  line-height: 1.7;
+  color: #48656d;
+}
+
+.triage-session-insight-tags {
+  margin-top: 10px;
+}
+
+.triage-session-insight-tags.danger span {
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+}
+
 .subcard strong {
   display: block;
   margin-bottom: 8px;
@@ -1066,14 +1284,16 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 
 @media (max-width: 1100px) {
   .stats,
-  .grid {
+  .grid,
+  .triage-doctor-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   .stats,
-  .grid {
+  .grid,
+  .triage-doctor-list {
     grid-template-columns: 1fr;
   }
 
@@ -1090,6 +1310,10 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 
   .message-card {
     max-width: 100%;
+  }
+
+  .triage-session-head {
+    flex-direction: column;
   }
 }
 </style>

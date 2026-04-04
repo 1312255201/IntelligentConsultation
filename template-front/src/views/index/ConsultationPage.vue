@@ -109,7 +109,7 @@
           <div class="panel-actions">
             <el-button @click="resetForm" :disabled="!template">重置表单</el-button>
             <el-button type="primary" :loading="submitting" :disabled="!template || !selectedPatientId" @click="submitConsultation">
-              提交问诊
+              提交并进入 AI 导诊
             </el-button>
           </div>
         </div>
@@ -118,7 +118,7 @@
 
         <template v-else-if="template">
           <el-alert
-            :title="template.description || '请根据实际情况填写当前问诊资料，后续智能导诊会基于这些信息进行识别和推荐。'"
+            :title="template.description || '请根据实际情况填写当前问诊资料，提交后系统会自动进入 AI 导诊工作区，继续生成建议和追问。'"
             type="info"
             :closable="false"
             class="template-alert"
@@ -277,9 +277,10 @@
             {{ formatDate(row.createTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openRecordDetail(row)">查看详情</el-button>
+            <el-button link type="success" @click="openTriageWorkspace(row.id)">AI 导诊</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -326,8 +327,11 @@
 
           <div v-if="detailRecord.triageSession" class="session-panel">
             <div class="doctor-recommend-head">
-              <strong>导诊留痕</strong>
-              <span>保存本次分诊的摘要、系统结果与规则命中过程</span>
+              <div>
+                <strong>导诊留痕</strong>
+                <span>保存本次分诊的摘要、系统结果与规则命中过程</span>
+              </div>
+              <el-button text type="primary" @click="openTriageWorkspace(detailRecord.id)">在独立工作区打开</el-button>
             </div>
             <div class="session-meta">
               <span>Session {{ detailRecord.triageSession.sessionNo }}</span>
@@ -336,7 +340,7 @@
             </div>
             <div class="session-message-list">
               <article
-                v-for="message in detailRecord.triageSession.messages || []"
+                v-for="message in detailTriageMessages"
                 :key="message.id"
                 class="session-message-card"
               >
@@ -348,7 +352,52 @@
                   <el-tag size="small" effect="light">{{ messageRoleLabel(message.roleType) }}</el-tag>
                 </div>
                 <p>{{ message.content }}</p>
+                <div v-if="message.insight" class="session-message-insight">
+                  <div class="session-message-insight-meta">
+                    <span v-if="message.insight.recommendedVisitType">建议方式：{{ message.insight.recommendedVisitType }}</span>
+                    <span v-if="message.insight.recommendedDepartmentName">建议科室：{{ message.insight.recommendedDepartmentName }}</span>
+                    <span v-if="message.insight.confidenceText">置信度：{{ message.insight.confidenceText }}</span>
+                  </div>
+                  <p v-if="message.insight.doctorRecommendationReason" class="session-message-insight-copy">
+                    <strong>推荐依据：</strong>{{ message.insight.doctorRecommendationReason }}
+                  </p>
+                  <div v-if="message.insight.recommendedDoctors.length" class="session-message-insight-tags">
+                    <span v-for="item in message.insight.recommendedDoctors" :key="item">{{ item }}</span>
+                  </div>
+                  <div v-if="message.insight.riskFlags.length" class="session-message-insight-tags danger">
+                    <span v-for="item in message.insight.riskFlags" :key="item">{{ item }}</span>
+                  </div>
+                </div>
               </article>
+            </div>
+            <div class="triage-ai-composer">
+              <div class="session-message-head">
+                <div>
+                  <strong>继续 AI 导诊</strong>
+                  <span>可继续补充症状变化、持续时间、体温或检查结果，AI 会继续追问并更新建议。</span>
+                </div>
+              </div>
+              <el-input
+                v-model="triageAiDraft.content"
+                type="textarea"
+                :rows="3"
+                maxlength="1000"
+                show-word-limit
+                :disabled="!canSendTriageAiMessage"
+                placeholder="例如：今晚开始发热到 38.5 度，咳嗽比白天更频繁，已经持续两小时。"
+              />
+              <div class="triage-ai-toolbar">
+                <span class="triage-ai-tip">{{ triageAiSendHint }}</span>
+                <el-button
+                  type="primary"
+                  plain
+                  :loading="triageAiSending"
+                  :disabled="!canSendTriageAiMessage"
+                  @click="sendTriageAiMessage"
+                >
+                  发送给 AI
+                </el-button>
+              </div>
             </div>
           </div>
 
@@ -639,6 +688,7 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
+import { resolveTriageMessageInsight } from '@/triage/insight'
 
 const router = useRouter()
 const categories = ref([])
@@ -654,12 +704,14 @@ const submitting = ref(false)
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailRecord = ref(null)
+const triageAiSending = ref(false)
 const consultationMessages = ref([])
 const messageLoading = ref(false)
 const messageSending = ref(false)
 const feedbackOptions = ref({ departments: [], doctors: [] })
 const feedbackSubmitting = ref(false)
 const formData = reactive({})
+const triageAiDraft = reactive({ content: '' })
 const messageDraft = reactive({ content: '', attachments: [] })
 const feedbackForm = reactive({
   userScore: 5,
@@ -684,6 +736,17 @@ const currentHealthSummary = computed(() => buildHealthSummary(currentHistory.va
 const visibleFields = computed(() => {
   const fields = template.value?.fields || []
   return fields.filter(field => isFieldVisible(field))
+})
+const detailTriageMessages = computed(() => (detailRecord.value?.triageSession?.messages || []).map(message => ({
+  ...message,
+  insight: resolveTriageMessageInsight(message)
+})))
+const canSendTriageAiMessage = computed(() => !!detailRecord.value?.triageSession)
+const triageAiSendHint = computed(() => {
+  if (!detailRecord.value?.triageSession) return '当前问诊还没有导诊会话。'
+  if (detailRecord.value.triageActionType === 'emergency') return '当前已有高风险提示，如症状继续加重请优先线下就医。'
+  if (detailRecord.value.triageActionType === 'offline') return '可以继续补充变化情况，但若不适明显加重仍建议优先线下就医。'
+  return 'AI 会基于已提交问诊资料和导诊历史继续分析。'
 })
 const canSendMessage = computed(() => !!detailRecord.value)
 const messageSendHint = computed(() => {
@@ -1020,11 +1083,16 @@ function submitConsultation() {
     answers
   }, () => {
     submitting.value = false
-    ElMessage.success('问诊资料提交成功，已生成初步分诊建议')
+    ElMessage.success('问诊资料提交成功，正在进入 AI 导诊工作区')
     loadRecords((list) => {
-      if (list?.length) openRecordDetail(list[0])
+      const latestRecord = list?.[0]
+      if (latestRecord?.id) {
+        resetForm()
+        openTriageWorkspace(latestRecord.id)
+        return
+      }
+      resetForm()
     })
-    resetForm()
   }, (message) => {
     submitting.value = false
     ElMessage.warning(message || '问诊资料提交失败')
@@ -1055,9 +1123,11 @@ function openRecordDetail(row) {
   detailVisible.value = true
   detailLoading.value = true
   detailRecord.value = null
+  triageAiSending.value = false
   consultationMessages.value = []
   messageLoading.value = false
   messageSending.value = false
+  resetTriageAiDraft()
   resetMessageDraft()
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
     detailRecord.value = data
@@ -1068,6 +1138,51 @@ function openRecordDetail(row) {
     detailLoading.value = false
     detailVisible.value = false
     ElMessage.warning(message || '问诊记录详情加载失败')
+  })
+}
+
+function openTriageWorkspace(recordId = detailRecord.value?.id) {
+  if (!recordId) return
+  router.push({ path: '/index/triage', query: { recordId } })
+}
+
+function refreshRecordDetail(recordId = detailRecord.value?.id, options = {}) {
+  if (!recordId) return
+  const { reloadConversation = false } = options
+  get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
+    detailRecord.value = data
+    applyFeedbackForm(data?.triageFeedback)
+    if (reloadConversation) loadConsultationMessages(recordId)
+  }, (message) => {
+    ElMessage.warning(message || '问诊记录详情刷新失败')
+  })
+}
+
+function resetTriageAiDraft() {
+  triageAiDraft.content = ''
+}
+
+function sendTriageAiMessage() {
+  const recordId = detailRecord.value?.id
+  if (!recordId || !detailRecord.value?.triageSession) return
+  const content = `${triageAiDraft.content || ''}`.trim()
+  if (!content) {
+    ElMessage.warning('请先补充想继续告诉 AI 的内容')
+    return
+  }
+
+  triageAiSending.value = true
+  post('/api/user/consultation/triage/message/send', {
+    recordId,
+    content
+  }, () => {
+    triageAiSending.value = false
+    resetTriageAiDraft()
+    ElMessage.success('AI 导诊已结合你的补充信息继续分析')
+    refreshRecordDetail(recordId)
+  }, (message) => {
+    triageAiSending.value = false
+    ElMessage.warning(message || 'AI 导诊继续分析失败')
   })
 }
 
@@ -1208,7 +1323,8 @@ function messageRoleLabel(value) {
   return {
     user: '用户',
     system: '系统',
-    rule_engine: '规则引擎'
+    rule_engine: '规则引擎',
+    assistant: 'AI 导诊'
   }[value] || value || '-'
 }
 
@@ -1218,7 +1334,11 @@ function messageTypeLabel(value) {
     health_summary: '健康摘要',
     triage_result: '分诊结果',
     rule_summary: '规则摘要',
-    rule_hit: '命中详情'
+    rule_hit: '命中详情',
+    ai_triage_summary: 'AI 导诊建议',
+    ai_followup_questions: 'AI 建议补充',
+    ai_user_followup: '患者补充',
+    ai_chat_reply: 'AI 导诊回复'
   }[value] || value || '-'
 }
 
@@ -1269,9 +1389,11 @@ function formatDate(value) {
 watch(detailVisible, (value) => {
   if (!value) {
     detailRecord.value = null
+    triageAiSending.value = false
     consultationMessages.value = []
     messageLoading.value = false
     messageSending.value = false
+    resetTriageAiDraft()
     resetMessageDraft()
   }
 })
@@ -1740,6 +1862,14 @@ onMounted(() => loadData())
   gap: 14px;
 }
 
+.triage-ai-composer {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(15, 102, 101, 0.05);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
 .session-message-head {
   justify-content: space-between;
   align-items: flex-start;
@@ -1757,6 +1887,59 @@ onMounted(() => loadData())
 .session-message-card p {
   margin: 12px 0 0;
   line-height: 1.8;
+}
+
+.session-message-insight {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(15, 102, 101, 0.06);
+  border: 1px solid rgba(15, 102, 101, 0.1);
+}
+
+.session-message-insight-meta,
+.session-message-insight-tags {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.session-message-insight-meta span,
+.session-message-insight-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.1);
+  color: #48656d;
+  font-size: 12px;
+}
+
+.session-message-insight-copy {
+  margin: 10px 0 0;
+  line-height: 1.7;
+  color: #48656d;
+}
+
+.session-message-insight-tags {
+  margin-top: 10px;
+}
+
+.session-message-insight-tags.danger span {
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+}
+
+.triage-ai-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.triage-ai-tip {
+  color: var(--app-muted);
+  font-size: 13px;
 }
 
 .doctor-avatar {
@@ -1814,6 +1997,7 @@ onMounted(() => loadData())
   .doctor-recommend-head,
   .doctor-top,
   .session-message-head,
+  .triage-ai-toolbar,
   .feedback-actions,
   .conversation-meta,
   .conversation-toolbar,

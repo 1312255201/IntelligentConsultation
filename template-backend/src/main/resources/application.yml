@@ -8,6 +8,16 @@ spring:
     host: smtp.163.com
     username: temlate@163.com
     password: temlate
+  ai:
+    deepseek:
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      chat:
+        enabled: ${DEEPSEEK_ENABLED:false}
+        options:
+          model: ${DEEPSEEK_MODEL:deepseek-chat}
+          temperature: ${DEEPSEEK_TEMPERATURE:0.2}
+          max-tokens: ${DEEPSEEK_MAX_TOKENS:1200}
   rabbitmq:
     addresses: localhost
     username: admin
@@ -43,3 +53,10 @@ spring:
     endpoint: 'http://localhost:9000'
     username: 'minioadmin'
     password: 'minioadmin'
+
+consultation:
+  ai:
+    triage:
+      enabled: ${CONSULTATION_AI_TRIAGE_ENABLED:true}
+      prompt-version: ${CONSULTATION_AI_TRIAGE_PROMPT_VERSION:deepseek-triage-v1}
+      doctor-candidate-limit: ${CONSULTATION_AI_TRIAGE_DOCTOR_LIMIT:3}
