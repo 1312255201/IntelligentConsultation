@@ -400,6 +400,8 @@ CREATE TABLE IF NOT EXISTS `db_consultation_doctor_conclusion` (
   `need_follow_up` tinyint(1) NOT NULL DEFAULT 0,
   `follow_up_within_days` int DEFAULT NULL,
   `is_consistent_with_ai` tinyint(1) DEFAULT NULL,
+  `ai_mismatch_reasons_json` varchar(500) DEFAULT NULL,
+  `ai_mismatch_remark` varchar(500) DEFAULT NULL,
   `patient_instruction` varchar(500) DEFAULT NULL,
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,

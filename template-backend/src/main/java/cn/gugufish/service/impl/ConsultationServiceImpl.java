@@ -62,6 +62,7 @@ import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageFeedbackService;
 import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
+import cn.gugufish.utils.ConsultationAiComparisonUtils;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
@@ -238,16 +239,23 @@ public class ConsultationServiceImpl implements ConsultationService {
                 .stream()
                 .map(item -> item.asViewObject(ConsultationRecordAnswerVO.class))
                 .toList();
+        var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(id);
+        var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(id);
+        var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(id);
+        var triageSession = triageSessionQueryService.detailByConsultationId(id);
+        var triageResult = triageResultQueryService.detailByConsultationId(id);
+        var triageFeedback = triageFeedbackQueryService.detailByConsultationId(id);
 
         return record.asViewObject(ConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
             vo.setRecommendedDoctors(buildRecommendedDoctors(record));
-            vo.setDoctorHandle(consultationDoctorHandleQueryService.detailByConsultationId(id));
-            vo.setDoctorConclusion(consultationDoctorConclusionQueryService.detailByConsultationId(id));
-            vo.setDoctorFollowUps(consultationDoctorFollowUpQueryService.listByConsultationId(id));
-            vo.setTriageSession(triageSessionQueryService.detailByConsultationId(id));
-            vo.setTriageResult(triageResultQueryService.detailByConsultationId(id));
-            vo.setTriageFeedback(triageFeedbackQueryService.detailByConsultationId(id));
+            vo.setDoctorHandle(doctorHandle);
+            vo.setDoctorConclusion(doctorConclusion);
+            vo.setAiComparison(ConsultationAiComparisonUtils.build(doctorConclusion, triageSession, triageResult));
+            vo.setDoctorFollowUps(doctorFollowUps);
+            vo.setTriageSession(triageSession);
+            vo.setTriageResult(triageResult);
+            vo.setTriageFeedback(triageFeedback);
         });
     }
 

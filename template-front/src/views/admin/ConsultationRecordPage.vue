@@ -9,6 +9,150 @@
 
     <section class="card block">
       <div class="head">
+        <div>
+          <h3>AI 采纳总览</h3>
+          <p>查看当前问诊记录中，AI 建议与医生最终结论的一致情况和最近差异样本。</p>
+        </div>
+        <el-button :loading="summaryLoading" @click="loadAiSummary">刷新 AI 统计</el-button>
+      </div>
+      <div class="summary-grid">
+        <article class="subcard summary-card">
+          <span>可对比结论</span>
+          <strong>{{ aiSummary.comparedCount }}</strong>
+          <small>{{ aiSummary.coverageText || '-' }}</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>与 AI 一致</span>
+          <strong>{{ aiSummary.consistentCount }}</strong>
+          <small>{{ aiSummary.consistentRateText || '-' }}</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>与 AI 不一致</span>
+          <strong>{{ aiSummary.mismatchCount }}</strong>
+          <small>优先复盘差异原因</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>待医生判断</span>
+          <strong>{{ aiSummary.pendingCount }}</strong>
+          <small>尚未形成可对比结论</small>
+        </article>
+      </div>
+      <div class="breakdown-grid">
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>按科室拆分</strong>
+              <p>快速查看哪些科室的 AI 采纳率更高，哪些科室差异更集中。</p>
+            </div>
+          </div>
+          <el-table v-if="aiSummary.departmentBreakdown?.length" :data="aiSummary.departmentBreakdown" size="small" border>
+            <el-table-column prop="groupName" label="科室" min-width="140" />
+            <el-table-column prop="totalCount" label="总量" width="80" align="center" />
+            <el-table-column prop="comparedCount" label="可对比" width="90" align="center" />
+            <el-table-column prop="consistentRateText" label="一致率" width="90" align="center" />
+            <el-table-column prop="mismatchCount" label="差异数" width="90" align="center" />
+            <el-table-column prop="pendingCount" label="待判断" width="90" align="center" />
+          </el-table>
+          <el-empty v-else description="当前暂无科室维度的 AI 采纳统计" />
+        </article>
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>按问诊分类拆分</strong>
+              <p>定位哪些问诊分类更容易出现 AI 与医生结论偏差，便于继续优化 Prompt 和规则。</p>
+            </div>
+          </div>
+          <el-table v-if="aiSummary.categoryBreakdown?.length" :data="aiSummary.categoryBreakdown" size="small" border>
+            <el-table-column prop="groupName" label="问诊分类" min-width="140" />
+            <el-table-column prop="totalCount" label="总量" width="80" align="center" />
+            <el-table-column prop="comparedCount" label="可对比" width="90" align="center" />
+            <el-table-column prop="consistentRateText" label="一致率" width="90" align="center" />
+            <el-table-column prop="mismatchCount" label="差异数" width="90" align="center" />
+            <el-table-column prop="pendingCount" label="待判断" width="90" align="center" />
+          </el-table>
+          <el-empty v-else description="当前暂无分类维度的 AI 采纳统计" />
+        </article>
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>按医生拆分</strong>
+              <p>基于已提交的结构化结论，查看每位医生对 AI 建议的采纳情况和最常见差异原因。</p>
+            </div>
+          </div>
+          <el-table v-if="aiSummary.doctorBreakdown?.length" :data="aiSummary.doctorBreakdown" size="small" border>
+            <el-table-column prop="doctorName" label="医生" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="departmentName" label="科室" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="totalCount" label="结论数" width="86" align="center" />
+            <el-table-column prop="comparedCount" label="已对比" width="86" align="center" />
+            <el-table-column prop="consistentRateText" label="一致率" width="86" align="center" />
+            <el-table-column prop="mismatchCount" label="差异数" width="86" align="center" />
+            <el-table-column label="差异主因" min-width="220">
+              <template #default="{ row }">
+                <div v-if="row.mismatchReasonBreakdown?.length" class="reason-chip-list">
+                  <span
+                    v-for="item in row.mismatchReasonBreakdown.slice(0, 3)"
+                    :key="`${row.doctorId || row.doctorName}-${item.reasonCode}`"
+                    class="reason-chip"
+                  >
+                    {{ item.reasonLabel }} {{ item.count }}次
+                  </span>
+                </div>
+                <span v-else class="muted-copy">-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="当前暂无医生维度的 AI 采纳统计" />
+        </article>
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>差异原因汇总</strong>
+              <p>汇总医生标记的 AI 偏差原因，便于后续优化 Prompt、规则和接诊流程。</p>
+            </div>
+          </div>
+          <div v-if="aiSummary.mismatchReasonBreakdown?.length" class="reason-list">
+            <article v-for="item in aiSummary.mismatchReasonBreakdown" :key="item.reasonCode" class="reason-item">
+              <strong>{{ item.reasonLabel }}</strong>
+              <span>{{ item.count }} 次</span>
+            </article>
+          </div>
+          <el-empty v-else description="当前暂无已沉淀的 AI 差异原因统计" />
+        </article>
+      </div>
+      <div class="head summary-subhead">
+        <div>
+          <h3>最近差异记录</h3>
+          <p>优先查看 AI 与医生结论存在偏差的问诊单，便于继续做人工纠偏和规则优化。</p>
+        </div>
+      </div>
+      <div v-if="aiSummary.recentMismatchRecords?.length" class="mismatch-list">
+        <article v-for="item in aiSummary.recentMismatchRecords" :key="item.consultationId" class="subcard mismatch-card">
+          <div class="chips">
+            <span>{{ item.consultationNo }}</span>
+            <span>{{ item.patientName }}</span>
+            <span>{{ item.categoryName }}</span>
+            <span>{{ item.departmentName || '未分配科室' }}</span>
+            <span>{{ formatDate(item.updateTime) }}</span>
+          </div>
+          <p class="copy"><strong>处理医生：</strong>{{ item.doctorName || '未记录' }}</p>
+          <p class="copy"><strong>病情等级：</strong>AI {{ item.aiConditionLevel ? conditionLevelLabel(item.aiConditionLevel) : '未提供' }} / 医生 {{ item.doctorConditionLevel ? conditionLevelLabel(item.doctorConditionLevel) : '未填写' }}</p>
+          <p class="copy"><strong>处理去向：</strong>AI {{ item.aiDisposition ? dispositionLabel(item.aiDisposition) : '未提供' }} / 医生 {{ item.doctorDisposition ? dispositionLabel(item.doctorDisposition) : '未填写' }}</p>
+          <p class="copy"><strong>随访安排：</strong>AI {{ item.aiFollowUpText || '未提供' }} / 医生 {{ item.doctorFollowUpText || '未填写' }}</p>
+          <p v-if="item.aiReasonText" class="copy"><strong>AI 推荐依据：</strong>{{ item.aiReasonText }}</p>
+          <div v-if="mismatchReasonLabels(item.mismatchReasonCodes).length" class="chips danger">
+            <span v-for="tag in mismatchReasonLabels(item.mismatchReasonCodes)" :key="tag">{{ tag }}</span>
+          </div>
+          <p v-if="item.mismatchRemark" class="copy"><strong>差异说明：</strong>{{ item.mismatchRemark }}</p>
+          <div class="actions">
+            <el-button link type="primary" @click="openDetail(item.consultationId)">查看详情</el-button>
+          </div>
+        </article>
+      </div>
+      <el-empty v-else description="当前暂无已标记为与 AI 不一致的问诊记录" />
+    </section>
+
+    <section class="card block">
+      <div class="head">
         <div class="toolbar">
           <el-input v-model="keyword" clearable placeholder="搜索单号、就诊人、标题或主诉" style="width:260px" />
           <el-select v-model="categoryFilter" clearable placeholder="全部分类" style="width:160px">
@@ -29,7 +173,7 @@
             <el-option label="已释放" value="released" />
           </el-select>
         </div>
-        <el-button @click="loadData">刷新</el-button>
+        <el-button @click="refreshAll">刷新</el-button>
       </div>
 
       <el-table :data="filteredRecords" v-loading="loading" border>
@@ -144,6 +288,74 @@
             <div v-if="parseJsonArray(detail.doctorConclusion.conclusionTagsJson).length" class="chips">
               <span v-for="item in parseJsonArray(detail.doctorConclusion.conclusionTagsJson)" :key="item">{{ item }}</span>
             </div>
+            <div v-if="doctorConclusionMismatchReasonLabels(detail.doctorConclusion).length" class="chips danger">
+              <span v-for="item in doctorConclusionMismatchReasonLabels(detail.doctorConclusion)" :key="item">{{ item }}</span>
+            </div>
+            <p v-if="detail.doctorConclusion.aiMismatchRemark" class="copy"><strong>差异说明：</strong>{{ detail.doctorConclusion.aiMismatchRemark }}</p>
+          </section>
+
+          <section v-if="detail.aiComparison" class="card panel compare-panel">
+            <div class="head">
+              <div>
+                <h3>AI 采纳摘要</h3>
+                <p>{{ detail.aiComparison.summary }}</p>
+              </div>
+              <div class="chips">
+                <span :class="['compare-badge', comparisonStatusClass(detail.aiComparison.overallStatus)]">{{ comparisonStatusLabel(detail.aiComparison.overallStatus) }}</span>
+                <span v-if="detail.doctorConclusion">{{ aiConsistencyLabel(detail.doctorConclusion.isConsistentWithAi) }}</span>
+              </div>
+            </div>
+            <div class="compare-grid">
+              <article class="subcard compare-card">
+                <strong>AI 建议</strong>
+                <p class="copy"><strong>病情等级：</strong>{{ detail.aiComparison.aiConditionLevel ? conditionLevelLabel(detail.aiComparison.aiConditionLevel) : '未提供' }}</p>
+                <p class="copy"><strong>处理去向：</strong>{{ detail.aiComparison.aiDisposition ? dispositionLabel(detail.aiComparison.aiDisposition) : '未提供' }}</p>
+                <p class="copy"><strong>建议科室：</strong>{{ detail.aiComparison.aiDepartmentName || '未提供' }}</p>
+                <p class="copy"><strong>随访建议：</strong>{{ detail.aiComparison.aiFollowUpText || '未提供' }}</p>
+                <p class="copy"><strong>置信度：</strong>{{ detail.aiComparison.aiConfidenceText || '未提供' }}</p>
+                <p v-if="detail.aiComparison.aiReasonText" class="copy"><strong>推荐依据：</strong>{{ detail.aiComparison.aiReasonText }}</p>
+              </article>
+              <article class="subcard compare-card">
+                <strong>医生最终结论</strong>
+                <p class="copy"><strong>病情等级：</strong>{{ detail.doctorConclusion?.conditionLevel ? conditionLevelLabel(detail.doctorConclusion.conditionLevel) : '待医生判断' }}</p>
+                <p class="copy"><strong>处理去向：</strong>{{ detail.doctorConclusion?.disposition ? dispositionLabel(detail.doctorConclusion.disposition) : '待医生判断' }}</p>
+                <p class="copy"><strong>诊断方向：</strong>{{ detail.doctorConclusion?.diagnosisDirection || '待医生填写' }}</p>
+                <p class="copy"><strong>随访建议：</strong>{{ doctorFollowUpText(detail.doctorConclusion) || '待医生判断' }}</p>
+                <p class="copy"><strong>AI 一致性：</strong>{{ detail.doctorConclusion ? aiConsistencyLabel(detail.doctorConclusion.isConsistentWithAi) : '待医生判断' }}</p>
+              </article>
+            </div>
+            <div class="compare-list">
+              <article class="subcard compare-item">
+                <div>
+                  <strong>病情等级</strong>
+                  <p class="copy">AI：{{ detail.aiComparison.aiConditionLevel ? conditionLevelLabel(detail.aiComparison.aiConditionLevel) : '未提供' }}</p>
+                  <p class="copy">医生：{{ detail.doctorConclusion?.conditionLevel ? conditionLevelLabel(detail.doctorConclusion.conditionLevel) : '待医生判断' }}</p>
+                </div>
+                <span :class="['compare-badge', comparisonStatusClass(detail.aiComparison.conditionLevelStatus)]">{{ comparisonStatusLabel(detail.aiComparison.conditionLevelStatus) }}</span>
+              </article>
+              <article class="subcard compare-item">
+                <div>
+                  <strong>处理去向</strong>
+                  <p class="copy">AI：{{ detail.aiComparison.aiDisposition ? dispositionLabel(detail.aiComparison.aiDisposition) : '未提供' }}</p>
+                  <p class="copy">医生：{{ detail.doctorConclusion?.disposition ? dispositionLabel(detail.doctorConclusion.disposition) : '待医生判断' }}</p>
+                </div>
+                <span :class="['compare-badge', comparisonStatusClass(detail.aiComparison.dispositionStatus)]">{{ comparisonStatusLabel(detail.aiComparison.dispositionStatus) }}</span>
+              </article>
+              <article class="subcard compare-item">
+                <div>
+                  <strong>随访安排</strong>
+                  <p class="copy">AI：{{ detail.aiComparison.aiFollowUpText || '未提供' }}</p>
+                  <p class="copy">医生：{{ doctorFollowUpText(detail.doctorConclusion) || '待医生判断' }}</p>
+                </div>
+                <span :class="['compare-badge', comparisonStatusClass(detail.aiComparison.followUpStatus)]">{{ comparisonStatusLabel(detail.aiComparison.followUpStatus) }}</span>
+              </article>
+            </div>
+            <div v-if="detail.aiComparison.aiRecommendedDoctors?.length" class="chips">
+              <span v-for="item in detail.aiComparison.aiRecommendedDoctors" :key="item">{{ item }}</span>
+            </div>
+            <div v-if="detail.aiComparison.aiRiskFlags?.length" class="chips danger">
+              <span v-for="item in detail.aiComparison.aiRiskFlags" :key="item">{{ item }}</span>
+            </div>
           </section>
 
           <section class="card panel">
@@ -251,17 +463,37 @@
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { get, resolveImagePath } from '@/net'
+import { aiMismatchReasonLabel, comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
+const summaryLoading = ref(false)
 const records = ref([])
 const detail = ref(null)
+const aiSummary = ref(createEmptyAiSummary())
 const keyword = ref('')
 const categoryFilter = ref('')
 const triageFilter = ref('')
 const statusFilter = ref('')
 const assignmentFilter = ref('')
+
+function createEmptyAiSummary() {
+  return {
+    totalRecordCount: 0,
+    comparedCount: 0,
+    consistentCount: 0,
+    mismatchCount: 0,
+    pendingCount: 0,
+    coverageText: '-',
+    consistentRateText: '-',
+    departmentBreakdown: [],
+    categoryBreakdown: [],
+    doctorBreakdown: [],
+    mismatchReasonBreakdown: [],
+    recentMismatchRecords: []
+  }
+}
 
 const assignedCount = computed(() => records.value.filter(item => item.doctorAssignment?.status === 'claimed').length)
 const completedCount = computed(() => records.value.filter(item => item.status === 'completed').length)
@@ -289,6 +521,20 @@ function loadData() {
   }, message => {
     loading.value = false
     ElMessage.warning(message || '问诊记录加载失败')
+  })
+}
+function refreshAll() {
+  loadData()
+  loadAiSummary()
+}
+function loadAiSummary() {
+  summaryLoading.value = true
+  get('/api/admin/consultation-record/ai-summary', data => {
+    aiSummary.value = { ...createEmptyAiSummary(), ...(data || {}) }
+    summaryLoading.value = false
+  }, message => {
+    summaryLoading.value = false
+    ElMessage.warning(message || 'AI 采纳统计加载失败')
   })
 }
 function openDetail(id) {
@@ -321,11 +567,14 @@ function handleStatusLabel(value) { return value === 'completed' ? '处理完成
 function conditionLevelLabel(value) { return ({ low: '轻度', medium: '中度', high: '较高风险', critical: '危急' })[value] || '未填写' }
 function dispositionLabel(value) { return ({ observe: '继续观察', online_followup: '线上随访', offline_visit: '线下就医', emergency: '立即急诊' })[value] || '未填写' }
 function aiConsistencyLabel(value) { return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断' }
+function doctorFollowUpText(conclusion) { return !conclusion ? '' : conclusion.needFollowUp === 1 ? (conclusion.followUpWithinDays ? `${conclusion.followUpWithinDays} 天内随访` : '需要随访') : conclusion.needFollowUp === 0 ? '暂不需要随访' : '' }
 function followUpTypeLabel(value) { return ({ platform: '平台随访', phone: '电话随访', offline: '线下随访', other: '其他方式' })[value] || '其他方式' }
 function patientStatusLabel(value) { return ({ improved: '明显好转', stable: '基本稳定', worsened: '出现加重', other: '其他情况' })[value] || '其他情况' }
 function statusTagType(value) { return ({ submitted: 'info', triaged: 'primary', processing: 'warning', completed: 'success' })[value] || 'info' }
 function triageBadgeStyle(color) { return color ? { color, borderColor: `${color}33`, backgroundColor: `${color}14` } : {} }
 function parseJsonArray(value) { try { const parsed = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed : [] } catch { return [] } }
+function mismatchReasonLabels(codes) { return (codes || []).map(item => aiMismatchReasonLabel(item)).filter(Boolean) }
+function doctorConclusionMismatchReasonLabels(conclusion) { return mismatchReasonLabels(parseJsonArray(conclusion?.aiMismatchReasonsJson)) }
 function formatConfidence(value) {
   const number = Number(value)
   return Number.isNaN(number) || number <= 0 ? '-' : `${Math.round(number * 100)}%`
@@ -335,11 +584,292 @@ function formatDate(value) {
   if (!value) return '-'
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
-onMounted(() => loadData())
+onMounted(() => refreshAll())
 </script>
 
 <style scoped>
-.record-page{display:flex;flex-direction:column;gap:18px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}.card{border:1px solid var(--app-border);border-radius:28px;background:var(--app-panel);box-shadow:var(--app-shadow)}.stat,.block,.panel{padding:22px}.stat span,.head p,.assignment span,.meta span{color:var(--app-muted)}.stat strong{display:block;margin-top:14px;font-size:30px}.head,.toolbar,.assignment,.chips{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}.head{justify-content:space-between;margin-bottom:16px}.head h3,.panel h3{margin:0}.head p{margin:6px 0 0;line-height:1.7}.meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.meta article,.subcard{padding:16px 18px;border-radius:18px;background:rgba(19,73,80,.05)}.meta strong{display:block;margin-top:8px}.copy{margin:0;line-height:1.8;color:#41575d}.copy+.copy{margin-top:8px}.chips span{padding:8px 14px;border-radius:999px;background:rgba(19,73,80,.08);color:#27646d}.badge{display:inline-flex;align-items:center;justify-content:center;padding:7px 14px;border-radius:999px;border:1px solid rgba(15,102,101,.18);background:rgba(15,102,101,.08);color:#0f6665;font-size:12px;font-weight:600}.answer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.image{width:220px;height:150px;border-radius:18px;object-fit:cover;border:1px solid rgba(17,70,77,.08)}
-@media (max-width:1180px){.stats,.meta,.answer-grid{grid-template-columns:1fr}}
-@media (max-width:760px){.head,.toolbar{flex-direction:column;align-items:flex-start}}
+.record-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.stats,
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.breakdown-grid,
+.answer-grid,
+.mismatch-list,
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  border: 1px solid var(--app-border);
+  border-radius: 28px;
+  background: var(--app-panel);
+  box-shadow: var(--app-shadow);
+}
+
+.stat,
+.block,
+.panel {
+  padding: 22px;
+}
+
+.stat span,
+.head p,
+.assignment span,
+.meta span,
+.summary-card span,
+.summary-card small,
+.breakdown-head p {
+  color: var(--app-muted);
+}
+
+.stat strong,
+.summary-card strong {
+  display: block;
+  margin-top: 14px;
+  font-size: 30px;
+}
+
+.head,
+.toolbar,
+.assignment,
+.chips,
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.head {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.head h3,
+.panel h3 {
+  margin: 0;
+}
+
+.head p,
+.breakdown-head p {
+  margin: 6px 0 0;
+  line-height: 1.7;
+}
+
+.summary-subhead {
+  margin-top: 18px;
+}
+
+.breakdown-grid {
+  margin-top: 18px;
+}
+
+.breakdown-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.breakdown-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.breakdown-head strong {
+  display: block;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.meta article,
+.subcard {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(19, 73, 80, 0.05);
+}
+
+.meta strong {
+  display: block;
+  margin-top: 8px;
+}
+
+.copy {
+  margin: 0;
+  line-height: 1.8;
+  color: #41575d;
+}
+
+.copy + .copy {
+  margin-top: 8px;
+}
+
+.chips span {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 102, 101, 0.18);
+  background: rgba(15, 102, 101, 0.08);
+  color: #0f6665;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.image {
+  width: 220px;
+  height: 150px;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.compare-panel {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.78));
+}
+
+.compare-card strong,
+.compare-item strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.compare-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.compare-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.compare-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 12px;
+}
+
+.compare-badge.is-match {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.compare-badge.is-mismatch {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
+}
+
+.compare-badge.is-partial,
+.compare-badge.is-pending {
+  background: rgba(210, 155, 47, 0.14);
+  color: #8f6514;
+}
+
+.chips.danger span {
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+}
+
+.reason-chip-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reason-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.muted-copy {
+  color: var(--app-muted);
+}
+
+.reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reason-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(19, 73, 80, 0.04);
+}
+
+.reason-item strong {
+  display: block;
+}
+
+.reason-item span {
+  color: var(--app-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .stats,
+  .summary-grid,
+  .breakdown-grid,
+  .meta,
+  .answer-grid,
+  .mismatch-list,
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .head,
+  .toolbar,
+  .compare-item,
+  .actions,
+  .breakdown-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 </style>

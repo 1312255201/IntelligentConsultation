@@ -55,6 +55,11 @@ public class DoctorConsultationHandleSubmitVO {
     @Max(1)
     Integer isConsistentWithAi;
 
+    List<String> aiMismatchReasons;
+
+    @Length(max = 500)
+    String aiMismatchRemark;
+
     @Length(max = 500)
     String patientInstruction;
 }

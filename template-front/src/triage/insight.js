@@ -54,6 +54,8 @@ function resolveTriageMessageInsight(message) {
   const payload = parseObject(message?.structuredContent)
   if (!payload) return null
 
+  const summary = safeText(payload.summary)
+  const reply = safeText(payload.reply)
   const riskFlags = normalizeStringList(payload.riskFlags).slice(0, 5)
   const recommendedDoctorNames = normalizeStringList(payload.recommendedDoctorNames).slice(0, 5)
   const recommendedDoctorIds = Array.isArray(payload.recommendedDoctorIds)
@@ -64,27 +66,39 @@ function resolveTriageMessageInsight(message) {
     : recommendedDoctorIds.map(item => `医生ID ${item}`)
   const doctorRecommendationReason = safeText(payload.doctorRecommendationReason)
   const recommendedDepartmentName = safeText(payload.recommendedDepartmentName)
+  const recommendedVisitTypeCode = safeText(payload.recommendedVisitType).toLowerCase()
   const recommendedVisitType = visitTypeLabel(payload.recommendedVisitType)
   const confidenceText = formatConfidence(payload.confidenceScore)
+  const shouldEscalateToHuman = payload.shouldEscalateToHuman === 1 ? 1 : 0
+  const suggestOfflineImmediately = payload.suggestOfflineImmediately === 1 ? 1 : 0
 
-  if (!riskFlags.length
+  if (!summary
+    && !reply
+    && !riskFlags.length
     && !recommendedDoctors.length
     && !recommendedDoctorIds.length
     && !doctorRecommendationReason
     && !recommendedDepartmentName
     && !recommendedVisitType
-    && !confidenceText) {
+    && !confidenceText
+    && shouldEscalateToHuman !== 1
+    && suggestOfflineImmediately !== 1) {
     return null
   }
 
   return {
+    summary,
+    reply,
     riskFlags,
     recommendedDoctors,
     recommendedDoctorNames,
     recommendedDoctorIds,
     doctorRecommendationReason,
     recommendedDepartmentName,
+    recommendedVisitTypeCode,
     recommendedVisitType,
+    shouldEscalateToHuman,
+    suggestOfflineImmediately,
     confidenceText
   }
 }

@@ -29,6 +29,8 @@ public class ConsultationDoctorConclusion implements BaseData {
     Integer needFollowUp;
     Integer followUpWithinDays;
     Integer isConsistentWithAi;
+    String aiMismatchReasonsJson;
+    String aiMismatchRemark;
     String patientInstruction;
     Date createTime;
     Date updateTime;

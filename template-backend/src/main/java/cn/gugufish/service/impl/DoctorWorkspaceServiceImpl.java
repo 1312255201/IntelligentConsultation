@@ -38,6 +38,8 @@ import cn.gugufish.service.DoctorWorkspaceService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
+import cn.gugufish.utils.ConsultationAiComparisonUtils;
+import cn.gugufish.utils.ConsultationAiMismatchReasonUtils;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
@@ -225,17 +227,25 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 .stream()
                 .map(item -> item.asViewObject(TriageRuleHitLogVO.class))
                 .toList();
+        var doctorAssignment = consultationDoctorAssignmentQueryService.detailByConsultationId(recordId);
+        var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(recordId);
+        var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(recordId);
+        var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(recordId);
+        var triageSession = triageSessionQueryService.detailByConsultationId(recordId);
+        var triageResult = triageResultQueryService.detailByConsultationId(recordId);
+        var triageFeedback = triageFeedbackQueryService.detailByConsultationId(recordId);
 
         return record.asViewObject(AdminConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
             vo.setRuleHits(ruleHits);
-            vo.setDoctorAssignment(consultationDoctorAssignmentQueryService.detailByConsultationId(recordId));
-            vo.setDoctorHandle(consultationDoctorHandleQueryService.detailByConsultationId(recordId));
-            vo.setDoctorConclusion(consultationDoctorConclusionQueryService.detailByConsultationId(recordId));
-            vo.setDoctorFollowUps(consultationDoctorFollowUpQueryService.listByConsultationId(recordId));
-            vo.setTriageSession(triageSessionQueryService.detailByConsultationId(recordId));
-            vo.setTriageResult(triageResultQueryService.detailByConsultationId(recordId));
-            vo.setTriageFeedback(triageFeedbackQueryService.detailByConsultationId(recordId));
+            vo.setDoctorAssignment(doctorAssignment);
+            vo.setDoctorHandle(doctorHandle);
+            vo.setDoctorConclusion(doctorConclusion);
+            vo.setAiComparison(ConsultationAiComparisonUtils.build(doctorConclusion, triageSession, triageResult));
+            vo.setDoctorFollowUps(doctorFollowUps);
+            vo.setTriageSession(triageSession);
+            vo.setTriageResult(triageResult);
+            vo.setTriageFeedback(triageFeedback);
         });
     }
 
@@ -318,7 +328,14 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         Integer needFollowUp = vo.getNeedFollowUp() == null ? 0 : vo.getNeedFollowUp();
         Integer followUpWithinDays = vo.getFollowUpWithinDays();
         Integer isConsistentWithAi = vo.getIsConsistentWithAi();
+        List<String> aiMismatchReasons = ConsultationAiMismatchReasonUtils.normalizeCodes(vo.getAiMismatchReasons());
+        String aiMismatchRemark = trimToNull(vo.getAiMismatchRemark());
         String patientInstruction = trimToNull(vo.getPatientInstruction());
+
+        if (!Objects.equals(isConsistentWithAi, 0)) {
+            aiMismatchReasons = List.of();
+            aiMismatchRemark = null;
+        }
 
         if (needFollowUp != 1) {
             followUpWithinDays = null;
@@ -329,6 +346,10 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         if ("completed".equals(status) && conditionLevel == null) return "完成处理时请填写病情等级";
         if ("completed".equals(status) && disposition == null) return "完成处理时请填写处理去向";
         if ("completed".equals(status) && isConsistentWithAi == null) return "完成处理时请填写是否与 AI 建议一致";
+        if ("completed".equals(status) && Objects.equals(isConsistentWithAi, 0)
+                && aiMismatchReasons.isEmpty() && aiMismatchRemark == null) {
+            return "涓?AI 涓嶄竴鑷存椂璇疯嚦灏戦€夋嫨涓€涓樊寮傚師鍥犳垨濉啓琛ュ厖璇存槑";
+        }
         if ("completed".equals(status) && needFollowUp == 1 && followUpWithinDays == null) {
             return "需要随访时请填写随访时效";
         }
@@ -392,7 +413,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
         String conclusionMessage = saveDoctorConclusion(vo.getConsultationId(), doctor, departmentName, status,
                 conditionLevel, disposition, diagnosisDirection, conclusionTags, needFollowUp,
-                followUpWithinDays, isConsistentWithAi, patientInstruction, now);
+                followUpWithinDays, isConsistentWithAi, aiMismatchReasons, aiMismatchRemark, patientInstruction, now);
         if (conclusionMessage != null) return conclusionMessage;
 
         record.setStatus(status);
@@ -492,6 +513,8 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                                         Integer needFollowUp,
                                         Integer followUpWithinDays,
                                         Integer isConsistentWithAi,
+                                        List<String> aiMismatchReasons,
+                                        String aiMismatchRemark,
                                         String patientInstruction,
                                         Date now) {
         ConsultationDoctorConclusion conclusion = consultationDoctorConclusionMapper.selectOne(Wrappers.<ConsultationDoctorConclusion>query()
@@ -501,11 +524,12 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         boolean shouldSave = conclusion != null
                 || "completed".equals(status)
                 || hasAnyConclusionData(conditionLevel, disposition, diagnosisDirection, conclusionTags,
-                needFollowUp, followUpWithinDays, isConsistentWithAi, patientInstruction);
+                needFollowUp, followUpWithinDays, isConsistentWithAi, aiMismatchReasons, aiMismatchRemark, patientInstruction);
 
         if (!shouldSave) return null;
 
         String tagsJson = conclusionTags.isEmpty() ? null : JSON.toJSONString(conclusionTags);
+        String aiMismatchReasonsJson = ConsultationAiMismatchReasonUtils.toJson(aiMismatchReasons);
         if (conclusion == null) {
             conclusion = new ConsultationDoctorConclusion(
                     null,
@@ -521,6 +545,8 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                     needFollowUp,
                     followUpWithinDays,
                     isConsistentWithAi,
+                    aiMismatchReasonsJson,
+                    aiMismatchRemark,
                     patientInstruction,
                     now,
                     now
@@ -540,6 +566,8 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             conclusion.setNeedFollowUp(needFollowUp);
             conclusion.setFollowUpWithinDays(followUpWithinDays);
             conclusion.setIsConsistentWithAi(isConsistentWithAi);
+            conclusion.setAiMismatchReasonsJson(aiMismatchReasonsJson);
+            conclusion.setAiMismatchRemark(aiMismatchRemark);
             conclusion.setPatientInstruction(patientInstruction);
             conclusion.setUpdateTime(now);
             if (consultationDoctorConclusionMapper.updateById(conclusion) <= 0) {
@@ -628,6 +656,8 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                                          Integer needFollowUp,
                                          Integer followUpWithinDays,
                                          Integer isConsistentWithAi,
+                                         List<String> aiMismatchReasons,
+                                         String aiMismatchRemark,
                                          String patientInstruction) {
         return conditionLevel != null
                 || disposition != null
@@ -636,6 +666,8 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 || (needFollowUp != null && needFollowUp == 1)
                 || followUpWithinDays != null
                 || isConsistentWithAi != null
+                || (aiMismatchReasons != null && !aiMismatchReasons.isEmpty())
+                || aiMismatchRemark != null
                 || patientInstruction != null;
     }
 

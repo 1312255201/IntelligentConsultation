@@ -1,6 +1,7 @@
 package cn.gugufish.controller.admin;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.vo.response.AdminConsultationAiSummaryVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.service.ConsultationRecordAdminService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,6 +29,12 @@ public class AdminConsultationRecordController {
     @Operation(summary = "查询导诊记录列表")
     public RestBean<List<AdminConsultationRecordVO>> list() {
         return RestBean.success(consultationRecordAdminService.listRecords());
+    }
+
+    @GetMapping("/ai-summary")
+    @Operation(summary = "查询 AI 采纳统计摘要")
+    public RestBean<AdminConsultationAiSummaryVO> aiSummary() {
+        return RestBean.success(consultationRecordAdminService.aiSummary());
     }
 
     @GetMapping("/detail")

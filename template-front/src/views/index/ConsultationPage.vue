@@ -543,6 +543,100 @@
             </div>
           </div>
 
+          <div v-if="detailRecord.aiComparison" class="result-panel compare-panel">
+            <div class="doctor-recommend-head">
+              <strong>AI 建议采纳情况</strong>
+              <span>{{ detailRecord.aiComparison.summary }}</span>
+            </div>
+            <div class="session-meta">
+              <span :class="['compare-badge', comparisonStatusClass(detailRecord.aiComparison.overallStatus)]">
+                {{ comparisonStatusLabel(detailRecord.aiComparison.overallStatus) }}
+              </span>
+              <span v-if="detailRecord.doctorConclusion">{{ aiConsistencyLabel(detailRecord.doctorConclusion.isConsistentWithAi) }}</span>
+            </div>
+            <div class="compare-grid">
+              <article class="compare-card">
+                <strong>AI 建议</strong>
+                <div class="compare-kv">
+                  <label>病情等级</label>
+                  <span>{{ detailRecord.aiComparison.aiConditionLevel ? conditionLevelLabel(detailRecord.aiComparison.aiConditionLevel) : '未提供' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>处理去向</label>
+                  <span>{{ detailRecord.aiComparison.aiDisposition ? dispositionLabel(detailRecord.aiComparison.aiDisposition) : '未提供' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>建议科室</label>
+                  <span>{{ detailRecord.aiComparison.aiDepartmentName || '未提供' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>随访建议</label>
+                  <span>{{ detailRecord.aiComparison.aiFollowUpText || '未提供' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>置信度</label>
+                  <span>{{ detailRecord.aiComparison.aiConfidenceText || '未提供' }}</span>
+                </div>
+                <p v-if="detailRecord.aiComparison.aiReasonText" class="result-copy compare-copy"><strong>推荐依据：</strong>{{ detailRecord.aiComparison.aiReasonText }}</p>
+              </article>
+              <article class="compare-card">
+                <strong>医生最终结论</strong>
+                <div class="compare-kv">
+                  <label>病情等级</label>
+                  <span>{{ detailRecord.doctorConclusion?.conditionLevel ? conditionLevelLabel(detailRecord.doctorConclusion.conditionLevel) : '待医生判断' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>处理去向</label>
+                  <span>{{ detailRecord.doctorConclusion?.disposition ? dispositionLabel(detailRecord.doctorConclusion.disposition) : '待医生判断' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>诊断方向</label>
+                  <span>{{ detailRecord.doctorConclusion?.diagnosisDirection || '待医生填写' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>随访建议</label>
+                  <span>{{ doctorFollowUpText(detailRecord.doctorConclusion) || '待医生判断' }}</span>
+                </div>
+                <div class="compare-kv">
+                  <label>AI 一致性</label>
+                  <span>{{ detailRecord.doctorConclusion ? aiConsistencyLabel(detailRecord.doctorConclusion.isConsistentWithAi) : '待医生判断' }}</span>
+                </div>
+              </article>
+            </div>
+            <div class="compare-list">
+              <article class="compare-item">
+                <div>
+                  <strong>病情等级</strong>
+                  <p>AI：{{ detailRecord.aiComparison.aiConditionLevel ? conditionLevelLabel(detailRecord.aiComparison.aiConditionLevel) : '未提供' }}</p>
+                  <p>医生：{{ detailRecord.doctorConclusion?.conditionLevel ? conditionLevelLabel(detailRecord.doctorConclusion.conditionLevel) : '待医生判断' }}</p>
+                </div>
+                <span :class="['compare-badge', comparisonStatusClass(detailRecord.aiComparison.conditionLevelStatus)]">{{ comparisonStatusLabel(detailRecord.aiComparison.conditionLevelStatus) }}</span>
+              </article>
+              <article class="compare-item">
+                <div>
+                  <strong>处理去向</strong>
+                  <p>AI：{{ detailRecord.aiComparison.aiDisposition ? dispositionLabel(detailRecord.aiComparison.aiDisposition) : '未提供' }}</p>
+                  <p>医生：{{ detailRecord.doctorConclusion?.disposition ? dispositionLabel(detailRecord.doctorConclusion.disposition) : '待医生判断' }}</p>
+                </div>
+                <span :class="['compare-badge', comparisonStatusClass(detailRecord.aiComparison.dispositionStatus)]">{{ comparisonStatusLabel(detailRecord.aiComparison.dispositionStatus) }}</span>
+              </article>
+              <article class="compare-item">
+                <div>
+                  <strong>随访安排</strong>
+                  <p>AI：{{ detailRecord.aiComparison.aiFollowUpText || '未提供' }}</p>
+                  <p>医生：{{ doctorFollowUpText(detailRecord.doctorConclusion) || '待医生判断' }}</p>
+                </div>
+                <span :class="['compare-badge', comparisonStatusClass(detailRecord.aiComparison.followUpStatus)]">{{ comparisonStatusLabel(detailRecord.aiComparison.followUpStatus) }}</span>
+              </article>
+            </div>
+            <div v-if="detailRecord.aiComparison.aiRecommendedDoctors?.length" class="chip-row">
+              <span v-for="item in detailRecord.aiComparison.aiRecommendedDoctors" :key="item">{{ item }}</span>
+            </div>
+            <div v-if="detailRecord.aiComparison.aiRiskFlags?.length" class="chip-row danger">
+              <span v-for="item in detailRecord.aiComparison.aiRiskFlags" :key="item">{{ item }}</span>
+            </div>
+          </div>
+
           <div class="result-panel">
             <div class="doctor-recommend-head">
               <strong>随访记录</strong>
@@ -688,6 +782,7 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
+import { comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 import { resolveTriageMessageInsight } from '@/triage/insight'
 
 const router = useRouter()
@@ -936,6 +1031,13 @@ function dispositionLabel(value) {
 
 function aiConsistencyLabel(value) {
   return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断'
+}
+
+function doctorFollowUpText(conclusion) {
+  if (!conclusion) return ''
+  if (conclusion.needFollowUp === 1) return conclusion.followUpWithinDays ? `${conclusion.followUpWithinDays} 天内随访` : '需要随访'
+  if (conclusion.needFollowUp === 0) return '暂不需要随访'
+  return ''
 }
 
 function followUpTypeLabel(value) {
@@ -1548,6 +1650,11 @@ onMounted(() => loadData())
   font-size: 12px;
 }
 
+.chip-row.danger span {
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+}
+
 .patient-card {
   margin-top: 16px;
   padding: 18px;
@@ -1726,6 +1833,104 @@ onMounted(() => loadData())
 .result-copy {
   margin: 0 0 14px;
   line-height: 1.8;
+}
+
+.compare-panel {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.78));
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.compare-card {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.compare-card strong,
+.compare-item strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.compare-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.compare-kv + .compare-kv {
+  margin-top: 10px;
+}
+
+.compare-kv label,
+.compare-item p {
+  color: var(--app-muted);
+}
+
+.compare-kv span {
+  text-align: right;
+  color: #31474d;
+}
+
+.compare-copy {
+  margin-top: 12px;
+}
+
+.compare-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.compare-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.compare-item p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.compare-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 12px;
+}
+
+.compare-badge.is-match {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.compare-badge.is-mismatch {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
+}
+
+.compare-badge.is-partial,
+.compare-badge.is-pending {
+  background: rgba(210, 155, 47, 0.14);
+  color: #8f6514;
 }
 
 .feedback-summary,
@@ -1986,7 +2191,8 @@ onMounted(() => loadData())
   .detail-meta,
   .triage-grid,
   .doctor-list,
-  .candidate-list {
+  .candidate-list,
+  .compare-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1998,6 +2204,8 @@ onMounted(() => loadData())
   .doctor-top,
   .session-message-head,
   .triage-ai-toolbar,
+  .compare-item,
+  .compare-kv,
   .feedback-actions,
   .conversation-meta,
   .conversation-toolbar,
@@ -2009,6 +2217,10 @@ onMounted(() => loadData())
   .panel-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .compare-kv span {
+    text-align: left;
   }
 
   .conversation-card {

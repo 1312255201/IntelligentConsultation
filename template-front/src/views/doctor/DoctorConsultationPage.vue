@@ -208,6 +208,33 @@
             </div>
           </section>
 
+          <section v-if="canApplyAiDraft" class="card panel">
+            <div class="head">
+              <div>
+                <h3>AI 接诊草稿</h3>
+                <p>可将 AI 导诊建议带入医生处理表单作为草稿，再继续人工修订，不会自动提交。</p>
+              </div>
+              <div class="head-actions">
+                <div class="chips">
+                  <span v-if="aiSuggestedConditionLevel">{{ conditionLevelLabel(aiSuggestedConditionLevel) }}</span>
+                  <span v-if="aiSuggestedDisposition">{{ dispositionLabel(aiSuggestedDisposition) }}</span>
+                  <span v-if="latestAiInsight?.confidenceText">置信度 {{ latestAiInsight.confidenceText }}</span>
+                </div>
+                <el-button plain :disabled="!canEdit" @click="applyAiDraftToHandle">带入处理草稿</el-button>
+                <el-button type="primary" plain :disabled="!canEdit" @click="applyAiDraftToConclusion">带入结构化结论</el-button>
+              </div>
+            </div>
+            <div class="subcard ai-draft-card">
+              <p v-if="aiDraftSummary" class="copy"><strong>判断摘要参考：</strong>{{ aiDraftSummary }}</p>
+              <p v-if="aiDraftMedicalAdvice" class="copy"><strong>处理建议参考：</strong>{{ aiDraftMedicalAdvice }}</p>
+              <p v-if="latestAiInsight?.doctorRecommendationReason" class="copy"><strong>推荐依据：</strong>{{ latestAiInsight.doctorRecommendationReason }}</p>
+              <p v-if="aiDraftPatientInstruction" class="copy"><strong>患者提示参考：</strong>{{ aiDraftPatientInstruction }}</p>
+              <div v-if="aiSuggestedRiskFlags.length" class="ai-draft-tags danger">
+                <span v-for="item in aiSuggestedRiskFlags" :key="item">{{ item }}</span>
+              </div>
+            </div>
+          </section>
+
           <section class="card panel">
             <div class="head">
               <div>
@@ -280,6 +307,68 @@
                 <span>{{ aiConsistencyLabel(detail.doctorConclusion.isConsistentWithAi) }}</span>
               </div>
             </div>
+            <div v-if="hasAiConclusionReference" class="conclusion-compare">
+              <div class="conclusion-compare-head">
+                <div>
+                  <strong>AI 建议 vs 医生结论</strong>
+                  <p>{{ conclusionCompareOverview.hint }}</p>
+                </div>
+                <div class="conclusion-compare-tags">
+                  <span :class="['compare-tag', compareTagClass(conclusionCompareOverview.status)]">{{ conclusionCompareOverview.label }}</span>
+                  <span :class="['compare-tag', compareTagClass(manualAiConsistencyStatus)]">{{ manualAiConsistencyText }}</span>
+                  <span>{{ doctorConclusionSourceLabel }}</span>
+                </div>
+              </div>
+              <div class="conclusion-compare-grid">
+                <article class="subcard conclusion-compare-card">
+                  <strong>AI 建议结论</strong>
+                  <div class="compare-kv-list">
+                    <div class="compare-kv"><label>病情等级</label><span>{{ aiConclusionReference.conditionLevel ? conditionLevelLabel(aiConclusionReference.conditionLevel) : '未提供' }}</span></div>
+                    <div class="compare-kv"><label>处理去向</label><span>{{ aiConclusionReference.disposition ? dispositionLabel(aiConclusionReference.disposition) : '未提供' }}</span></div>
+                    <div class="compare-kv"><label>建议科室</label><span>{{ aiConclusionReference.departmentName || '未提供' }}</span></div>
+                    <div class="compare-kv"><label>随访建议</label><span>{{ aiConclusionReference.followUpLabel || '未提供' }}</span></div>
+                    <div class="compare-kv"><label>置信度</label><span>{{ aiConclusionReference.confidenceText || '未提供' }}</span></div>
+                  </div>
+                  <p v-if="aiConclusionReference.reasonText" class="copy"><strong>推荐依据：</strong>{{ aiConclusionReference.reasonText }}</p>
+                  <div v-if="aiConclusionReference.recommendedDoctors.length" class="ai-draft-tags">
+                    <span v-for="item in aiConclusionReference.recommendedDoctors" :key="item">{{ item }}</span>
+                  </div>
+                  <div v-if="aiConclusionReference.riskFlags.length" class="ai-draft-tags danger">
+                    <span v-for="item in aiConclusionReference.riskFlags" :key="item">{{ item }}</span>
+                  </div>
+                </article>
+                <article class="subcard conclusion-compare-card">
+                  <strong>医生结论{{ detail.doctorConclusion ? '' : '草稿' }}</strong>
+                  <div class="compare-kv-list">
+                    <div class="compare-kv"><label>病情等级</label><span>{{ conclusionForm.conditionLevel ? conditionLevelLabel(conclusionForm.conditionLevel) : '待填写' }}</span></div>
+                    <div class="compare-kv"><label>处理去向</label><span>{{ conclusionForm.disposition ? dispositionLabel(conclusionForm.disposition) : '待填写' }}</span></div>
+                    <div class="compare-kv"><label>诊断方向</label><span>{{ conclusionForm.diagnosisDirection || '待填写' }}</span></div>
+                    <div class="compare-kv"><label>随访建议</label><span>{{ doctorFollowUpLabel || '待填写' }}</span></div>
+                    <div class="compare-kv"><label>AI 一致性</label><span>{{ manualAiConsistencyText }}</span></div>
+                  </div>
+                  <div v-if="conclusionForm.conclusionTags.length" class="ai-draft-tags">
+                    <span v-for="item in conclusionForm.conclusionTags" :key="item">{{ item }}</span>
+                  </div>
+                  <p v-if="conclusionForm.patientInstruction" class="copy"><strong>患者指导：</strong>{{ conclusionForm.patientInstruction }}</p>
+                </article>
+              </div>
+              <div v-if="doctorMismatchReasonLabels.length || conclusionForm.aiMismatchRemark" class="subcard conclusion-compare-note">
+                <div v-if="doctorMismatchReasonLabels.length" class="ai-draft-tags danger">
+                  <span v-for="item in doctorMismatchReasonLabels" :key="item">{{ item }}</span>
+                </div>
+                <p v-if="conclusionForm.aiMismatchRemark" class="copy"><strong>差异说明：</strong>{{ conclusionForm.aiMismatchRemark }}</p>
+              </div>
+              <div v-if="conclusionCompareRows.length" class="conclusion-compare-list">
+                <article v-for="item in conclusionCompareRows" :key="item.label" class="conclusion-compare-item">
+                  <div>
+                    <strong>{{ item.label }}</strong>
+                    <p>AI：{{ item.aiValue }}</p>
+                    <p>医生：{{ item.doctorValue }}</p>
+                  </div>
+                  <span :class="['compare-tag', compareTagClass(item.status)]">{{ compareStatusLabel(item.status) }}</span>
+                </article>
+              </div>
+            </div>
             <el-form label-position="top" :disabled="!canEdit">
               <div class="grid">
                 <el-form-item label="病情等级">
@@ -315,6 +404,14 @@
                   <el-button text @click="applyTemplateToField('patient_instruction', 'patientInstruction', 'append')">追加填入</el-button>
                 </div>
                 <el-input v-model="conclusionForm.patientInstruction" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：如出现持续高热或呼吸困难，请立即线下就医。" />
+              </el-form-item>
+              <el-form-item v-if="conclusionForm.isConsistentWithAi === 0" label="与 AI 不一致原因">
+                <el-select v-model="conclusionForm.aiMismatchReasons" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择差异原因">
+                  <el-option v-for="item in aiMismatchReasonOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="conclusionForm.isConsistentWithAi === 0" label="差异补充说明">
+                <el-input v-model="conclusionForm.aiMismatchRemark" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="补充记录医生为何调整 AI 建议，便于后续复盘和统计分析" />
               </el-form-item>
             </el-form>
             <div class="actions">
@@ -526,6 +623,7 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
+import { aiMismatchReasonLabel, aiMismatchReasonOptions } from '@/triage/comparison'
 import { resolveTriageMessageInsight } from '@/triage/insight'
 
 const route = useRoute()
@@ -555,7 +653,18 @@ const messageLoading = ref(false)
 const messageSending = ref(false)
 const doctor = reactive({ bound: 1, bindingMessage: '', doctorId: null, doctorName: '' })
 const handleForm = reactive({ summary: '', medicalAdvice: '', followUpPlan: '', internalRemark: '' })
-const conclusionForm = reactive({ conditionLevel: '', disposition: '', diagnosisDirection: '', conclusionTags: [], needFollowUp: 0, followUpWithinDays: null, isConsistentWithAi: null, patientInstruction: '' })
+const conclusionForm = reactive({
+  conditionLevel: '',
+  disposition: '',
+  diagnosisDirection: '',
+  conclusionTags: [],
+  needFollowUp: 0,
+  followUpWithinDays: null,
+  isConsistentWithAi: null,
+  aiMismatchReasons: [],
+  aiMismatchRemark: '',
+  patientInstruction: ''
+})
 const followUpForm = reactive({ followUpType: 'platform', patientStatus: 'stable', summary: '', advice: '', nextStep: '', needRevisit: 0, nextFollowUpDate: '' })
 const messageDraft = reactive({ content: '', attachments: [] })
 const templateSelection = reactive({
@@ -587,6 +696,120 @@ const triageSessionMessages = computed(() => (detail.value?.triageSession?.messa
   ...message,
   insight: resolveTriageMessageInsight(message)
 })))
+const latestAiMessage = computed(() => [...triageSessionMessages.value]
+  .reverse()
+  .find(message => message.roleType === 'assistant' && `${message.content || ''}`.trim()))
+const latestAiInsight = computed(() => [...triageSessionMessages.value]
+  .reverse()
+  .find(message => message.roleType === 'assistant' && message.insight)?.insight || null)
+const aiSuggestedDisposition = computed(() => mapAiVisitTypeToDisposition(
+  latestAiInsight.value?.recommendedVisitTypeCode || detail.value?.triageActionType || ''
+))
+const aiSuggestedConditionLevel = computed(() => mapTriageLevelToConditionLevel(
+  detail.value?.triageResult?.triageLevelCode
+  || detail.value?.triageSession?.triageLevelCode
+  || detail.value?.triageLevelCode
+  || detail.value?.triageLevelName
+  || ''
+))
+const aiSuggestedRiskFlags = computed(() => {
+  if (latestAiInsight.value?.riskFlags?.length) return latestAiInsight.value.riskFlags
+  return parseJsonArray(detail.value?.triageResult?.riskFlagsJson)
+})
+const aiSuggestedNeedFollowUp = computed(() => (latestAiInsight.value?.recommendedVisitTypeCode || detail.value?.triageActionType) === 'followup' ? 1 : 0)
+const aiSuggestedFollowUpWithinDays = computed(() => aiSuggestedNeedFollowUp.value === 1 ? 3 : null)
+const aiDraftSummary = computed(() => buildAiDraftSummary())
+const aiDraftMedicalAdvice = computed(() => buildAiDraftMedicalAdvice())
+const aiDraftFollowUpPlan = computed(() => buildAiDraftFollowUpPlan())
+const aiDraftPatientInstruction = computed(() => buildAiDraftPatientInstruction())
+const canApplyAiDraft = computed(() => !!detail.value && (
+  !!aiDraftSummary.value
+  || !!aiDraftMedicalAdvice.value
+  || !!aiDraftPatientInstruction.value
+  || !!aiSuggestedDisposition.value
+  || !!aiSuggestedConditionLevel.value
+))
+const aiConclusionReference = computed(() => {
+  const insight = latestAiInsight.value
+  const recommendedDoctors = insight?.recommendedDoctors?.length
+    ? insight.recommendedDoctors
+    : triageDoctorCandidates.value.map(item => trimText(item?.name)).filter(Boolean).slice(0, 5)
+  const departmentName = trimText(insight?.recommendedDepartmentName || detail.value?.triageResult?.departmentName || detail.value?.departmentName)
+  const reasonText = trimText(insight?.doctorRecommendationReason || detail.value?.triageResult?.reasonText)
+  const confidenceText = trimText(insight?.confidenceText || formatConfidence(detail.value?.triageResult?.confidenceScore))
+  return {
+    conditionLevel: aiSuggestedConditionLevel.value,
+    disposition: aiSuggestedDisposition.value,
+    departmentName,
+    reasonText,
+    confidenceText,
+    riskFlags: aiSuggestedRiskFlags.value,
+    recommendedDoctors,
+    followUpLabel: buildFollowUpCompareLabel(aiSuggestedNeedFollowUp.value, aiSuggestedFollowUpWithinDays.value, !!(aiSuggestedDisposition.value || detail.value?.triageActionType))
+  }
+})
+const hasAiConclusionReference = computed(() => {
+  const ai = aiConclusionReference.value
+  return !!(ai.conditionLevel || ai.disposition || ai.departmentName || ai.reasonText || ai.confidenceText || ai.riskFlags.length || ai.recommendedDoctors.length || ai.followUpLabel)
+})
+const hasDoctorConclusionContent = computed(() => !!(
+  conclusionForm.conditionLevel
+  || conclusionForm.disposition
+  || trimText(conclusionForm.diagnosisDirection)
+  || conclusionForm.conclusionTags.length
+  || conclusionForm.aiMismatchReasons.length
+  || trimText(conclusionForm.aiMismatchRemark)
+  || trimText(conclusionForm.patientInstruction)
+  || conclusionForm.followUpWithinDays
+  || conclusionForm.isConsistentWithAi !== null
+  || detail.value?.doctorConclusion
+))
+const doctorFollowUpLabel = computed(() => buildFollowUpCompareLabel(
+  conclusionForm.needFollowUp,
+  conclusionForm.followUpWithinDays,
+  hasDoctorConclusionContent.value || conclusionForm.needFollowUp === 1
+))
+const doctorConclusionSourceLabel = computed(() => detail.value?.doctorConclusion ? '已保存结论' : '当前编辑草稿')
+const manualAiConsistencyStatus = computed(() => {
+  if (conclusionForm.isConsistentWithAi === 1) return 'match'
+  if (conclusionForm.isConsistentWithAi === 0) return 'mismatch'
+  return 'pending'
+})
+const manualAiConsistencyText = computed(() => conclusionForm.isConsistentWithAi === null ? '待医生判断' : aiConsistencyLabel(conclusionForm.isConsistentWithAi))
+const doctorMismatchReasonLabels = computed(() => conclusionForm.aiMismatchReasons
+  .map(item => aiMismatchReasonLabel(item))
+  .filter(Boolean))
+const conclusionCompareRows = computed(() => {
+  const rows = []
+  const ai = aiConclusionReference.value
+  const pushRow = (label, aiValue, doctorValue) => {
+    const left = trimText(aiValue)
+    const right = trimText(doctorValue)
+    if (!left && !right) return
+    rows.push({
+      label,
+      aiValue: left || '未提供',
+      doctorValue: right || '待填写',
+      status: compareFieldStatus(left, right)
+    })
+  }
+  pushRow('病情等级', ai.conditionLevel ? conditionLevelLabel(ai.conditionLevel) : '', conclusionForm.conditionLevel ? conditionLevelLabel(conclusionForm.conditionLevel) : '')
+  pushRow('处理去向', ai.disposition ? dispositionLabel(ai.disposition) : '', conclusionForm.disposition ? dispositionLabel(conclusionForm.disposition) : '')
+  pushRow('随访安排', ai.followUpLabel, doctorFollowUpLabel.value)
+  return rows
+})
+const conclusionCompareOverview = computed(() => {
+  if (!conclusionCompareRows.value.length) {
+    return { status: 'pending', label: '待开始对比', hint: '当前还缺少可对比字段，可先一键带入 AI 草稿或手动填写医生结论。' }
+  }
+  if (conclusionCompareRows.value.some(item => item.status === 'mismatch')) {
+    return { status: 'mismatch', label: '存在差异', hint: 'AI 建议与医生当前结论存在不一致项，建议在提交前再确认一次。' }
+  }
+  if (conclusionCompareRows.value.some(item => item.status === 'pending')) {
+    return { status: 'partial', label: '待补充', hint: '已有部分字段可以对比，但仍有医生结论未填写。' }
+  }
+  return { status: 'match', label: '当前一致', hint: '当前已填写的核心结论与 AI 建议保持一致。' }
+})
 const canSubmitFollowUp = computed(() => doctor.bound === 1
   && detail.value?.status === 'completed'
   && detail.value?.doctorHandle?.status === 'completed'
@@ -681,8 +904,14 @@ function syncForms() {
   conclusionForm.needFollowUp = conclusion?.needFollowUp === 1 ? 1 : 0
   conclusionForm.followUpWithinDays = conclusion?.followUpWithinDays || null
   conclusionForm.isConsistentWithAi = conclusion?.isConsistentWithAi ?? null
+  conclusionForm.aiMismatchReasons = parseJsonArray(conclusion?.aiMismatchReasonsJson).filter(Boolean)
+  conclusionForm.aiMismatchRemark = conclusion?.aiMismatchRemark || ''
   conclusionForm.patientInstruction = conclusion?.patientInstruction || ''
   resetFollowUpForm()
+}
+function clearAiMismatchReview() {
+  conclusionForm.aiMismatchReasons = []
+  conclusionForm.aiMismatchRemark = ''
 }
 function resetFollowUpForm() {
   followUpForm.followUpType = 'platform'
@@ -787,6 +1016,103 @@ function applyTemplateToField(sceneType, fieldKey, mode = 'append', formType = '
   const current = `${form[fieldKey] || ''}`.trim()
   form[fieldKey] = mode === 'replace' || !current ? template.content : `${current}\n${template.content}`
 }
+function applyAiDraftToHandle() {
+  if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
+  let changed = 0
+  changed += mergeTextField(handleForm, 'summary', aiDraftSummary.value)
+  changed += mergeTextField(handleForm, 'medicalAdvice', aiDraftMedicalAdvice.value)
+  changed += mergeTextField(handleForm, 'followUpPlan', aiDraftFollowUpPlan.value)
+  if (!changed) return ElMessage.info('当前医生处理表单已有内容，可继续手动补充或调整')
+  ElMessage.success('已将 AI 建议带入医生处理草稿')
+}
+function applyAiDraftToConclusion() {
+  if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
+  let changed = 0
+  changed += assignField(conclusionForm, 'conditionLevel', aiSuggestedConditionLevel.value)
+  changed += assignField(conclusionForm, 'disposition', aiSuggestedDisposition.value)
+  changed += assignField(conclusionForm, 'isConsistentWithAi', aiSuggestedDisposition.value ? 1 : conclusionForm.isConsistentWithAi)
+  changed += assignField(conclusionForm, 'needFollowUp', aiSuggestedNeedFollowUp.value)
+  changed += assignField(conclusionForm, 'followUpWithinDays', aiSuggestedNeedFollowUp.value === 1 ? aiSuggestedFollowUpWithinDays.value : null)
+  changed += mergeTextField(conclusionForm, 'patientInstruction', aiDraftPatientInstruction.value)
+  if (!changed) return ElMessage.info('当前结构化结论已具备内容，可继续人工修订')
+  ElMessage.success('已将 AI 建议带入结构化结论')
+}
+function buildAiDraftSummary() {
+  const segments = []
+  const insight = latestAiInsight.value
+  if (insight?.summary) segments.push(insight.summary)
+  if (detail.value?.triageResult?.reasonText) segments.push(`AI/规则结论：${detail.value.triageResult.reasonText}`)
+  if (aiSuggestedRiskFlags.value.length) segments.push(`风险关注：${aiSuggestedRiskFlags.value.join('、')}`)
+  if (insight?.doctorRecommendationReason) segments.push(`推荐依据：${insight.doctorRecommendationReason}`)
+  return abbreviateText(joinUniqueSegments(segments), 480)
+}
+function buildAiDraftMedicalAdvice() {
+  const segments = []
+  const insight = latestAiInsight.value
+  if (insight?.reply) segments.push(insight.reply)
+  else if (latestAiMessage.value?.content) segments.push(latestAiMessage.value.content)
+  if (insight?.recommendedVisitType) segments.push(`建议方式：${insight.recommendedVisitType}`)
+  if (insight?.recommendedDepartmentName) segments.push(`建议科室：${insight.recommendedDepartmentName}`)
+  if (insight?.doctorRecommendationReason) segments.push(`推荐依据：${insight.doctorRecommendationReason}`)
+  if (insight?.suggestOfflineImmediately === 1) segments.push('当前更建议尽快线下就医。')
+  if (insight?.shouldEscalateToHuman === 1) segments.push('建议尽快由医生进一步接管和评估。')
+  return abbreviateText(joinUniqueSegments(segments), 1600)
+}
+function buildAiDraftFollowUpPlan() {
+  const insight = latestAiInsight.value
+  const segments = []
+  if (aiSuggestedNeedFollowUp.value === 1) {
+    segments.push(`建议 ${aiSuggestedFollowUpWithinDays.value || 3} 天内安排复诊或线上随访。`)
+  } else if (aiSuggestedDisposition.value === 'offline_visit') {
+    segments.push('建议尽快安排线下就医，并根据病情变化提前复诊。')
+  } else if (aiSuggestedDisposition.value === 'emergency') {
+    segments.push('建议立即急诊处理，不建议继续等待。')
+  } else if (aiSuggestedDisposition.value === 'online_followup') {
+    segments.push('建议继续线上随访，必要时补充检查结果后复评。')
+  }
+  if (insight?.recommendedVisitType) segments.push(`AI 当前建议方式：${insight.recommendedVisitType}`)
+  return abbreviateText(joinUniqueSegments(segments), 320)
+}
+function buildAiDraftPatientInstruction() {
+  const insight = latestAiInsight.value
+  const segments = []
+  if (insight?.reply) segments.push(insight.reply)
+  if (!insight?.reply && insight?.summary) segments.push(insight.summary)
+  if (aiSuggestedRiskFlags.value.length) {
+    segments.push(`如出现${aiSuggestedRiskFlags.value.join('、')}等情况，请及时线下就医或尽快复诊。`)
+  }
+  return abbreviateText(joinUniqueSegments(segments), 500)
+}
+function buildFollowUpCompareLabel(needFollowUp, days, hasValue = true) {
+  if (!hasValue) return ''
+  if (needFollowUp === 1) return `${days ? `${days} 天内` : '需要'}随访`
+  return '暂不需要随访'
+}
+function compareFieldStatus(aiValue, doctorValue) {
+  if (!aiValue && !doctorValue) return 'pending'
+  if (!aiValue || !doctorValue) return 'pending'
+  return aiValue === doctorValue ? 'match' : 'mismatch'
+}
+function mergeTextField(form, fieldKey, value) {
+  const next = trimText(value)
+  if (!next) return 0
+  const current = trimText(form[fieldKey])
+  if (!current) {
+    form[fieldKey] = next
+    return 1
+  }
+  if (!current.includes(next)) {
+    form[fieldKey] = `${current}\n${next}`
+    return 1
+  }
+  return 0
+}
+function assignField(form, fieldKey, value) {
+  if (value === undefined) return 0
+  if (form[fieldKey] === value) return 0
+  form[fieldKey] = value
+  return 1
+}
 function submitAssignment(type, id) {
   assignLoading.value = true
   assignType.value = type
@@ -812,6 +1138,9 @@ function submitHandle(status) {
   if (status === 'completed' && !conclusionForm.disposition) return ElMessage.warning('完成处理时请填写处理去向')
   if (status === 'completed' && conclusionForm.isConsistentWithAi === null) return ElMessage.warning('完成处理时请填写是否与 AI 一致')
   if (status === 'completed' && conclusionForm.needFollowUp === 1 && !conclusionForm.followUpWithinDays) return ElMessage.warning('需要随访时请填写建议随访时效')
+  if (status === 'completed' && conclusionForm.isConsistentWithAi === 0 && !conclusionForm.aiMismatchReasons.length && !`${conclusionForm.aiMismatchRemark || ''}`.trim()) {
+    return ElMessage.warning('涓?AI 涓嶄竴鑷存椂璇疯嚦灏戦€夋嫨涓€涓樊寮傚師鍥犳垨濉啓琛ュ厖璇存槑')
+  }
   submitLoading.value = true
   submitStatus.value = status
   post('/api/doctor/consultation/handle', {
@@ -828,6 +1157,8 @@ function submitHandle(status) {
     needFollowUp: conclusionForm.needFollowUp,
     followUpWithinDays: conclusionForm.needFollowUp === 1 ? conclusionForm.followUpWithinDays : null,
     isConsistentWithAi: conclusionForm.isConsistentWithAi,
+    aiMismatchReasons: conclusionForm.isConsistentWithAi === 0 ? (conclusionForm.aiMismatchReasons || []) : [],
+    aiMismatchRemark: conclusionForm.isConsistentWithAi === 0 ? `${conclusionForm.aiMismatchRemark || ''}`.trim() : '',
     patientInstruction: `${conclusionForm.patientInstruction || ''}`.trim()
   }, () => {
     submitLoading.value = false
@@ -883,6 +1214,35 @@ function assignmentTagType(assignment) {
   if (!assignment || assignment.status !== 'claimed') return 'info'
   return assignment.doctorId === doctor.doctorId ? 'success' : 'warning'
 }
+function mapAiVisitTypeToDisposition(value) {
+  return ({
+    emergency: 'emergency',
+    offline: 'offline_visit',
+    followup: 'online_followup',
+    online: 'online_followup'
+  })[`${value || ''}`.toLowerCase()] || ''
+}
+function mapTriageLevelToConditionLevel(value) {
+  const text = `${value || ''}`.trim().toUpperCase()
+  if (!text) return ''
+  if (text.includes('EMERGENCY') || text.includes('CRITICAL') || text.includes('RED')) return 'critical'
+  if (text.includes('OFFLINE') || text.includes('HIGH') || text.includes('ORANGE')) return 'high'
+  if (text.includes('FOLLOWUP') || text.includes('MEDIUM') || text.includes('YELLOW')) return 'medium'
+  if (text.includes('ONLINE') || text.includes('LOW') || text.includes('GREEN')) return 'low'
+  return ''
+}
+function joinUniqueSegments(segments) {
+  return [...new Set((segments || []).map(item => trimText(item)).filter(Boolean))].join('\n')
+}
+function abbreviateText(value, maxLength = 500) {
+  const text = trimText(value)
+  if (!text || text.length <= maxLength) return text
+  return `${text.slice(0, Math.max(maxLength - 3, 0))}...`
+}
+function trimText(value) {
+  const text = `${value || ''}`.trim()
+  return text || ''
+}
 function parseJsonArray(value) { try { const parsed = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed : [] } catch { return [] } }
 function parseDoctorCandidates(value) { return parseJsonArray(value).filter(item => item && typeof item === 'object') }
 function displayAnswer(answer) { return answer.fieldType === 'switch' ? (answer.fieldValue === '1' ? '是' : '否') : (answer.fieldValue || '-') }
@@ -908,6 +1268,8 @@ function messageTypeLabel(value) {
 function conditionLevelLabel(value) { return ({ low: '轻度', medium: '中度', high: '较高风险', critical: '危急' })[value] || '未填写' }
 function dispositionLabel(value) { return ({ observe: '继续观察', online_followup: '线上随访', offline_visit: '线下就医', emergency: '立即急诊' })[value] || '未填写' }
 function aiConsistencyLabel(value) { return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断' }
+function compareStatusLabel(value) { return ({ match: '一致', mismatch: '不一致', partial: '待补充', pending: '待判断' })[value] || '待判断' }
+function compareTagClass(value) { return ({ match: 'is-match', mismatch: 'is-mismatch', partial: 'is-partial', pending: 'is-pending' })[value] || 'is-pending' }
 function followUpTypeLabel(value) { return ({ platform: '平台随访', phone: '电话随访', offline: '线下随访', other: '其他方式' })[value] || '其他方式' }
 function patientStatusLabel(value) { return ({ improved: '明显好转', stable: '基本稳定', worsened: '出现加重', other: '其他情况' })[value] || '其他情况' }
 function formatConfidence(value) {
@@ -929,6 +1291,7 @@ watch(detailVisible, value => {
     if (route.query.id) router.replace({ path: '/doctor/consultation' })
   }
 })
+watch(() => conclusionForm.isConsistentWithAi, value => { if (value !== 0) clearAiMismatchReview() })
 watch(() => conclusionForm.needFollowUp, value => { if (value !== 1) conclusionForm.followUpWithinDays = null })
 watch(() => followUpForm.needRevisit, value => { if (value !== 1) followUpForm.nextFollowUpDate = '' })
 onMounted(() => { refreshAll(); loadReplyTemplates() })
@@ -1037,6 +1400,160 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   padding: 16px 18px;
   border-radius: 18px;
   background: rgba(19, 73, 80, 0.05);
+}
+
+.ai-draft-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-draft-tags {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-draft-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.1);
+  color: #48656d;
+  font-size: 12px;
+}
+
+.ai-draft-tags.danger span {
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+}
+
+.conclusion-compare {
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.06), rgba(19, 73, 80, 0.03));
+  border: 1px solid rgba(15, 102, 101, 0.12);
+}
+
+.conclusion-compare-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.conclusion-compare-head strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.conclusion-compare-head p {
+  margin: 0;
+  line-height: 1.7;
+  color: var(--app-muted);
+}
+
+.conclusion-compare-tags,
+.conclusion-compare-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.conclusion-compare-note {
+  margin-top: 14px;
+}
+
+.compare-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 13px;
+}
+
+.compare-tag.is-match {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.compare-tag.is-mismatch {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
+}
+
+.compare-tag.is-partial,
+.compare-tag.is-pending {
+  background: rgba(210, 155, 47, 0.14);
+  color: #8f6514;
+}
+
+.conclusion-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.conclusion-compare-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compare-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compare-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.compare-kv label,
+.conclusion-compare-item p {
+  color: var(--app-muted);
+}
+
+.compare-kv label {
+  flex: 0 0 auto;
+}
+
+.compare-kv span {
+  text-align: right;
+  color: #31474d;
+}
+
+.conclusion-compare-list {
+  margin-top: 14px;
+  flex-direction: column;
+}
+
+.conclusion-compare-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(19, 73, 80, 0.08);
+}
+
+.conclusion-compare-item strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.conclusion-compare-item p {
+  margin: 0;
+  line-height: 1.7;
 }
 
 .triage-doctor-list,
@@ -1285,7 +1802,8 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 @media (max-width: 1100px) {
   .stats,
   .grid,
-  .triage-doctor-list {
+  .triage-doctor-list,
+  .conclusion-compare-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1293,7 +1811,8 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 @media (max-width: 760px) {
   .stats,
   .grid,
-  .triage-doctor-list {
+  .triage-doctor-list,
+  .conclusion-compare-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1301,11 +1820,21 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   .toolbar,
   .actions,
   .head-actions,
+  .conclusion-compare-head,
   .message-toolbar,
   .message-meta,
   .message-attachment-actions {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .compare-kv,
+  .conclusion-compare-item {
+    flex-direction: column;
+  }
+
+  .compare-kv span {
+    text-align: left;
   }
 
   .message-card {
