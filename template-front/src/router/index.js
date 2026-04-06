@@ -52,7 +52,7 @@ const router = createRouter({
     {
       path: '/index',
       component: () => import('@/views/IndexView.vue'),
-      redirect: '/index/profile',
+      redirect: '/index/overview',
       children: [
         {
           path: 'profile',
@@ -73,6 +73,11 @@ const router = createRouter({
           path: 'consultation',
           name: 'index-consultation',
           component: () => import('@/views/index/ConsultationPage.vue')
+        },
+        {
+          path: 'reminder',
+          name: 'index-reminder',
+          component: () => import('@/views/index/ConsultationReminderPage.vue')
         },
         {
           path: 'triage',

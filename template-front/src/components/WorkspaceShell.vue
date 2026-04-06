@@ -20,7 +20,18 @@
           :index="item.index"
         >
           <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.title }}</span>
+          <div class="menu-copy">
+            <span>{{ item.title }}</span>
+            <el-tag
+              v-if="menuBadgeCount(item) > 0"
+              :type="menuBadgeType(item)"
+              effect="dark"
+              size="small"
+              class="menu-count-tag"
+            >
+              {{ formatMenuCount(menuBadgeCount(item)) }}
+            </el-tag>
+          </div>
         </el-menu-item>
       </el-menu>
 
@@ -83,9 +94,17 @@
 <script setup>
 import { ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, provide, reactive, ref } from 'vue'
+import { computed, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, logout, resolveHomeRouteByRole, resolveImagePath, syncAccessProfile } from '@/net'
+import {
+  followUpState,
+  isPendingFollowUpRecord,
+  isReminderRecord,
+  normalizeReminderRecords,
+  recordHasUnreadDoctorReply,
+  recordProgressStage
+} from '@/triage/reminder'
 
 const props = defineProps({
   brandMark: {
@@ -119,6 +138,10 @@ const route = useRoute()
 
 const profileLoading = ref(false)
 const profile = reactive(createEmptyProfile())
+const workspaceSummaryLoading = ref(false)
+const workspaceSummary = reactive(createEmptyWorkspaceSummary())
+const doctorWorkspaceSummaryLoading = ref(false)
+const doctorWorkspaceSummary = reactive(createEmptyDoctorWorkspaceSummary())
 
 function createEmptyProfile() {
   return {
@@ -131,8 +154,62 @@ function createEmptyProfile() {
   }
 }
 
+function createEmptyWorkspaceSummary() {
+  return {
+    totalReminderCount: 0,
+    unreadDoctorReplyCount: 0,
+    waitingDoctorHandleCount: 0,
+    pendingFollowUpCount: 0,
+    dueTodayFollowUpCount: 0,
+    overdueFollowUpCount: 0
+  }
+}
+
+function createEmptyDoctorWorkspaceSummary() {
+  return {
+    bound: 0,
+    unclaimedConsultationCount: 0,
+    highPriorityUnclaimedCount: 0,
+    unreadConsultationCount: 0,
+    waitingReplyConsultationCount: 0,
+    pendingFollowUpCount: 0,
+    dueTodayFollowUpCount: 0,
+    overdueFollowUpCount: 0,
+    recommendedConsultationCount: 0,
+    myClaimedConsultationCount: 0,
+    actionableConsultationCount: 0
+  }
+}
+
 function patchProfile(nextProfile = {}) {
   Object.assign(profile, nextProfile)
+}
+
+function patchWorkspaceSummary(nextSummary = {}) {
+  Object.assign(workspaceSummary, createEmptyWorkspaceSummary(), nextSummary)
+}
+
+function resolveDoctorActionableCount(summary = {}) {
+  const counts = [
+    Number(summary.unclaimedConsultationCount || 0),
+    Number(summary.unreadConsultationCount || 0),
+    Number(summary.waitingReplyConsultationCount || 0),
+    Number(summary.overdueFollowUpCount || 0)
+  ]
+  return counts.reduce((total, value) => total + (Number.isFinite(value) ? value : 0), 0)
+}
+
+function buildDoctorWorkspaceSummary(summary = {}) {
+  const nextSummary = {
+    ...createEmptyDoctorWorkspaceSummary(),
+    ...(summary || {})
+  }
+  nextSummary.actionableConsultationCount = resolveDoctorActionableCount(nextSummary)
+  return nextSummary
+}
+
+function patchDoctorWorkspaceSummary(nextSummary = {}) {
+  Object.assign(doctorWorkspaceSummary, buildDoctorWorkspaceSummary(nextSummary))
 }
 
 function routeRoleByPath(path = '') {
@@ -167,12 +244,101 @@ function redirectWhenRoleMismatch(role) {
   }
 }
 
+function buildUserWorkspaceSummary(records = []) {
+  const followUpRecords = records.filter(isPendingFollowUpRecord)
+  return {
+    totalReminderCount: records.filter(isReminderRecord).length,
+    unreadDoctorReplyCount: records.filter(recordHasUnreadDoctorReply).length,
+    waitingDoctorHandleCount: records.filter(item => recordProgressStage(item) === 'waiting_doctor').length,
+    pendingFollowUpCount: followUpRecords.length,
+    dueTodayFollowUpCount: followUpRecords.filter(item => followUpState(item) === 'due_today').length,
+    overdueFollowUpCount: followUpRecords.filter(item => followUpState(item) === 'overdue').length
+  }
+}
+
+function refreshWorkspaceSummary(showLoading = false) {
+  if (routeRoleByPath(route.path) !== 'user') {
+    patchWorkspaceSummary()
+    workspaceSummaryLoading.value = false
+    return
+  }
+
+  if (showLoading) {
+    workspaceSummaryLoading.value = true
+  }
+
+  get('/api/user/consultation/record/list', (data) => {
+    patchWorkspaceSummary(buildUserWorkspaceSummary(normalizeReminderRecords(data || [])))
+    workspaceSummaryLoading.value = false
+  }, (message) => {
+    workspaceSummaryLoading.value = false
+    if (showLoading && message) {
+      ElMessage.warning(message)
+    }
+  })
+}
+
+function refreshDoctorWorkspaceSummary(showLoading = false) {
+  if (routeRoleByPath(route.path) !== 'doctor') {
+    patchDoctorWorkspaceSummary()
+    doctorWorkspaceSummaryLoading.value = false
+    return
+  }
+
+  if (showLoading) {
+    doctorWorkspaceSummaryLoading.value = true
+  }
+
+  get('/api/doctor/workbench/summary', (data) => {
+    patchDoctorWorkspaceSummary(data || {})
+    doctorWorkspaceSummaryLoading.value = false
+  }, (message) => {
+    doctorWorkspaceSummaryLoading.value = false
+    if (showLoading && message) {
+      ElMessage.warning(message)
+    }
+  })
+}
+
 const currentItem = computed(() => {
   return props.menuItems.find(item => route.path === item.index) || props.menuItems[0]
 })
 
 const avatarUrl = computed(() => resolveImagePath(profile.avatar))
 const userInitial = computed(() => (profile.username || 'U').slice(0, 1).toUpperCase())
+
+function menuBadgeCount(item) {
+  if ((item?.badgeKey || item?.index) === 'patient-reminder' || item?.index === '/index/reminder') {
+    return workspaceSummary.totalReminderCount
+  }
+  if ((item?.badgeKey || item?.index) === 'doctor-consultation' || item?.index === '/doctor/consultation') {
+    return doctorWorkspaceSummary.actionableConsultationCount
+  }
+  return 0
+}
+
+function menuBadgeType(item) {
+  if ((item?.badgeKey || item?.index) === 'patient-reminder' || item?.index === '/index/reminder') {
+    if (workspaceSummary.overdueFollowUpCount > 0) {
+      return 'danger'
+    }
+    return 'primary'
+  }
+  if ((item?.badgeKey || item?.index) === 'doctor-consultation' || item?.index === '/doctor/consultation') {
+    if (doctorWorkspaceSummary.highPriorityUnclaimedCount > 0 || doctorWorkspaceSummary.overdueFollowUpCount > 0) {
+      return 'danger'
+    }
+    if (doctorWorkspaceSummary.unreadConsultationCount > 0 || doctorWorkspaceSummary.waitingReplyConsultationCount > 0) {
+      return 'warning'
+    }
+    return 'primary'
+  }
+  return 'info'
+}
+
+function formatMenuCount(value) {
+  return value > 99 ? '99+' : value
+}
 
 function handleCommand(command) {
   if (command === 'logout') {
@@ -184,13 +350,42 @@ function handleCommand(command) {
 
 provide('account-context', {
   avatarUrl,
+  doctorWorkspaceSummary,
+  doctorWorkspaceSummaryLoading,
   patchProfile,
+  patchDoctorWorkspaceSummary,
   profile,
   profileLoading,
-  refreshProfile
+  refreshProfile,
+  refreshDoctorWorkspaceSummary,
+  patchWorkspaceSummary,
+  refreshWorkspaceSummary,
+  workspaceSummary,
+  workspaceSummaryLoading
 })
 
-onMounted(() => refreshProfile())
+watch(() => route.path, (path) => {
+  const role = routeRoleByPath(path)
+  if (role === 'user') {
+    refreshWorkspaceSummary()
+    patchDoctorWorkspaceSummary()
+  } else if (role === 'doctor') {
+    patchWorkspaceSummary()
+    refreshDoctorWorkspaceSummary()
+  } else {
+    patchWorkspaceSummary()
+    patchDoctorWorkspaceSummary()
+  }
+})
+
+onMounted(() => {
+  refreshProfile()
+  if (routeRoleByPath(route.path) === 'doctor') {
+    refreshDoctorWorkspaceSummary(true)
+  } else {
+    refreshWorkspaceSummary(true)
+  }
+})
 </script>
 
 <style scoped>
@@ -257,6 +452,19 @@ onMounted(() => refreshProfile())
   margin-bottom: 8px;
   border-radius: 16px;
   color: rgba(243, 251, 251, 0.82);
+}
+
+.menu-copy {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.menu-count-tag {
+  flex-shrink: 0;
 }
 
 .side-menu :deep(.el-menu-item:hover) {

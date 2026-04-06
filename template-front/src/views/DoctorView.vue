@@ -24,7 +24,8 @@ const menuItems = [
     index: '/doctor/consultation',
     title: '科室问诊列表',
     description: '查看当前科室下的问诊记录、分诊结果和反馈信息。',
-    icon: Document
+    icon: Document,
+    badgeKey: 'doctor-consultation'
   },
   {
     index: '/doctor/schedule',

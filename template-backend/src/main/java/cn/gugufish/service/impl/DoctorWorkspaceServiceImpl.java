@@ -135,14 +135,20 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setConsultationCount(0);
             vo.setTodayConsultationCount(0);
             vo.setRiskConsultationCount(0);
+            vo.setUnclaimedConsultationCount(0);
+            vo.setMyClaimedConsultationCount(0);
+            vo.setHighPriorityUnclaimedCount(0);
             vo.setUnreadConsultationCount(0);
             vo.setWaitingReplyConsultationCount(0);
             vo.setPendingFollowUpCount(0);
+            vo.setDueTodayFollowUpCount(0);
+            vo.setOverdueFollowUpCount(0);
             vo.setRecommendedConsultationCount(0);
             vo.setUpcomingScheduleCount(0);
             vo.setServiceTagCount(0);
             vo.setServiceTags(List.of());
             vo.setRecentConsultations(List.of());
+            vo.setUnclaimedConsultations(List.of());
             vo.setRecommendedConsultations(List.of());
             vo.setUnreadConsultations(List.of());
             vo.setWaitingReplyConsultations(List.of());
@@ -171,10 +177,23 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         int riskCount = (int) consultations.stream()
                 .filter(this::isRiskConsultation)
                 .count();
+        List<AdminConsultationRecordVO> unclaimedConsultations = buildUnclaimedConsultations(consultations);
+        int myClaimedConsultationCount = (int) consultations.stream()
+                .filter(item -> isClaimedByDoctor(item, doctor.getId()))
+                .count();
+        int highPriorityUnclaimedCount = (int) unclaimedConsultations.stream()
+                .filter(this::isRiskConsultation)
+                .count();
         List<AdminConsultationRecordVO> recommendedConsultations = buildRecommendedConsultations(consultations, doctor.getId());
         List<AdminConsultationRecordVO> unreadConsultations = buildUnreadConsultations(consultations, doctor.getId());
         List<AdminConsultationRecordVO> waitingReplyConsultations = buildWaitingReplyConsultations(consultations, doctor.getId());
         List<AdminConsultationRecordVO> pendingFollowUpConsultations = buildPendingFollowUpConsultations(consultations, doctor.getId());
+        int dueTodayFollowUpCount = (int) pendingFollowUpConsultations.stream()
+                .filter(this::isDueTodayFollowUp)
+                .count();
+        int overdueFollowUpCount = (int) pendingFollowUpConsultations.stream()
+                .filter(this::isOverdueFollowUp)
+                .count();
 
         DoctorWorkbenchVO vo = new DoctorWorkbenchVO();
         vo.setBound(1);
@@ -194,14 +213,20 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         vo.setConsultationCount(consultations.size());
         vo.setTodayConsultationCount(todayCount);
         vo.setRiskConsultationCount(riskCount);
+        vo.setUnclaimedConsultationCount(unclaimedConsultations.size());
+        vo.setMyClaimedConsultationCount(myClaimedConsultationCount);
+        vo.setHighPriorityUnclaimedCount(highPriorityUnclaimedCount);
         vo.setUnreadConsultationCount(unreadConsultations.size());
         vo.setWaitingReplyConsultationCount(waitingReplyConsultations.size());
         vo.setPendingFollowUpCount(pendingFollowUpConsultations.size());
+        vo.setDueTodayFollowUpCount(dueTodayFollowUpCount);
+        vo.setOverdueFollowUpCount(overdueFollowUpCount);
         vo.setRecommendedConsultationCount(recommendedConsultations.size());
         vo.setUpcomingScheduleCount(schedules.size());
         vo.setServiceTagCount(serviceTags.size());
         vo.setServiceTags(serviceTags);
         vo.setRecentConsultations(consultations.stream().limit(6).toList());
+        vo.setUnclaimedConsultations(unclaimedConsultations.stream().limit(5).toList());
         vo.setRecommendedConsultations(recommendedConsultations.stream().limit(5).toList());
         vo.setUnreadConsultations(unreadConsultations.stream().limit(5).toList());
         vo.setWaitingReplyConsultations(waitingReplyConsultations.stream().limit(5).toList());
@@ -234,15 +259,45 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                         .orderByDesc("is_final")
                         .orderByDesc("id"))
                 .forEach(item -> triageResultMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, ConsultationDoctorHandle> handleMap = new HashMap<>();
+        consultationDoctorHandleMapper.selectList(Wrappers.<ConsultationDoctorHandle>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> handleMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, ConsultationDoctorConclusion> conclusionMap = new HashMap<>();
+        consultationDoctorConclusionMapper.selectList(Wrappers.<ConsultationDoctorConclusion>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> conclusionMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, ConsultationDoctorFollowUp> latestFollowUpMap = new HashMap<>();
+        consultationDoctorFollowUpMapper.selectList(Wrappers.<ConsultationDoctorFollowUp>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .forEach(item -> latestFollowUpMap.putIfAbsent(item.getConsultationId(), item));
         Map<Integer, ConsultationMessageSummaryVO> messageSummaryMap = consultationMessageService.summarizeDoctorMessages(consultationIds);
 
         return records.stream()
                 .map(item -> item.asViewObject(AdminConsultationRecordVO.class, vo -> {
                     ConsultationDoctorAssignment assignment = assignmentMap.get(item.getId());
                     TriageResult triageResult = triageResultMap.get(item.getId());
+                    ConsultationDoctorHandle handle = handleMap.get(item.getId());
+                    ConsultationDoctorConclusion conclusion = conclusionMap.get(item.getId());
+                    ConsultationDoctorFollowUp latestFollowUp = latestFollowUpMap.get(item.getId());
                     if (assignment != null) {
                         vo.setDoctorAssignment(assignment.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorAssignmentVO.class));
                     }
+                    if (handle != null) {
+                        vo.setDoctorHandle(handle.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO.class));
+                    }
+                    if (conclusion != null) {
+                        vo.setDoctorConclusion(conclusion.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO.class));
+                    }
+                    vo.setDoctorFollowUps(latestFollowUp == null
+                            ? List.of()
+                            : List.of(latestFollowUp.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO.class)));
                     vo.setMessageSummary(messageSummaryMap.get(item.getId()));
                     vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                             assignment == null ? null : assignment.getDoctorId(),
@@ -752,6 +807,16 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 .toList();
     }
 
+    private List<AdminConsultationRecordVO> buildUnclaimedConsultations(List<AdminConsultationRecordVO> consultations) {
+        return consultations.stream()
+                .filter(this::isUnclaimedConsultation)
+                .sorted(Comparator
+                        .comparing(this::isRiskConsultation).reversed()
+                        .thenComparing(this::messageSortTime, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(AdminConsultationRecordVO::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
     private List<AdminConsultationRecordVO> buildUnreadConsultations(List<AdminConsultationRecordVO> consultations, Integer doctorId) {
         return consultations.stream()
                 .filter(item -> isActionableForDoctor(item, doctorId))
@@ -832,16 +897,27 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
     private boolean isActionableForDoctor(AdminConsultationRecordVO record, Integer doctorId) {
         if (record == null || doctorId == null) return false;
-        var assignment = record.getDoctorAssignment();
-        return assignment == null
-                || !"claimed".equals(assignment.getStatus())
-                || Objects.equals(assignment.getDoctorId(), doctorId);
+        return isUnclaimedConsultation(record) || isClaimedByDoctor(record, doctorId);
     }
 
     private boolean isRecommendedToDoctor(AdminConsultationRecordVO record, Integer doctorId) {
         if (record == null || doctorId == null || record.getSmartDispatch() == null) return false;
         return Objects.equals(record.getSmartDispatch().getSuggestedDoctorId(), doctorId)
                 && "waiting_accept".equals(record.getSmartDispatch().getStatus());
+    }
+
+    private boolean isUnclaimedConsultation(AdminConsultationRecordVO record) {
+        if (record == null) return false;
+        var assignment = record.getDoctorAssignment();
+        return assignment == null || !"claimed".equals(assignment.getStatus());
+    }
+
+    private boolean isClaimedByDoctor(AdminConsultationRecordVO record, Integer doctorId) {
+        if (record == null || doctorId == null) return false;
+        var assignment = record.getDoctorAssignment();
+        return assignment != null
+                && "claimed".equals(assignment.getStatus())
+                && Objects.equals(assignment.getDoctorId(), doctorId);
     }
 
     private boolean isWaitingReplyConsultation(AdminConsultationRecordVO record) {
@@ -887,6 +963,24 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             }
         }
         return record.getUpdateTime();
+    }
+
+    private boolean isDueTodayFollowUp(AdminConsultationRecordVO record) {
+        Date dueTime = followUpDueTime(record);
+        if (dueTime == null) return false;
+        return dueTime.toInstant()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+                .isEqual(LocalDate.now());
+    }
+
+    private boolean isOverdueFollowUp(AdminConsultationRecordVO record) {
+        Date dueTime = followUpDueTime(record);
+        if (dueTime == null) return false;
+        return dueTime.toInstant()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+                .isBefore(LocalDate.now());
     }
 
     private AdminConsultationRecordVO copyRecord(AdminConsultationRecordVO source) {

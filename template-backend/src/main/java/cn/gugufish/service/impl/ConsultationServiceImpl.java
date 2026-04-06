@@ -3,6 +3,9 @@ package cn.gugufish.service.impl;
 import cn.gugufish.entity.dto.BodyPartDict;
 import cn.gugufish.entity.dto.ConsultationCategory;
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
+import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
+import cn.gugufish.entity.dto.ConsultationDoctorFollowUp;
+import cn.gugufish.entity.dto.ConsultationDoctorHandle;
 import cn.gugufish.entity.dto.ConsultationDispatchConfig;
 import cn.gugufish.entity.dto.ConsultationIntakeField;
 import cn.gugufish.entity.dto.ConsultationIntakeTemplate;
@@ -38,6 +41,9 @@ import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordVO;
 import cn.gugufish.mapper.BodyPartDictMapper;
 import cn.gugufish.mapper.ConsultationCategoryMapper;
+import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
+import cn.gugufish.mapper.ConsultationDoctorFollowUpMapper;
+import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
 import cn.gugufish.mapper.ConsultationIntakeFieldMapper;
 import cn.gugufish.mapper.ConsultationIntakeTemplateMapper;
 import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
@@ -116,6 +122,9 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationIntakeTemplateMapper consultationIntakeTemplateMapper;
     @Resource ConsultationIntakeFieldMapper consultationIntakeFieldMapper;
     @Resource ConsultationDoctorAssignmentMapper consultationDoctorAssignmentMapper;
+    @Resource ConsultationDoctorHandleMapper consultationDoctorHandleMapper;
+    @Resource ConsultationDoctorConclusionMapper consultationDoctorConclusionMapper;
+    @Resource ConsultationDoctorFollowUpMapper consultationDoctorFollowUpMapper;
     @Resource ConsultationRecordMapper consultationRecordMapper;
     @Resource ConsultationRecordAnswerMapper consultationRecordAnswerMapper;
     @Resource DepartmentMapper departmentMapper;
@@ -247,12 +256,42 @@ public class ConsultationServiceImpl implements ConsultationService {
                         .orderByDesc("is_final")
                         .orderByDesc("id"))
                 .forEach(item -> triageResultMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, ConsultationDoctorHandle> handleMap = new HashMap<>();
+        consultationDoctorHandleMapper.selectList(Wrappers.<ConsultationDoctorHandle>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> handleMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, ConsultationDoctorConclusion> conclusionMap = new HashMap<>();
+        consultationDoctorConclusionMapper.selectList(Wrappers.<ConsultationDoctorConclusion>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> conclusionMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, ConsultationDoctorFollowUp> latestFollowUpMap = new HashMap<>();
+        consultationDoctorFollowUpMapper.selectList(Wrappers.<ConsultationDoctorFollowUp>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .forEach(item -> latestFollowUpMap.putIfAbsent(item.getConsultationId(), item));
 
         return records
                 .stream()
                 .map(item -> item.asViewObject(ConsultationRecordVO.class, vo -> {
                     TriageResult triageResult = triageResultMap.get(item.getId());
                     ConsultationDoctorAssignment assignment = assignmentMap.get(item.getId());
+                    ConsultationDoctorHandle handle = handleMap.get(item.getId());
+                    ConsultationDoctorConclusion conclusion = conclusionMap.get(item.getId());
+                    ConsultationDoctorFollowUp latestFollowUp = latestFollowUpMap.get(item.getId());
+                    if (handle != null) {
+                        vo.setDoctorHandle(handle.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO.class));
+                    }
+                    if (conclusion != null) {
+                        vo.setDoctorConclusion(conclusion.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO.class));
+                    }
+                    vo.setDoctorFollowUps(latestFollowUp == null
+                            ? List.of()
+                            : List.of(latestFollowUp.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO.class)));
                     vo.setMessageSummary(messageSummaryMap.get(item.getId()));
                     vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                             assignment == null ? null : assignment.getDoctorId(),

@@ -21,6 +21,123 @@
         <span>医生新回复</span>
         <strong>{{ unreadDoctorReplyCount }}</strong>
       </article>
+      <article class="stat-card">
+        <span>待医生处理</span>
+        <strong>{{ waitingDoctorHandleCount }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>待随访</span>
+        <strong>{{ pendingFollowUpCount }}</strong>
+      </article>
+    </section>
+
+    <section class="reminder-grid">
+      <article class="reminder-card">
+        <div class="reminder-head">
+          <div>
+            <span class="panel-kicker">Reminder</span>
+            <h3>医生新回复</h3>
+            <p>优先查看医生刚回复的问诊，避免错过进一步处理建议。</p>
+          </div>
+          <el-tag type="success" effect="light">{{ unreadDoctorReplyCount }}</el-tag>
+        </div>
+        <div v-if="unreadReplyRecords.length" class="reminder-list">
+          <button
+            v-for="item in unreadReplyRecords"
+            :key="`reply-${item.id}`"
+            type="button"
+            class="reminder-item"
+            @click="openRecordDetail(item)"
+          >
+            <div class="reminder-item-head">
+              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+              <span>{{ formatDate(getMessageSummary(item).latestTime) }}</span>
+            </div>
+            <p>{{ recordMessagePreview(item) }}</p>
+            <div class="reminder-item-meta">
+              <span>{{ item.categoryName || '未分类' }}</span>
+              <span>未读 {{ getMessageSummary(item).unreadCount }} 条</span>
+            </div>
+          </button>
+        </div>
+        <el-empty v-else description="当前没有新的医生回复" />
+        <div class="reminder-foot">
+          <el-button text @click="applyRecordQuickFilter({ progress: 'doctor_replied' })">只看医生新回复</el-button>
+        </div>
+      </article>
+
+      <article class="reminder-card">
+        <div class="reminder-head">
+          <div>
+            <span class="panel-kicker">Queue</span>
+            <h3>待医生处理</h3>
+            <p>这些问诊还在等待医生接手或继续处理，可随时补充更多症状与资料。</p>
+          </div>
+          <el-tag type="warning" effect="light">{{ waitingDoctorHandleCount }}</el-tag>
+        </div>
+        <div v-if="waitingDoctorRecords.length" class="reminder-list">
+          <button
+            v-for="item in waitingDoctorRecords"
+            :key="`waiting-${item.id}`"
+            type="button"
+            class="reminder-item"
+            @click="openRecordDetail(item)"
+          >
+            <div class="reminder-item-head">
+              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+              <span>{{ formatDate(item.createTime) }}</span>
+            </div>
+            <p>{{ recordProgressHint(item) }}</p>
+            <div class="reminder-item-meta">
+              <span>{{ item.categoryName || '未分类' }}</span>
+              <span>{{ smartDispatchStatusLabel(item.smartDispatch) }}</span>
+            </div>
+          </button>
+        </div>
+        <el-empty v-else description="当前没有待医生处理的问诊" />
+        <div class="reminder-foot">
+          <el-button text @click="applyRecordQuickFilter({ progress: 'waiting_doctor' })">只看待处理问诊</el-button>
+        </div>
+      </article>
+
+      <article class="reminder-card reminder-card-followup">
+        <div class="reminder-head">
+          <div>
+            <span class="panel-kicker">Follow-up</span>
+            <h3>待随访提醒</h3>
+            <p>及时查看需要继续跟进的问诊，尤其是今日到期和已逾期的随访。</p>
+          </div>
+          <div class="reminder-tags">
+            <el-tag type="primary" effect="light">{{ pendingFollowUpCount }}</el-tag>
+            <el-tag v-if="dueTodayFollowUpCount" type="warning" effect="light">今日 {{ dueTodayFollowUpCount }}</el-tag>
+            <el-tag v-if="overdueFollowUpCount" type="danger" effect="light">逾期 {{ overdueFollowUpCount }}</el-tag>
+          </div>
+        </div>
+        <div v-if="followUpReminderRecords.length" class="reminder-list">
+          <button
+            v-for="item in followUpReminderRecords"
+            :key="`followup-${item.id}`"
+            type="button"
+            :class="['reminder-item', followUpReminderItemClass(item)]"
+            @click="openRecordDetail(item)"
+          >
+            <div class="reminder-item-head">
+              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+              <span>{{ followUpLine(item) }}</span>
+            </div>
+            <p>{{ item?.doctorConclusion?.patientInstruction || item?.doctorHandle?.followUpPlan || '医生已建议继续关注恢复情况。' }}</p>
+            <div class="reminder-item-meta">
+              <span>{{ item.categoryName || '未分类' }}</span>
+              <span>{{ followUpTagLabel(item) }}</span>
+            </div>
+          </button>
+        </div>
+        <el-empty v-else description="当前没有待随访问诊" />
+        <div class="reminder-foot">
+          <el-button text @click="applyRecordQuickFilter({ followUp: 'pending' })">只看待随访</el-button>
+          <el-button v-if="overdueFollowUpCount" text type="danger" @click="applyRecordQuickFilter({ followUp: 'overdue' })">优先看逾期</el-button>
+        </div>
+      </article>
     </section>
 
     <section class="entry-layout">
@@ -249,7 +366,7 @@
       </div>
     </section>
 
-    <section class="history-card">
+    <section ref="historySectionRef" class="history-card">
       <div class="panel-head">
         <div>
           <span class="panel-kicker">History</span>
@@ -258,7 +375,30 @@
         <el-button @click="loadRecords">刷新记录</el-button>
       </div>
 
-      <el-table :data="records" v-loading="historyLoading" border>
+      <div class="history-toolbar">
+        <el-input v-model="recordKeyword" clearable placeholder="搜索标题、分类、就诊人或消息" style="width: 260px" />
+        <el-select v-model="recordStatusFilter" clearable placeholder="全部状态" style="width: 150px">
+          <el-option label="已提交" value="submitted" />
+          <el-option label="已分诊" value="triaged" />
+          <el-option label="处理中" value="processing" />
+          <el-option label="已完成" value="completed" />
+        </el-select>
+        <el-select v-model="recordProgressFilter" style="width: 170px">
+          <el-option label="全部进度" value="all" />
+          <el-option label="医生新回复" value="doctor_replied" />
+          <el-option label="待医生处理" value="waiting_doctor" />
+          <el-option label="医生处理中" value="doctor_processing" />
+          <el-option label="已完成" value="completed" />
+        </el-select>
+        <el-select v-model="recordFollowUpFilter" style="width: 170px">
+          <el-option label="全部随访" value="all" />
+          <el-option label="待随访" value="pending" />
+          <el-option label="今日到期" value="due_today" />
+          <el-option label="已逾期" value="overdue" />
+        </el-select>
+      </div>
+
+      <el-table :data="filteredRecords" v-loading="historyLoading" border :row-class-name="recordRowClassName">
         <el-table-column label="初步分诊" min-width="140" align="center">
           <template #default="{ row }">
             <span class="triage-badge" :style="triageBadgeStyle(row.triageLevelColor)">
@@ -291,6 +431,22 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="问诊进度" min-width="180">
+          <template #default="{ row }">
+            <div class="record-message-cell">
+              <el-tag :type="recordProgressTagType(row)" effect="light">{{ recordProgressLabel(row) }}</el-tag>
+              <span>{{ recordProgressHint(row) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="随访提醒" min-width="180">
+          <template #default="{ row }">
+            <div class="record-message-cell">
+              <el-tag :type="followUpTagType(row)" effect="light">{{ followUpTagLabel(row) }}</el-tag>
+              <span>{{ followUpLine(row) }}</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="healthSummary" label="健康摘要" min-width="220" show-overflow-tooltip />
         <el-table-column label="提交时间" min-width="170">
           <template #default="{ row }">
@@ -320,6 +476,33 @@
             <p><strong>标题：</strong>{{ detailRecord.title }}</p>
             <p><strong>主诉摘要：</strong>{{ detailRecord.chiefComplaint || '未自动提取' }}</p>
             <p><strong>健康摘要：</strong>{{ detailRecord.healthSummary || '未关联健康档案摘要' }}</p>
+          </div>
+
+          <el-alert
+            v-if="detailFollowUpReminder"
+            :title="detailFollowUpReminder"
+            :type="followUpReminderType(detailRecord)"
+            :closable="false"
+            class="conversation-alert"
+          />
+
+          <div class="result-panel timeline-panel">
+            <div class="doctor-recommend-head">
+              <strong>问诊进度时间线</strong>
+              <span>从提交、分诊、接诊到随访，帮助你快速了解当前处理阶段。</span>
+            </div>
+            <div class="timeline-list">
+              <article v-for="item in detailTimelineItems" :key="item.key" class="timeline-item">
+                <div class="timeline-dot" :class="`is-${item.tone}`"></div>
+                <div class="timeline-content">
+                  <div class="timeline-head">
+                    <strong>{{ item.title }}</strong>
+                    <span>{{ item.timeText }}</span>
+                  </div>
+                  <p>{{ item.description }}</p>
+                </div>
+              </article>
+            </div>
           </div>
 
           <div class="triage-panel">
@@ -851,13 +1034,14 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
 import { comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveTriageMessageInsight } from '@/triage/insight'
 
+const route = useRoute()
 const router = useRouter()
 const categories = ref([])
 const patients = ref([])
@@ -866,6 +1050,12 @@ const records = ref([])
 const template = ref(null)
 const activeCategoryId = ref(null)
 const selectedPatientId = ref(null)
+const historySectionRef = ref(null)
+const syncingRecordRoute = ref(false)
+const recordKeyword = ref('')
+const recordStatusFilter = ref('')
+const recordProgressFilter = ref('all')
+const recordFollowUpFilter = ref('all')
 const templateLoading = ref(false)
 const historyLoading = ref(false)
 const submitting = ref(false)
@@ -936,10 +1126,56 @@ const todayCount = computed(() => {
   return records.value.filter(item => new Date(item.createTime).toDateString() === today).length
 })
 const unreadDoctorReplyCount = computed(() => records.value.filter(recordHasUnreadDoctorReply).length)
+const waitingDoctorHandleCount = computed(() => records.value.filter(item => recordProgressStage(item) === 'waiting_doctor').length)
+const pendingFollowUpCount = computed(() => records.value.filter(item => ['pending', 'due_today', 'overdue'].includes(followUpState(item))).length)
+const dueTodayFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'due_today').length)
+const overdueFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'overdue').length)
+const unreadReplyRecords = computed(() => records.value
+  .filter(recordHasUnreadDoctorReply)
+  .slice()
+  .sort((left, right) => compareDateDesc(getMessageSummary(left).latestTime || left?.updateTime || left?.createTime, getMessageSummary(right).latestTime || right?.updateTime || right?.createTime))
+  .slice(0, 4))
+const waitingDoctorRecords = computed(() => records.value
+  .filter(item => recordProgressStage(item) === 'waiting_doctor')
+  .slice()
+  .sort((left, right) => compareDateDesc(left?.createTime, right?.createTime))
+  .slice(0, 4))
+const followUpReminderRecords = computed(() => records.value
+  .filter(item => ['pending', 'due_today', 'overdue'].includes(followUpState(item)))
+  .slice()
+  .sort(compareRecordOrder)
+  .slice(0, 4))
+const filteredRecords = computed(() => records.value
+  .filter(item => {
+    const search = recordKeyword.value.trim().toLowerCase()
+    const matchesKeyword = !search || [item.title, item.categoryName, item.patientName, item.chiefComplaint, recordMessagePreview(item), recordProgressLabel(item), followUpLine(item)]
+      .filter(Boolean)
+      .some(text => `${text}`.toLowerCase().includes(search))
+    const matchesStatus = !recordStatusFilter.value || item.status === recordStatusFilter.value
+    const matchesProgress = recordProgressFilter.value === 'all' || recordProgressStage(item) === recordProgressFilter.value
+    const matchesFollowUp = recordFollowUpFilter.value === 'all'
+      || (recordFollowUpFilter.value === 'pending' && ['pending', 'due_today', 'overdue'].includes(followUpState(item)))
+      || followUpState(item) === recordFollowUpFilter.value
+    return matchesKeyword && matchesStatus && matchesProgress && matchesFollowUp
+  })
+  .slice()
+  .sort(compareRecordOrder))
 const detailMessageSummary = computed(() => getMessageSummary(detailRecord.value))
+const detailFollowUpReminder = computed(() => followUpReminderText(detailRecord.value))
+const detailTimelineItems = computed(() => buildTimelineItems(detailRecord.value))
 
 watch(activeCategoryId, (value) => {
   if (value) loadTemplate(value)
+})
+
+watch(() => route.query, () => {
+  syncingRecordRoute.value = true
+  applyRouteRecordFilters()
+  nextTick(() => { syncingRecordRoute.value = false })
+}, { immediate: true })
+
+watch(() => route.query.id, () => {
+  autoOpenRecordDetail()
 })
 
 watch(() => feedbackForm.manualCorrectDepartmentId, (value) => {
@@ -950,12 +1186,76 @@ watch(() => feedbackForm.manualCorrectDepartmentId, (value) => {
   }
 })
 
+watch([recordKeyword, recordStatusFilter, recordProgressFilter, recordFollowUpFilter], () => {
+  if (syncingRecordRoute.value) return
+  const routeState = normalizeRecordRouteQuery(route.query)
+  const nextState = normalizeRecordRouteQuery(buildRecordRouteQuery())
+  if (sameRecordRouteQuery(routeState, nextState)) return
+  router.replace({ path: route.path, query: buildRecordRouteQuery() })
+})
+
 function loadData() {
   loadPatients()
   loadHistories()
   loadCategories()
   loadRecords()
   loadFeedbackOptions()
+}
+
+function normalizeRecordRouteQuery(query = {}) {
+  const keyword = typeof query.keyword === 'string' ? query.keyword.trim() : ''
+  const status = typeof query.status === 'string' && ['submitted', 'triaged', 'processing', 'completed'].includes(query.status)
+    ? query.status
+    : ''
+  const progress = typeof query.progress === 'string' && ['doctor_replied', 'waiting_doctor', 'doctor_processing', 'completed'].includes(query.progress)
+    ? query.progress
+    : 'all'
+  const followUp = typeof query.followUp === 'string' && ['pending', 'due_today', 'overdue'].includes(query.followUp)
+    ? query.followUp
+    : 'all'
+  return { keyword, status, progress, followUp }
+}
+
+function buildRecordRouteQuery({ includeId = true } = {}) {
+  const query = { ...route.query }
+  const keyword = recordKeyword.value.trim()
+  delete query.keyword
+  delete query.status
+  delete query.progress
+  delete query.followUp
+  if (!includeId) delete query.id
+  if (keyword) query.keyword = keyword
+  if (recordStatusFilter.value) query.status = recordStatusFilter.value
+  if (recordProgressFilter.value !== 'all') query.progress = recordProgressFilter.value
+  if (recordFollowUpFilter.value !== 'all') query.followUp = recordFollowUpFilter.value
+  return query
+}
+
+function applyRouteRecordFilters() {
+  const query = normalizeRecordRouteQuery(route.query)
+  recordKeyword.value = query.keyword
+  recordStatusFilter.value = query.status
+  recordProgressFilter.value = query.progress
+  recordFollowUpFilter.value = query.followUp
+}
+
+function sameRecordRouteQuery(left, right) {
+  return left.keyword === right.keyword
+    && left.status === right.status
+    && left.progress === right.progress
+    && left.followUp === right.followUp
+}
+
+function applyRecordQuickFilter({ status = '', progress = 'all', followUp = 'all', keyword = '' } = {}) {
+  recordKeyword.value = keyword
+  recordStatusFilter.value = status
+  recordProgressFilter.value = progress
+  recordFollowUpFilter.value = followUp
+  nextTick(() => focusHistorySection())
+}
+
+function focusHistorySection() {
+  historySectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function loadPatients() {
@@ -1006,6 +1306,7 @@ function loadRecords(callback) {
     }))
     historyLoading.value = false
     callback?.(records.value)
+    autoOpenRecordDetail()
   }, () => {
     historyLoading.value = false
   })
@@ -1303,7 +1604,23 @@ function shouldSubmitValue(value) {
   return value !== null && value !== undefined && value !== '' && value !== '[]'
 }
 
-function openRecordDetail(row) {
+function autoOpenRecordDetail() {
+  const id = Number(route.query.id || 0)
+  if (!id) return
+  const record = records.value.find(item => item.id === id)
+  if (!record) return
+  if (detailVisible.value && (detailRecord.value?.id === id || detailLoading.value)) return
+  openRecordDetail(record, { syncRoute: false })
+}
+
+function openRecordDetail(row, options = {}) {
+  const { syncRoute = true } = options
+  if (syncRoute && Number(route.query.id || 0) !== row.id) {
+    router.replace({
+      path: route.path,
+      query: { ...buildRecordRouteQuery({ includeId: false }), id: row.id }
+    })
+  }
   detailVisible.value = true
   detailLoading.value = true
   detailRecord.value = null
@@ -1319,12 +1636,16 @@ function openRecordDetail(row) {
       smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
       messageSummary: normalizeMessageSummary(data?.messageSummary)
     } : null
+    syncRecordSnapshot(detailRecord.value)
     applyFeedbackForm(data?.triageFeedback)
     loadConsultationMessages(row.id)
     detailLoading.value = false
   }, (message) => {
     detailLoading.value = false
     detailVisible.value = false
+    if (route.query.id) {
+      router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false }) })
+    }
     ElMessage.warning(message || '问诊记录详情加载失败')
   })
 }
@@ -1343,6 +1664,7 @@ function refreshRecordDetail(recordId = detailRecord.value?.id, options = {}) {
       smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
       messageSummary: normalizeMessageSummary(data?.messageSummary)
     } : null
+    syncRecordSnapshot(detailRecord.value)
     applyFeedbackForm(data?.triageFeedback)
     if (reloadConversation) loadConsultationMessages(recordId)
   }, (message) => {
@@ -1427,6 +1749,176 @@ function recordMessagePreview(record) {
   return getMessageSummary(record).latestMessagePreview || '暂未产生沟通消息'
 }
 
+function recordProgressStage(record) {
+  if (!record) return 'waiting_doctor'
+  if (recordHasUnreadDoctorReply(record)) return 'doctor_replied'
+  if (record.status === 'completed' || record?.doctorHandle?.status === 'completed') return 'completed'
+  if (record?.doctorHandle?.doctorName || record.status === 'processing') return 'doctor_processing'
+  return 'waiting_doctor'
+}
+
+function recordProgressLabel(record) {
+  return ({
+    doctor_replied: '医生已回复',
+    waiting_doctor: '待医生处理',
+    doctor_processing: '医生处理中',
+    completed: '已完成'
+  })[recordProgressStage(record)] || '待医生处理'
+}
+
+function recordProgressTagType(record) {
+  return ({
+    doctor_replied: 'success',
+    waiting_doctor: 'warning',
+    doctor_processing: 'primary',
+    completed: 'info'
+  })[recordProgressStage(record)] || 'info'
+}
+
+function recordProgressHint(record) {
+  const stage = recordProgressStage(record)
+  if (stage === 'doctor_replied') return recordMessagePreview(record)
+  if (stage === 'doctor_processing') return record?.doctorHandle?.doctorName ? `当前由 ${record.doctorHandle.doctorName} 跟进处理` : '医生已接手，正在整理处理意见'
+  if (stage === 'completed') return followUpLine(record)
+  const dispatch = getSmartDispatch(record)
+  return dispatch.hint || '已提交问诊，等待医生进一步处理'
+}
+
+function latestFollowUp(record) {
+  return Array.isArray(record?.doctorFollowUps) && record.doctorFollowUps.length
+    ? record.doctorFollowUps[0]
+    : null
+}
+
+function followUpDueDate(record) {
+  const latest = latestFollowUp(record)
+  if (latest?.nextFollowUpDate) return latest.nextFollowUpDate
+  if (record?.doctorConclusion?.needFollowUp !== 1) return null
+  const followUpWithinDays = Number(record?.doctorConclusion?.followUpWithinDays || 0)
+  if (!Number.isFinite(followUpWithinDays) || followUpWithinDays <= 0) return null
+  const baseTime = record?.doctorConclusion?.updateTime || record?.doctorHandle?.completeTime || record?.updateTime
+  if (!baseTime) return null
+  const dueDate = new Date(baseTime)
+  dueDate.setHours(0, 0, 0, 0)
+  dueDate.setDate(dueDate.getDate() + followUpWithinDays)
+  return dueDate
+}
+
+function followUpState(record) {
+  if (!record?.doctorConclusion || record.doctorConclusion.needFollowUp !== 1) return 'none'
+  if (latestFollowUp(record)?.needRevisit === 0) return 'done'
+  const dueValue = followUpDueDate(record)
+  if (!dueValue) return 'pending'
+  const dueDate = new Date(dueValue)
+  dueDate.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (dueDate.getTime() < today.getTime()) return 'overdue'
+  if (dueDate.getTime() === today.getTime()) return 'due_today'
+  return 'pending'
+}
+
+function followUpTagLabel(record) {
+  return ({
+    overdue: '已逾期',
+    due_today: '今日到期',
+    pending: '待随访',
+    done: '本轮已完成',
+    none: '无需随访'
+  })[followUpState(record)] || '无需随访'
+}
+
+function followUpTagType(record) {
+  return ({
+    overdue: 'danger',
+    due_today: 'warning',
+    pending: 'primary',
+    done: 'success',
+    none: 'info'
+  })[followUpState(record)] || 'info'
+}
+
+function followUpLine(record) {
+  const latest = latestFollowUp(record)
+  const dueValue = followUpDueDate(record)
+  const state = followUpState(record)
+  if (state === 'overdue') return `应于 ${formatDate(dueValue, true)} 前完成随访`
+  if (state === 'due_today') return '建议今天完成本轮随访'
+  if (state === 'pending') return dueValue ? `计划于 ${formatDate(dueValue, true)} 跟进` : '医生已建议继续随访'
+  if (state === 'done') return latest?.createTime ? `最近随访 ${formatDate(latest.createTime)}` : '当前轮次已完成'
+  return '当前暂无随访安排'
+}
+
+function followUpReminderText(record) {
+  const state = followUpState(record)
+  if (state === 'overdue') return `当前问诊的随访计划已逾期，建议尽快留意医生回访或主动补充恢复情况。计划时间：${formatDate(followUpDueDate(record), true)}`
+  if (state === 'due_today') return '当前问诊的随访计划今天到期，如症状仍有变化，建议今天补充最新情况。'
+  if (state === 'pending') return `当前问诊仍处于待随访状态${followUpDueDate(record) ? `，计划时间：${formatDate(followUpDueDate(record), true)}` : ''}`
+  return ''
+}
+
+function followUpReminderType(record) {
+  const state = followUpState(record)
+  if (state === 'overdue') return 'error'
+  if (state === 'due_today') return 'warning'
+  return 'info'
+}
+
+function compareRecordOrder(left, right) {
+  const followUpDiff = compareFollowUpPriority(left, right)
+  if (followUpDiff !== 0) return followUpDiff
+  if (recordHasUnreadDoctorReply(left) !== recordHasUnreadDoctorReply(right)) return recordHasUnreadDoctorReply(left) ? -1 : 1
+  return compareDateDesc(left?.createTime, right?.createTime)
+}
+
+function compareFollowUpPriority(left, right) {
+  const priorityMap = { overdue: 0, due_today: 1, pending: 2, done: 3, none: 4 }
+  const stateDiff = compareNumber(priorityMap[followUpState(left)] ?? 9, priorityMap[followUpState(right)] ?? 9)
+  if (stateDiff !== 0) return stateDiff
+  const dueDiff = compareDateAsc(followUpDueDate(left), followUpDueDate(right))
+  if (dueDiff !== 0) return dueDiff
+  return 0
+}
+
+function compareDateAsc(left, right) {
+  const leftTime = toTimestamp(left)
+  const rightTime = toTimestamp(right)
+  if (leftTime === rightTime) return 0
+  if (leftTime === null) return 1
+  if (rightTime === null) return -1
+  return compareNumber(leftTime, rightTime)
+}
+
+function compareDateDesc(left, right) {
+  return compareDateAsc(right, left)
+}
+
+function compareNumber(left, right) {
+  if (left === right) return 0
+  return left < right ? -1 : 1
+}
+
+function toTimestamp(value) {
+  if (!value) return null
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? null : time
+}
+
+function recordRowClassName({ row }) {
+  if (recordHasUnreadDoctorReply(row)) return 'record-row-unread'
+  const state = followUpState(row)
+  if (state === 'overdue') return 'record-row-overdue'
+  if (state === 'due_today') return 'record-row-due-today'
+  return ''
+}
+
+function followUpReminderItemClass(record) {
+  const state = followUpState(record)
+  if (state === 'overdue') return 'is-overdue'
+  if (state === 'due_today') return 'is-due-today'
+  return ''
+}
+
 function getSmartDispatch(record) {
   return normalizeSmartDispatch(record?.smartDispatch)
 }
@@ -1484,6 +1976,25 @@ function syncRecordMessageSummary(recordId, summary) {
       messageSummary: nextSummary
     }
   }
+}
+
+function syncRecordSnapshot(record) {
+  if (!record?.id) return
+  records.value = records.value.map(item => item.id === record.id
+    ? {
+        ...item,
+        status: record.status,
+        triageLevelName: record.triageLevelName,
+        triageLevelColor: record.triageLevelColor,
+        triageActionType: record.triageActionType,
+        departmentName: record.departmentName,
+        doctorHandle: record.doctorHandle,
+        doctorConclusion: record.doctorConclusion,
+        doctorFollowUps: record.doctorFollowUps,
+        smartDispatch: normalizeSmartDispatch(record.smartDispatch),
+        messageSummary: normalizeMessageSummary(record.messageSummary)
+      }
+    : item)
 }
 
 function resetMessageDraft() {
@@ -1594,6 +2105,7 @@ function submitFeedback() {
         smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
         messageSummary: normalizeMessageSummary(data?.messageSummary)
       } : null
+      syncRecordSnapshot(detailRecord.value)
       applyFeedbackForm(data?.triageFeedback)
     })
   }, (message) => {
@@ -1656,6 +2168,80 @@ function doctorRecommendationScoreText(item) {
   return Number.isFinite(number) && number > 0 ? `优先分 ${number}` : ''
 }
 
+function buildTimelineItems(record) {
+  if (!record) return []
+  const items = []
+  items.push(createTimelineItem('submitted', '已提交问诊', record.createTime, `已提交 ${record.categoryName || '当前'} 问诊，等待系统分诊和医生处理。`, 'primary'))
+  if (record.triageResult?.createTime || record.triageSession?.createTime || record.triageLevelName) {
+    items.push(createTimelineItem(
+      'triage',
+      '已完成导诊',
+      record.triageResult?.createTime || record.triageSession?.createTime || record.updateTime,
+      `${record.triageLevelName || record.triageResult?.triageLevelName || '系统已生成导诊结论'}，${triageActionLabel(record.triageActionType)}`,
+      'info'
+    ))
+  }
+  if (record.smartDispatch?.status) {
+    items.push(createTimelineItem(
+      'dispatch',
+      '智能分配中',
+      record.triageResult?.updateTime || record.updateTime,
+      smartDispatchHintText(record.smartDispatch),
+      record.smartDispatch.status.includes('claimed') ? 'success' : 'info'
+    ))
+  }
+  if (record.doctorHandle?.receiveTime || record.doctorHandle?.doctorName) {
+    items.push(createTimelineItem(
+      'doctor_receive',
+      '医生已接手',
+      record.doctorHandle.receiveTime || record.doctorHandle.updateTime,
+      record.doctorHandle.doctorName ? `${record.doctorHandle.doctorName} 已开始跟进处理。` : '医生已接手当前问诊。',
+      'success'
+    ))
+  }
+  if (detailMessageSummary.value.totalCount > 0) {
+    items.push(createTimelineItem(
+      'conversation',
+      '医患沟通更新',
+      detailMessageSummary.value.latestTime,
+      detailMessageSummary.value.unreadCount > 0
+        ? `医生有 ${detailMessageSummary.value.unreadCount} 条新回复，建议及时查看。`
+        : recordMessageStatus(record),
+      detailMessageSummary.value.unreadCount > 0 ? 'warning' : 'info'
+    ))
+  }
+  if (record.doctorHandle?.completeTime || record.doctorConclusion) {
+    items.push(createTimelineItem(
+      'doctor_complete',
+      '医生处理完成',
+      record.doctorHandle?.completeTime || record.doctorConclusion?.updateTime,
+      record.doctorHandle?.summary || doctorFollowUpText(record.doctorConclusion) || '医生已完成本轮处理。',
+      'success'
+    ))
+  }
+  if (followUpState(record) !== 'none') {
+    items.push(createTimelineItem(
+      'follow_up',
+      followUpTagLabel(record),
+      latestFollowUp(record)?.createTime || followUpDueDate(record) || record.doctorConclusion?.updateTime,
+      followUpReminderText(record) || followUpLine(record),
+      followUpState(record) === 'overdue' ? 'danger' : followUpState(record) === 'due_today' ? 'warning' : 'info'
+    ))
+  }
+  return items.filter(item => item.time || item.description)
+}
+
+function createTimelineItem(key, title, time, description, tone = 'info') {
+  return {
+    key,
+    title,
+    time,
+    tone,
+    description,
+    timeText: formatDate(time)
+  }
+}
+
 function formatConfidence(value) {
   const number = Number(value)
   if (Number.isNaN(number) || number <= 0) return '-'
@@ -1677,15 +2263,21 @@ function abbreviateText(value, maxLength = 80) {
   return `${text.slice(0, Math.max(maxLength - 3, 0))}...`
 }
 
-function formatDate(value) {
+function formatDate(value, onlyDate = false) {
   if (!value) return '-'
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(new Date(value))
+  return new Intl.DateTimeFormat('zh-CN', onlyDate
+    ? {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }
+    : {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(new Date(value))
 }
 
 watch(detailVisible, (value) => {
@@ -1697,6 +2289,9 @@ watch(detailVisible, (value) => {
     messageSending.value = false
     resetTriageAiDraft()
     resetMessageDraft()
+    if (route.query.id) {
+      router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false }) })
+    }
   }
 })
 
@@ -1730,6 +2325,110 @@ onMounted(() => loadData())
 
 .stat-card {
   padding: 22px 24px;
+}
+
+.reminder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.reminder-card {
+  padding: 22px;
+  border: 1px solid var(--app-border);
+  border-radius: 28px;
+  background: var(--app-panel);
+  box-shadow: var(--app-shadow);
+}
+
+.reminder-card.reminder-card-followup {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.06), rgba(255, 255, 255, 0.96));
+}
+
+.reminder-head,
+.reminder-item-head,
+.reminder-item-meta,
+.reminder-foot,
+.reminder-tags {
+  display: flex;
+  gap: 12px;
+}
+
+.reminder-head,
+.reminder-item-head,
+.reminder-item-meta {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.reminder-head {
+  margin-bottom: 14px;
+}
+
+.reminder-head h3 {
+  margin: 6px 0 0;
+}
+
+.reminder-head p,
+.reminder-item p,
+.reminder-item-head span,
+.reminder-item-meta span {
+  color: var(--app-muted);
+}
+
+.reminder-head p,
+.reminder-item p {
+  margin: 8px 0 0;
+  line-height: 1.7;
+}
+
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reminder-item {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(17, 70, 77, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.reminder-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(15, 102, 101, 0.26);
+  box-shadow: 0 12px 24px rgba(19, 73, 80, 0.08);
+}
+
+.reminder-item.is-overdue {
+  border-color: rgba(214, 95, 80, 0.24);
+  background: linear-gradient(180deg, rgba(214, 95, 80, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.reminder-item.is-due-today {
+  border-color: rgba(210, 155, 47, 0.24);
+  background: linear-gradient(180deg, rgba(210, 155, 47, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.reminder-item strong {
+  color: #31474d;
+}
+
+.reminder-item-meta {
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.reminder-foot,
+.reminder-tags {
+  margin-top: 14px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .stat-card span,
@@ -1780,6 +2479,23 @@ onMounted(() => loadData())
 .panel-head p {
   margin: 6px 0 0;
   color: var(--app-muted);
+}
+
+.history-toolbar,
+.timeline-head {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.history-toolbar {
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.timeline-head {
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .compact {
@@ -1936,6 +2652,85 @@ onMounted(() => loadData())
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.timeline-panel {
+  margin-bottom: 18px;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.timeline-dot {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  margin: 6px 0 0 4px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.3);
+}
+
+.timeline-dot::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  width: 2px;
+  height: calc(100% + 16px);
+  transform: translateX(-50%);
+  background: rgba(19, 73, 80, 0.1);
+}
+
+.timeline-item:last-child .timeline-dot::after {
+  display: none;
+}
+
+.timeline-dot.is-primary,
+.timeline-dot.is-info {
+  background: rgba(15, 102, 101, 0.32);
+}
+
+.timeline-dot.is-success {
+  background: rgba(77, 168, 132, 0.36);
+}
+
+.timeline-dot.is-warning {
+  background: rgba(210, 155, 47, 0.36);
+}
+
+.timeline-dot.is-danger {
+  background: rgba(214, 95, 80, 0.42);
+}
+
+.timeline-content {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.timeline-content strong {
+  display: block;
+}
+
+.timeline-content span,
+.timeline-content p {
+  color: var(--app-muted);
+}
+
+.timeline-content p {
+  margin: 8px 0 0;
+  line-height: 1.7;
 }
 
 .triage-panel,
@@ -2435,8 +3230,21 @@ onMounted(() => loadData())
   line-height: 1.8;
 }
 
+:deep(.el-table .record-row-unread td.el-table__cell) {
+  background: rgba(77, 168, 132, 0.08);
+}
+
+:deep(.el-table .record-row-overdue td.el-table__cell) {
+  background: rgba(214, 95, 80, 0.09);
+}
+
+:deep(.el-table .record-row-due-today td.el-table__cell) {
+  background: rgba(210, 155, 47, 0.09);
+}
+
 @media (max-width: 1180px) {
   .stat-grid,
+  .reminder-grid,
   .entry-layout,
   .detail-meta,
   .triage-grid,
@@ -2450,6 +3258,13 @@ onMounted(() => loadData())
 @media (max-width: 760px) {
   .panel-head,
   .patient-top,
+  .reminder-head,
+  .reminder-item-head,
+  .reminder-item-meta,
+  .reminder-foot,
+  .reminder-tags,
+  .history-toolbar,
+  .timeline-head,
   .doctor-recommend-head,
   .doctor-top,
   .session-message-head,

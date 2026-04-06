@@ -34,9 +34,17 @@
             <span>今日新增问诊</span>
             <strong>{{ summary.todayConsultationCount || 0 }}</strong>
           </article>
-          <article class="stat-card">
+          <article class="stat-card stat-card-danger">
             <span>高优先级问诊</span>
             <strong>{{ summary.riskConsultationCount || 0 }}</strong>
+          </article>
+          <article class="stat-card stat-card-accent">
+            <span>待认领问诊</span>
+            <strong>{{ summary.unclaimedConsultationCount || 0 }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>我认领的</span>
+            <strong>{{ summary.myClaimedConsultationCount || 0 }}</strong>
           </article>
           <article class="stat-card">
             <span>患者新消息</span>
@@ -49,6 +57,14 @@
           <article class="stat-card">
             <span>待随访</span>
             <strong>{{ summary.pendingFollowUpCount || 0 }}</strong>
+          </article>
+          <article class="stat-card stat-card-warning">
+            <span>今日到期随访</span>
+            <strong>{{ summary.dueTodayFollowUpCount || 0 }}</strong>
+          </article>
+          <article class="stat-card stat-card-danger">
+            <span>已逾期随访</span>
+            <strong>{{ summary.overdueFollowUpCount || 0 }}</strong>
           </article>
           <article class="stat-card">
             <span>系统推荐给我</span>
@@ -65,19 +81,66 @@
         <div class="panel-head">
           <div>
             <h3>待办看板</h3>
-            <p>把患者新消息、待回复和待随访集中到一个入口，便于医生快速切入处理。</p>
+            <p>把“先认领，再处理，再随访”的关键入口集中在首页，方便连续处理医生侧全流程。</p>
           </div>
           <el-button text @click="openConsultationList()">进入问诊列表</el-button>
         </div>
 
         <div class="todo-grid">
+          <article class="todo-card todo-card-claim">
+            <div class="todo-card-head">
+              <div>
+                <strong>待认领问诊</strong>
+                <p>先处理尚未认领的问诊，尤其优先接手高优先级和系统判定风险更高的记录。</p>
+              </div>
+              <div class="todo-card-tags">
+                <el-tag type="primary" effect="light">{{ summary.unclaimedConsultationCount || 0 }}</el-tag>
+                <el-tag v-if="summary.highPriorityUnclaimedCount" type="danger" effect="light">
+                  高优先级 {{ summary.highPriorityUnclaimedCount }}
+                </el-tag>
+              </div>
+            </div>
+            <div v-if="summary.unclaimedConsultations?.length" class="todo-list">
+              <button
+                v-for="item in summary.unclaimedConsultations"
+                :key="`claim-${item.id}`"
+                type="button"
+                :class="['todo-item', claimTodoItemClass(item)]"
+                @click="goToConsultation(item.id, claimRecordQuery(item))"
+              >
+                <div class="todo-item-head">
+                  <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+                  <span>{{ formatDate(item.messageSummary?.latestTime || item.createTime) }}</span>
+                </div>
+                <p>{{ item.smartDispatch?.hint || item.chiefComplaint || '当前问诊尚未认领，可先接手后继续处理。' }}</p>
+                <div class="todo-item-meta">
+                  <span>{{ item.categoryName || '未分类' }}</span>
+                  <span>{{ item.triageLevelName || triageActionLabel(item.triageActionType) }}</span>
+                  <span>{{ claimPriorityText(item) }}</span>
+                </div>
+              </button>
+            </div>
+            <el-empty v-else description="当前没有待认领的问诊" />
+            <div class="todo-foot">
+              <el-button text @click="openConsultationList({ ownerFilter: 'unclaimed' })">查看全部待认领</el-button>
+              <el-button
+                v-if="summary.highPriorityUnclaimedCount"
+                text
+                type="danger"
+                @click="openConsultationList({ ownerFilter: 'unclaimed', riskFilter: 'high_priority' })"
+              >
+                优先处理高优先级
+              </el-button>
+            </div>
+          </article>
+
           <article class="todo-card">
             <div class="todo-card-head">
               <div>
                 <strong>系统推荐给我</strong>
-                <p>系统根据当前分诊结果、科室和排班优先建议由你先接手。</p>
+                <p>系统结合当前分诊结果、科室和排班情况，优先建议由你先接手处理。</p>
               </div>
-              <el-tag type="primary" effect="light">{{ summary.recommendedConsultationCount || 0 }}</el-tag>
+              <el-tag type="success" effect="light">{{ summary.recommendedConsultationCount || 0 }}</el-tag>
             </div>
             <div v-if="summary.recommendedConsultations?.length" class="todo-list">
               <button
@@ -85,7 +148,7 @@
                 :key="`recommended-${item.id}`"
                 type="button"
                 class="todo-item"
-                @click="goToConsultation(item.id)"
+                @click="goToConsultation(item.id, { dispatchFilter: 'recommended_to_me' })"
               >
                 <div class="todo-item-head">
                   <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -98,7 +161,7 @@
                 </div>
               </button>
             </div>
-            <el-empty v-else description="当前没有系统优先推荐给你的问诊" />
+            <el-empty v-else description="当前没有系统推荐给你的问诊" />
             <div class="todo-foot">
               <el-button text @click="openConsultationList({ dispatchFilter: 'recommended_to_me' })">查看全部推荐问诊</el-button>
             </div>
@@ -108,7 +171,7 @@
             <div class="todo-card-head">
               <div>
                 <strong>患者新消息</strong>
-                <p>患者刚补充了病情变化、检查结果或恢复情况。</p>
+                <p>患者刚补充了病情变化、检查结果或恢复情况，适合尽快回看。</p>
               </div>
               <el-tag type="danger" effect="light">{{ summary.unreadConsultationCount || 0 }}</el-tag>
             </div>
@@ -118,7 +181,7 @@
                 :key="`unread-${item.id}`"
                 type="button"
                 class="todo-item"
-                @click="goToConsultation(item.id)"
+                @click="goToConsultation(item.id, { messageFilter: 'unread' })"
               >
                 <div class="todo-item-head">
                   <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -141,7 +204,7 @@
             <div class="todo-card-head">
               <div>
                 <strong>待医生回复</strong>
-                <p>最后一条消息来自患者，建议尽快继续回复或接手处理。</p>
+                <p>最后一条消息来自患者，建议尽快继续回复或接手处理，避免链路中断。</p>
               </div>
               <el-tag type="warning" effect="light">{{ summary.waitingReplyConsultationCount || 0 }}</el-tag>
             </div>
@@ -151,7 +214,7 @@
                 :key="`reply-${item.id}`"
                 type="button"
                 class="todo-item"
-                @click="goToConsultation(item.id)"
+                @click="goToConsultation(item.id, { messageFilter: 'waiting_reply' })"
               >
                 <div class="todo-item-head">
                   <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -174,17 +237,21 @@
             <div class="todo-card-head">
               <div>
                 <strong>待随访</strong>
-                <p>已经完成接诊，但仍需要继续跟进恢复情况或安排再次随访。</p>
+                <p>已经完成接诊，但仍需要继续跟进恢复情况或安排下一轮随访。</p>
               </div>
-              <el-tag type="success" effect="light">{{ summary.pendingFollowUpCount || 0 }}</el-tag>
+              <div class="todo-card-tags">
+                <el-tag type="success" effect="light">{{ summary.pendingFollowUpCount || 0 }}</el-tag>
+                <el-tag v-if="summary.dueTodayFollowUpCount" type="warning" effect="light">今日 {{ summary.dueTodayFollowUpCount }}</el-tag>
+                <el-tag v-if="summary.overdueFollowUpCount" type="danger" effect="light">逾期 {{ summary.overdueFollowUpCount }}</el-tag>
+              </div>
             </div>
             <div v-if="summary.pendingFollowUpConsultations?.length" class="todo-list">
               <button
                 v-for="item in summary.pendingFollowUpConsultations"
                 :key="`followup-${item.id}`"
                 type="button"
-                class="todo-item"
-                @click="goToConsultation(item.id)"
+                :class="['todo-item', followUpTodoItemClass(item)]"
+                @click="goToConsultation(item.id, { followUpFilter: 'pending', sortMode: 'follow_up_due' })"
               >
                 <div class="todo-item-head">
                   <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -199,7 +266,15 @@
             </div>
             <el-empty v-else description="当前没有待随访问诊" />
             <div class="todo-foot">
-              <el-button text @click="openConsultationList({ status: 'completed' })">查看全部已完成问诊</el-button>
+              <el-button text @click="openConsultationList({ followUpFilter: 'pending', sortMode: 'follow_up_due' })">查看全部待随访</el-button>
+              <el-button
+                v-if="summary.overdueFollowUpCount"
+                text
+                type="danger"
+                @click="openConsultationList({ followUpFilter: 'overdue', sortMode: 'follow_up_due' })"
+              >
+                优先处理逾期
+              </el-button>
             </div>
           </article>
         </div>
@@ -223,7 +298,7 @@
           <div class="panel-head">
             <div>
               <h3>近期排班</h3>
-              <p>先展示未来排班，方便医生确认接诊时段和容量安排。</p>
+              <p>优先展示未来排班，方便医生确认接诊时段和容量安排。</p>
             </div>
             <el-button text @click="router.push('/doctor/schedule')">查看全部</el-button>
           </div>
@@ -231,7 +306,7 @@
             <div v-for="item in summary.upcomingSchedules" :key="item.id" class="schedule-item">
               <div>
                 <strong>{{ formatDate(item.scheduleDate, true) }}</strong>
-                <span>{{ timePeriodLabel(item.timePeriod) }} · {{ visitTypeLabel(item.visitType) }}</span>
+                <span>{{ timePeriodLabel(item.timePeriod) }} / {{ visitTypeLabel(item.visitType) }}</span>
               </div>
               <div class="schedule-meta">
                 <span>{{ remainingCapacity(item) }} / {{ item.maxCapacity }} 剩余</span>
@@ -249,12 +324,12 @@
         <div class="panel-head">
           <div>
             <h3>最近问诊</h3>
-            <p>这里按科室展示近期问诊记录，方便医生快速进入查看详情。</p>
+            <p>这里按科室展示最近问诊记录，方便医生快速回到详情继续处理。</p>
           </div>
           <el-button text @click="router.push('/doctor/consultation')">进入问诊列表</el-button>
         </div>
 
-          <el-table :data="summary.recentConsultations || []" border>
+        <el-table :data="summary.recentConsultations || []" border>
           <el-table-column prop="patientName" label="就诊人" min-width="100" />
           <el-table-column prop="categoryName" label="问诊分类" min-width="120" />
           <el-table-column prop="chiefComplaint" label="主诉" min-width="220" show-overflow-tooltip />
@@ -297,20 +372,22 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, reactive } from 'vue'
+import { computed, inject, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, resolveImagePath } from '@/net'
 import { smartDispatchHintText, smartDispatchStatusLabel } from '@/triage/dispatch'
 
 const router = useRouter()
+const accountContext = inject('account-context', null)
 
 const summary = reactive(createEmptySummary())
 
-const profileTitle = computed(() => [summary.doctorTitle, summary.expertise].filter(Boolean).join(' · ') || '暂未完善医生职称与专长')
+const profileTitle = computed(() => [summary.doctorTitle, summary.expertise].filter(Boolean).join(' / ') || '暂未完善医生职称与专长')
 
 function loadSummary() {
   get('/api/doctor/workbench/summary', (data) => {
     Object.assign(summary, createEmptySummary(), data || {})
+    accountContext?.patchDoctorWorkspaceSummary?.(data || {})
   }, (message) => {
     ElMessage.warning(message || '医生工作台加载失败，请稍后再试')
   })
@@ -333,14 +410,20 @@ function createEmptySummary() {
     consultationCount: 0,
     todayConsultationCount: 0,
     riskConsultationCount: 0,
+    unclaimedConsultationCount: 0,
+    myClaimedConsultationCount: 0,
+    highPriorityUnclaimedCount: 0,
     unreadConsultationCount: 0,
     waitingReplyConsultationCount: 0,
     pendingFollowUpCount: 0,
+    dueTodayFollowUpCount: 0,
+    overdueFollowUpCount: 0,
     recommendedConsultationCount: 0,
     upcomingScheduleCount: 0,
     serviceTagCount: 0,
     serviceTags: [],
     recentConsultations: [],
+    unclaimedConsultations: [],
     recommendedConsultations: [],
     unreadConsultations: [],
     waitingReplyConsultations: [],
@@ -349,10 +432,10 @@ function createEmptySummary() {
   }
 }
 
-function goToConsultation(id) {
+function goToConsultation(id, query = {}) {
   router.push({
     path: '/doctor/consultation',
-    query: { id }
+    query: { ...query, id }
   })
 }
 
@@ -361,6 +444,26 @@ function openConsultationList(query = {}) {
     path: '/doctor/consultation',
     query
   })
+}
+
+function isRiskConsultation(item) {
+  return ['emergency', 'offline'].includes(item?.triageActionType)
+}
+
+function claimRecordQuery(item) {
+  return isRiskConsultation(item)
+    ? { ownerFilter: 'unclaimed', riskFilter: 'high_priority' }
+    : { ownerFilter: 'unclaimed' }
+}
+
+function claimPriorityText(item) {
+  if (item?.triageActionType === 'emergency') return '立即关注'
+  if (item?.triageActionType === 'offline') return '尽快接手'
+  return '可认领'
+}
+
+function claimTodoItemClass(item) {
+  return isRiskConsultation(item) ? 'is-urgent' : ''
 }
 
 function assignmentOwnerText(item) {
@@ -378,19 +481,63 @@ function consultationMessageStatus(item) {
   return '沟通中'
 }
 
+function latestFollowUp(item) {
+  return Array.isArray(item?.doctorFollowUps) && item.doctorFollowUps.length
+    ? item.doctorFollowUps[0]
+    : null
+}
+
+function followUpDueDate(item) {
+  const latest = latestFollowUp(item)
+  if (latest?.nextFollowUpDate) return latest.nextFollowUpDate
+  const days = Number(item?.doctorConclusion?.followUpWithinDays || 0)
+  if (!Number.isFinite(days) || days <= 0) return null
+  const baseTime = item?.doctorConclusion?.updateTime || item?.doctorHandle?.completeTime || item?.updateTime
+  if (!baseTime) return null
+  const dueDate = new Date(baseTime)
+  dueDate.setHours(0, 0, 0, 0)
+  dueDate.setDate(dueDate.getDate() + days)
+  return dueDate
+}
+
+function followUpState(item) {
+  const dueValue = followUpDueDate(item)
+  if (!dueValue) return 'pending'
+  const dueDate = new Date(dueValue)
+  dueDate.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (dueDate.getTime() < today.getTime()) return 'overdue'
+  if (dueDate.getTime() === today.getTime()) return 'due_today'
+  return 'pending'
+}
+
 function followUpDueText(item) {
-  const latestFollowUpDate = item?.doctorFollowUps?.[0]?.nextFollowUpDate
-  if (latestFollowUpDate) return `下次随访 ${formatDate(latestFollowUpDate, true)}`
+  const dueDate = followUpDueDate(item)
+  const state = followUpState(item)
+  if (state === 'overdue') return `已逾期 ${formatDate(dueDate, true)}`
+  if (state === 'due_today') return `今日到期 ${formatDate(dueDate, true)}`
+  if (dueDate) return `下次随访 ${formatDate(dueDate, true)}`
   const days = Number(item?.doctorConclusion?.followUpWithinDays || 0)
   if (days > 0) return `${days} 天内随访`
   return '待安排随访'
 }
 
 function followUpPlanText(item) {
-  const latestFollowUp = item?.doctorFollowUps?.[0]
-  if (latestFollowUp?.needRevisit === 1) return '仍需继续随访'
-  if (latestFollowUp?.needRevisit === 0) return '当前轮次已记录'
+  const state = followUpState(item)
+  if (state === 'overdue') return '建议优先回访'
+  if (state === 'due_today') return '建议今日完成'
+  const latest = latestFollowUp(item)
+  if (latest?.needRevisit === 1) return '仍需继续随访'
+  if (latest?.needRevisit === 0) return '当前轮次已记录'
   return item?.doctorConclusion?.needFollowUp === 1 ? '建议继续跟进' : '待确认'
+}
+
+function followUpTodoItemClass(item) {
+  const state = followUpState(item)
+  if (state === 'overdue') return 'is-overdue'
+  if (state === 'due_today') return 'is-due-today'
+  return ''
 }
 
 function remainingCapacity(item) {
@@ -460,7 +607,7 @@ onMounted(() => loadSummary())
 
 .hero-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 18px;
   padding: 26px;
 }
@@ -518,10 +665,19 @@ onMounted(() => loadSummary())
   font-size: 30px;
 }
 
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+.stat-card.stat-card-accent {
+  border-color: rgba(15, 102, 101, 0.24);
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.96));
+}
+
+.stat-card.stat-card-warning {
+  border-color: rgba(210, 155, 47, 0.24);
+  background: linear-gradient(180deg, rgba(210, 155, 47, 0.1), rgba(255, 255, 255, 0.96));
+}
+
+.stat-card.stat-card-danger {
+  border-color: rgba(214, 95, 80, 0.24);
+  background: linear-gradient(180deg, rgba(214, 95, 80, 0.1), rgba(255, 255, 255, 0.96));
 }
 
 .panel-card {
@@ -563,7 +719,7 @@ onMounted(() => loadSummary())
 
 .todo-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
 }
 
@@ -574,12 +730,23 @@ onMounted(() => loadSummary())
   border: 1px solid rgba(19, 73, 80, 0.08);
 }
 
+.todo-card.todo-card-claim {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.06), rgba(255, 255, 255, 0.92));
+}
+
 .todo-card-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 14px;
+}
+
+.todo-card-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .todo-card-head strong {
@@ -616,6 +783,17 @@ onMounted(() => loadSummary())
   box-shadow: 0 12px 24px rgba(19, 73, 80, 0.08);
 }
 
+.todo-item.is-urgent,
+.todo-item.is-overdue {
+  border-color: rgba(214, 95, 80, 0.24);
+  background: linear-gradient(180deg, rgba(214, 95, 80, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.todo-item.is-due-today {
+  border-color: rgba(210, 155, 47, 0.24);
+  background: linear-gradient(180deg, rgba(210, 155, 47, 0.08), rgba(255, 255, 255, 0.98));
+}
+
 .todo-item-head,
 .todo-item-meta,
 .recent-message-cell {
@@ -638,12 +816,8 @@ onMounted(() => loadSummary())
   line-height: 1.5;
 }
 
-.todo-item p,
-.recent-message-cell span {
-  margin: 8px 0 0;
-}
-
 .todo-item p {
+  margin: 8px 0 0;
   color: #41575d;
   line-height: 1.7;
 }
@@ -655,6 +829,15 @@ onMounted(() => loadSummary())
 
 .todo-foot {
   margin-top: 14px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .recent-message-cell {
@@ -691,16 +874,21 @@ onMounted(() => loadSummary())
 
 @media (max-width: 1100px) {
   .hero-card,
-  .content-grid,
-  .todo-grid {
+  .content-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
   .doctor-profile,
-  .schedule-item {
+  .schedule-item,
+  .panel-head,
+  .todo-card-head,
+  .todo-item-head,
+  .todo-item-meta,
+  .todo-foot {
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .schedule-meta {
