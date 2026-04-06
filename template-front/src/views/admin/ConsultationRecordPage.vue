@@ -5,6 +5,98 @@
       <article class="card stat"><span>已认领</span><strong>{{ assignedCount }}</strong></article>
       <article class="card stat"><span>医生已完成</span><strong>{{ completedCount }}</strong></article>
       <article class="card stat"><span>今日新增</span><strong>{{ todayCount }}</strong></article>
+      <article class="card stat"><span>等待首推医生</span><strong>{{ waitingDispatchCount }}</strong></article>
+      <article class="card stat"><span>首推已接手</span><strong>{{ suggestedAcceptedCount }}</strong></article>
+    </section>
+
+    <section class="card block">
+      <div class="head">
+        <div>
+          <h3>智能分配运营总览</h3>
+          <p>查看当前推荐覆盖、首推命中率和待接手积压情况，方便持续优化分配链路。</p>
+        </div>
+        <el-button :loading="dispatchSummaryLoading" @click="loadSmartDispatchSummary">刷新分配统计</el-button>
+      </div>
+      <div class="summary-grid dispatch-summary-grid">
+        <article class="subcard summary-card">
+          <span>推荐覆盖问诊</span>
+          <strong>{{ dispatchSummary.suggestedCount }}</strong>
+          <small>{{ dispatchSummary.suggestionCoverageText || '-' }}</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>首推命中率</span>
+          <strong>{{ dispatchSummary.suggestedHitRateText }}</strong>
+          <small>{{ dispatchSummary.claimedBySuggestedCount }} 单由首推医生接手</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>转其他医生率</span>
+          <strong>{{ dispatchSummary.claimedByOtherRateText }}</strong>
+          <small>{{ dispatchSummary.claimedByOtherCount }} 单由其他医生承接</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>平均接手时长</span>
+          <strong>{{ dispatchSummary.averageClaimDurationText }}</strong>
+          <small>按已接手推荐单统计</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>超 24h 待接手</span>
+          <strong>{{ dispatchSummary.overdueWaitingCount }}</strong>
+          <small class="muted-copy">{{ `当前阈值 ${dispatchSummary.overdueThresholdHours || 24}h` }}</small>
+          <small>{{ dispatchSummary.waitingAcceptCount }} 单仍在等待首推医生</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>科室分诊队列</span>
+          <strong>{{ dispatchSummary.departmentQueueCount }}</strong>
+          <small>尚未形成明确首推医生</small>
+        </article>
+      </div>
+      <div class="breakdown-grid">
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>首推医生承接情况</strong>
+              <p>聚焦系统首推给谁、最终是否由首推医生接手，以及当前待接手积压主要落在哪些医生。</p>
+            </div>
+          </div>
+          <el-table v-if="dispatchSummary.doctorBreakdown?.length" :data="dispatchSummary.doctorBreakdown" size="small" border>
+            <el-table-column prop="doctorName" label="首推医生" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="departmentName" label="科室" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="totalSuggestedCount" label="被推荐量" width="90" align="center" />
+            <el-table-column prop="waitingAcceptCount" label="待接手" width="90" align="center" />
+            <el-table-column prop="acceptedCount" label="已接手" width="90" align="center" />
+            <el-table-column prop="lostCount" label="他人承接" width="96" align="center" />
+            <el-table-column prop="hitRateText" label="命中率" width="90" align="center" />
+            <el-table-column prop="averageClaimDurationText" label="平均接手时长" min-width="120" align="center" />
+          </el-table>
+          <el-empty v-else description="当前暂无可统计的首推医生承接数据" />
+        </article>
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>长时间待接手问诊</strong>
+              <p>优先关注当前仍处于等待首推医生接手状态、且等待时间较长的问诊单。</p>
+            </div>
+          </div>
+          <div v-if="dispatchSummary.recentWaitingRecords?.length" class="dispatch-wait-list">
+            <article v-for="item in dispatchSummary.recentWaitingRecords" :key="item.consultationId" class="dispatch-wait-card">
+              <div class="chips">
+                <span>{{ item.consultationNo }}</span>
+                <span>{{ item.patientName }}</span>
+                <span>{{ item.categoryName }}</span>
+                <span>{{ item.departmentName || '未分配科室' }}</span>
+                <span>{{ formatDate(item.createTime) }}</span>
+              </div>
+              <p class="copy"><strong>优先医生：</strong>{{ item.suggestedDoctorName || '待系统明确' }}</p>
+              <p class="copy"><strong>等待时长：</strong>{{ item.waitingDurationText || '-' }}</p>
+              <p v-if="item.recommendationReason" class="copy"><strong>推荐依据：</strong>{{ item.recommendationReason }}</p>
+              <div class="actions">
+                <el-button link type="primary" @click="openDetail(item.consultationId)">查看详情</el-button>
+              </div>
+            </article>
+          </div>
+          <el-empty v-else description="当前暂无待接手的首推问诊" />
+        </article>
+      </div>
     </section>
 
     <section class="card block">
@@ -252,6 +344,12 @@
             <el-option label="已认领" value="claimed" />
             <el-option label="已释放" value="released" />
           </el-select>
+          <el-select v-model="dispatchFilter" clearable placeholder="全部智能分配" style="width:180px">
+            <el-option label="等待首推医生" value="waiting_accept" />
+            <el-option label="首推医生已接手" value="claimed_by_suggested" />
+            <el-option label="其他医生接手" value="claimed_by_other" />
+            <el-option label="科室分诊队列" value="department_queue" />
+          </el-select>
         </div>
         <el-button @click="refreshAll">刷新</el-button>
       </div>
@@ -270,6 +368,14 @@
             <div class="assignment">
               <el-tag :type="assignmentTagType(row.doctorAssignment)" effect="light">{{ assignmentStatusLabel(row.doctorAssignment) }}</el-tag>
               <span v-if="row.doctorAssignment?.doctorName">{{ row.doctorAssignment.doctorName }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="智能分配" min-width="210">
+          <template #default="{ row }">
+            <div class="assignment">
+              <el-tag :type="smartDispatchTagType(row.smartDispatch)" effect="light">{{ smartDispatchStatusLabel(row.smartDispatch) }}</el-tag>
+              <span>{{ smartDispatchLine(row) }}</span>
             </div>
           </template>
         </el-table-column>
@@ -454,6 +560,28 @@
               <p class="copy"><strong>当前状态：</strong>{{ assignmentStatusLabel(detail.doctorAssignment) }}</p>
               <p class="copy"><strong>认领医生：</strong>{{ detail.doctorAssignment?.doctorName || '暂无认领医生' }}</p>
               <p class="copy"><strong>科室快照：</strong>{{ detail.doctorAssignment?.departmentName || detail.departmentName || '-' }}</p>
+            </div>
+          </section>
+
+          <section class="card panel">
+            <div class="head">
+              <div>
+                <h3>智能分配归档</h3>
+                <p>{{ smartDispatchHintText(detail?.smartDispatch) }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ smartDispatchStatusLabel(detail?.smartDispatch) }}</span>
+                <span v-if="getSmartDispatch(detail).suggestedDoctorName">首推 {{ getSmartDispatch(detail).suggestedDoctorName }}</span>
+                <span v-if="getSmartDispatch(detail).candidateCount">候选 {{ getSmartDispatch(detail).candidateCount }} 位</span>
+              </div>
+            </div>
+            <div class="subcard">
+              <p class="copy"><strong>当前进度：</strong>{{ smartDispatchHintText(detail?.smartDispatch) }}</p>
+              <p v-if="getSmartDispatch(detail).suggestedDoctorName" class="copy">
+                <strong>优先医生：</strong>{{ getSmartDispatch(detail).suggestedDoctorName }}{{ getSmartDispatch(detail).suggestedDoctorTitle ? ` / ${getSmartDispatch(detail).suggestedDoctorTitle}` : '' }}
+              </p>
+              <p v-if="getSmartDispatch(detail).recommendationReason" class="copy"><strong>推荐依据：</strong>{{ getSmartDispatch(detail).recommendationReason }}</p>
+              <p v-if="getSmartDispatch(detail).suggestedDoctorNextScheduleText" class="copy"><strong>排班参考：</strong>{{ getSmartDispatch(detail).suggestedDoctorNextScheduleText }}</p>
             </div>
           </section>
 
@@ -675,12 +803,14 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { download, get, resolveImagePath } from '@/net'
 import { aiMismatchReasonLabel, aiMismatchReasonOptions, comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
+import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 
 const SAMPLE_PAGE_SIZE = 20
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
 const summaryLoading = ref(false)
+const dispatchSummaryLoading = ref(false)
 const mismatchSampleVisible = ref(false)
 const mismatchSampleLoading = ref(false)
 const mismatchSampleExporting = ref(false)
@@ -694,6 +824,7 @@ const fieldSampleHasMore = ref(false)
 const records = ref([])
 const detail = ref(null)
 const aiSummary = ref(createEmptyAiSummary())
+const dispatchSummary = ref(createEmptyDispatchSummary())
 const mismatchSamples = ref([])
 const fieldSamples = ref([])
 const keyword = ref('')
@@ -701,6 +832,7 @@ const categoryFilter = ref('')
 const triageFilter = ref('')
 const statusFilter = ref('')
 const assignmentFilter = ref('')
+const dispatchFilter = ref('')
 const mismatchSampleMeta = ref(createEmptyMismatchSampleMeta())
 const mismatchSampleFilters = reactive(createEmptyMismatchSampleFilters())
 const fieldSampleStatus = ref('mismatch')
@@ -722,6 +854,25 @@ function createEmptyAiSummary() {
     doctorBreakdown: [],
     mismatchReasonBreakdown: [],
     recentMismatchRecords: []
+  }
+}
+
+function createEmptyDispatchSummary() {
+  return {
+    totalRecordCount: 0,
+    suggestedCount: 0,
+    waitingAcceptCount: 0,
+    claimedBySuggestedCount: 0,
+    claimedByOtherCount: 0,
+    departmentQueueCount: 0,
+    overdueWaitingCount: 0,
+    overdueThresholdHours: 24,
+    suggestionCoverageText: '-',
+    suggestedHitRateText: '-',
+    claimedByOtherRateText: '-',
+    averageClaimDurationText: '-',
+    doctorBreakdown: [],
+    recentWaitingRecords: []
   }
 }
 
@@ -767,6 +918,8 @@ const todayCount = computed(() => {
   const today = new Date().toDateString()
   return records.value.filter(item => item.createTime && new Date(item.createTime).toDateString() === today).length
 })
+const waitingDispatchCount = computed(() => records.value.filter(item => getSmartDispatch(item).status === 'waiting_accept').length)
+const suggestedAcceptedCount = computed(() => records.value.filter(item => getSmartDispatch(item).status === 'claimed_by_suggested').length)
 const categoryOptions = computed(() => [...new Set(records.value.map(item => item.categoryName).filter(Boolean))])
 const triageOptions = computed(() => [...new Set(records.value.map(item => item.triageLevelName).filter(Boolean))])
 const fieldSampleDoctorOptions = computed(() => [...new Set((aiSummary.value.doctorBreakdown || []).map(item => item.doctorName).filter(Boolean))])
@@ -797,13 +950,17 @@ const filteredRecords = computed(() => records.value.filter(item => {
   const matchesTriage = !triageFilter.value || item.triageLevelName === triageFilter.value
   const matchesStatus = !statusFilter.value || item.status === statusFilter.value
   const matchesAssignment = !assignmentFilter.value || assignmentKey(item.doctorAssignment) === assignmentFilter.value
-  return matchesKeyword && matchesCategory && matchesTriage && matchesStatus && matchesAssignment
+  const matchesDispatch = !dispatchFilter.value || getSmartDispatch(item).status === dispatchFilter.value
+  return matchesKeyword && matchesCategory && matchesTriage && matchesStatus && matchesAssignment && matchesDispatch
 }))
 
 function loadData() {
   loading.value = true
   get('/api/admin/consultation-record/list', data => {
-    records.value = data || []
+    records.value = (data || []).map(item => ({
+      ...item,
+      smartDispatch: normalizeSmartDispatch(item?.smartDispatch)
+    }))
     loading.value = false
   }, message => {
     loading.value = false
@@ -813,6 +970,7 @@ function loadData() {
 function refreshAll() {
   loadData()
   loadAiSummary()
+  loadSmartDispatchSummary()
 }
 function loadAiSummary() {
   summaryLoading.value = true
@@ -822,6 +980,16 @@ function loadAiSummary() {
   }, message => {
     summaryLoading.value = false
     ElMessage.warning(message || 'AI 采纳统计加载失败')
+  })
+}
+function loadSmartDispatchSummary() {
+  dispatchSummaryLoading.value = true
+  get('/api/admin/consultation-record/smart-dispatch-summary', data => {
+    dispatchSummary.value = { ...createEmptyDispatchSummary(), ...(data || {}) }
+    dispatchSummaryLoading.value = false
+  }, message => {
+    dispatchSummaryLoading.value = false
+    ElMessage.warning(message || '智能分配统计加载失败')
   })
 }
 function openMismatchSampleDialog({
@@ -1004,7 +1172,10 @@ function openDetail(id) {
   detailLoading.value = true
   detail.value = null
   get(`/api/admin/consultation-record/detail?id=${id}`, data => {
-    detail.value = data || null
+    detail.value = data ? {
+      ...data,
+      smartDispatch: normalizeSmartDispatch(data?.smartDispatch)
+    } : null
     detailLoading.value = false
   }, message => {
     detailLoading.value = false
@@ -1023,6 +1194,15 @@ function assignmentStatusLabel(assignment) {
 function assignmentTagType(assignment) {
   if (!assignment) return 'info'
   return assignment.status === 'claimed' ? 'success' : 'warning'
+}
+function getSmartDispatch(record) {
+  return normalizeSmartDispatch(record?.smartDispatch)
+}
+function smartDispatchLine(record) {
+  const summary = getSmartDispatch(record)
+  if (summary.suggestedDoctorName) return `首推 ${summary.suggestedDoctorName}`
+  if (summary.claimedDoctorName) return `接手 ${summary.claimedDoctorName}`
+  return smartDispatchHintText(summary)
 }
 function statusLabel(value) { return ({ submitted: '已提交', triaged: '已分诊', processing: '处理中', completed: '已完成' })[value] || value || '-' }
 function handleStatusLabel(value) { return value === 'completed' ? '处理完成' : '处理中' }
@@ -1132,6 +1312,11 @@ onMounted(() => refreshAll())
 
 .summary-subhead {
   margin-top: 18px;
+}
+
+.dispatch-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
 }
 
 .breakdown-grid {
@@ -1443,6 +1628,18 @@ onMounted(() => refreshAll())
 .reason-item span {
   color: var(--app-muted);
   white-space: nowrap;
+}
+
+.dispatch-wait-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dispatch-wait-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 @media (max-width: 1180px) {

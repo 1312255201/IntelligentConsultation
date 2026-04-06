@@ -3,6 +3,7 @@ package cn.gugufish.service.impl;
 import cn.gugufish.entity.dto.BodyPartDict;
 import cn.gugufish.entity.dto.ConsultationCategory;
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
+import cn.gugufish.entity.dto.ConsultationDispatchConfig;
 import cn.gugufish.entity.dto.ConsultationIntakeField;
 import cn.gugufish.entity.dto.ConsultationIntakeTemplate;
 import cn.gugufish.entity.dto.ConsultationRecord;
@@ -57,6 +58,7 @@ import cn.gugufish.mapper.TriageMessageMapper;
 import cn.gugufish.mapper.TriageSessionMapper;
 import cn.gugufish.mapper.TriageLevelDictMapper;
 import cn.gugufish.service.ConsultationService;
+import cn.gugufish.service.ConsultationDoctorRecommendationService;
 import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
@@ -82,6 +84,7 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -139,6 +142,7 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationAiEnrichmentService consultationAiEnrichmentService;
     @Resource TriageFeedbackService triageFeedbackService;
     @Resource ConsultationMessageService consultationMessageService;
+    @Resource ConsultationDoctorRecommendationService consultationDoctorRecommendationService;
 
     @Override
     public List<ConsultationEntryCategoryVO> listEntryCategories() {
@@ -1029,7 +1033,7 @@ public class ConsultationServiceImpl implements ConsultationService {
                 firstDoctor == null ? null : firstDoctor.getId(),
                 firstDoctor == null ? null : firstDoctor.getName(),
                 JSON.toJSONString(candidates),
-                buildTriageResultReason(record),
+                buildTriageResultReason(record, firstDoctor),
                 buildRiskFlagsJson(record, triage.ruleHits()),
                 buildSymptomExtractJson(answers),
                 resolveConfidenceScore(triage),
@@ -1061,11 +1065,15 @@ public class ConsultationServiceImpl implements ConsultationService {
         }
     }
 
-    private String buildTriageResultReason(ConsultationRecord record) {
+    private String buildTriageResultReason(ConsultationRecord record,
+                                           ConsultationRecommendDoctorVO firstDoctor) {
         List<String> segments = new ArrayList<>();
         if (!isEmptyValue(record.getTriageSuggestion())) segments.add(record.getTriageSuggestion());
         if (!isEmptyValue(record.getTriageRuleSummary())) segments.add(record.getTriageRuleSummary());
         if (!isEmptyValue(record.getChiefComplaint())) segments.add("主诉摘要：" + abbreviate(record.getChiefComplaint(), 120));
+        if (firstDoctor != null && !isEmptyValue(firstDoctor.getRecommendationSummary())) {
+            segments.add("首推医生：" + firstDoctor.getName() + "，" + firstDoctor.getRecommendationSummary());
+        }
         return segments.isEmpty() ? null : abbreviate(String.join("；", segments), 500);
     }
 
@@ -1321,72 +1329,63 @@ public class ConsultationServiceImpl implements ConsultationService {
     }
 
     private List<ConsultationRecommendDoctorVO> buildRecommendedDoctors(ConsultationRecord record) {
-        if (record.getDepartmentId() == null) return List.of();
-        List<Doctor> doctors = doctorMapper.selectList(Wrappers.<Doctor>query()
-                .eq("department_id", record.getDepartmentId())
-                .eq("status", 1)
-                .orderByAsc("sort")
-                .orderByAsc("id"));
-        if (doctors.isEmpty()) return List.of();
+        return consultationDoctorRecommendationService.recommendDoctors(record);
+    }
 
-        List<Integer> doctorIds = doctors.stream().map(Doctor::getId).toList();
-        Date today = java.sql.Date.valueOf(LocalDate.now());
-        List<DoctorSchedule> schedules = doctorScheduleMapper.selectList(Wrappers.<DoctorSchedule>query()
-                        .in("doctor_id", doctorIds)
-                        .eq("status", 1)
-                        .ge("schedule_date", today))
-                .stream()
-                .sorted(Comparator
-                        .comparing(DoctorSchedule::getScheduleDate)
-                        .thenComparingInt(item -> scheduleTimeOrder(item.getTimePeriod()))
-                        .thenComparingInt(DoctorSchedule::getId))
-                .toList();
+    private DoctorRecommendationSnapshot buildDoctorRecommendationSnapshot(ConsultationDispatchConfig dispatchConfig,
+                                                                          ConsultationRecord record,
+                                                                          Doctor doctor,
+                                                                          DoctorSchedule schedule,
+                                                                          boolean hasAvailableSchedule,
+                                                                          List<String> serviceTags,
+                                                                          int activeConsultationCount) {
+        List<String> matchedServiceTags = matchServiceTags(record, serviceTags, dispatchConfig);
+        int remainingCapacity = schedule == null ? 0 : remainingCapacity(schedule);
+        int maxCapacity = schedule == null ? 0 : defaultInt(schedule.getMaxCapacity());
+        boolean highPriority = isHighPriorityConsultation(record);
 
-        Map<Integer, DoctorSchedule> nextAvailableScheduleMap = new HashMap<>();
-        Map<Integer, DoctorSchedule> nextScheduleMap = new HashMap<>();
-        for (DoctorSchedule schedule : schedules) {
-            nextScheduleMap.putIfAbsent(schedule.getDoctorId(), schedule);
-            if (remainingCapacity(schedule) > 0) nextAvailableScheduleMap.putIfAbsent(schedule.getDoctorId(), schedule);
-        }
+        int score = scaleScore(
+                resolveVisitTypeScore(record.getTriageActionType(), schedule == null ? null : schedule.getVisitType()),
+                dispatchConfig == null ? null : dispatchConfig.getVisitTypeWeight()
+        ) + scaleScore(
+                resolveScheduleScore(schedule, hasAvailableSchedule, highPriority),
+                dispatchConfig == null ? null : dispatchConfig.getScheduleWeight()
+        ) + scaleScore(
+                resolveCapacityScore(remainingCapacity, maxCapacity, hasAvailableSchedule, highPriority),
+                dispatchConfig == null ? null : dispatchConfig.getCapacityWeight()
+        ) + scaleScore(
+                resolveWorkloadScore(activeConsultationCount, highPriority),
+                dispatchConfig == null ? null : dispatchConfig.getWorkloadWeight()
+        ) + scaleScore(
+                Math.min(matchedServiceTags.size(), resolveMaxMatchedTags(dispatchConfig)) * resolveTagMatchScorePerHit(dispatchConfig),
+                dispatchConfig == null ? null : dispatchConfig.getTagMatchWeight()
+        );
+        score = Math.max(resolveMinRecommendationScore(dispatchConfig), Math.min(score, resolveMaxRecommendationScore(dispatchConfig)));
 
-        Map<Integer, List<String>> tagMap = doctorServiceTagMapper.selectList(Wrappers.<DoctorServiceTag>query()
-                        .in("doctor_id", doctorIds)
-                        .eq("status", 1)
-                        .orderByAsc("sort")
-                        .orderByAsc("id"))
-                .stream()
-                .collect(Collectors.groupingBy(DoctorServiceTag::getDoctorId,
-                        Collectors.mapping(DoctorServiceTag::getTagName, Collectors.toList())));
-
-        return doctors.stream()
-                .sorted(Comparator
-                        .comparing((Doctor item) -> nextAvailableScheduleMap.containsKey(item.getId())).reversed()
-                        .thenComparingLong(item -> {
-                            DoctorSchedule schedule = nextAvailableScheduleMap.getOrDefault(item.getId(), nextScheduleMap.get(item.getId()));
-                            return schedule == null ? Long.MAX_VALUE : schedule.getScheduleDate().getTime();
-                        })
-                        .thenComparingInt(item -> {
-                            DoctorSchedule schedule = nextAvailableScheduleMap.getOrDefault(item.getId(), nextScheduleMap.get(item.getId()));
-                            return schedule == null ? Integer.MAX_VALUE : scheduleTimeOrder(schedule.getTimePeriod());
-                        })
-                        .thenComparingInt(item -> defaultSort(item.getSort()))
-                        .thenComparingInt(Doctor::getId))
-                .limit(3)
-                .map(item -> {
-                    DoctorSchedule schedule = nextAvailableScheduleMap.getOrDefault(item.getId(), nextScheduleMap.get(item.getId()));
-                    ConsultationRecommendDoctorVO vo = new ConsultationRecommendDoctorVO();
-                    vo.setId(item.getId());
-                    vo.setName(item.getName());
-                    vo.setTitle(item.getTitle());
-                    vo.setPhoto(item.getPhoto());
-                    vo.setExpertise(item.getExpertise());
-                    vo.setIntroduction(item.getIntroduction());
-                    vo.setNextScheduleText(buildScheduleText(schedule));
-                    vo.setRemainingCapacity(schedule == null ? null : remainingCapacity(schedule));
-                    vo.setServiceTags(tagMap.getOrDefault(item.getId(), List.of()));
-                    return vo;
-                })
-                .toList();
+        List<String> reasons = buildDoctorRecommendationReasons(
+                record,
+                schedule,
+                hasAvailableSchedule,
+                remainingCapacity,
+                activeConsultationCount,
+                matchedServiceTags
+        );
+        String summary = abbreviate(String.join("；", reasons), 120);
+        long scheduleRank = schedule == null
+                ? Long.MAX_VALUE
+                : scheduleDelayDays(schedule.getScheduleDate()) * 10 + scheduleTimeOrder(schedule.getTimePeriod());
+        return new DoctorRecommendationSnapshot(
+                doctor,
+                schedule,
+                hasAvailableSchedule,
+                activeConsultationCount,
+                score,
+                scheduleRank,
+                serviceTags,
+                matchedServiceTags,
+                reasons,
+                summary
+        );
     }
 
     private String buildScheduleText(DoctorSchedule schedule) {
@@ -1402,6 +1401,256 @@ public class ConsultationServiceImpl implements ConsultationService {
 
     private int remainingCapacity(DoctorSchedule schedule) {
         return Math.max(defaultInt(schedule.getMaxCapacity()) - defaultInt(schedule.getUsedCapacity()), 0);
+    }
+
+    private Map<Integer, Integer> loadActiveConsultationCountMap(List<Integer> doctorIds) {
+        if (doctorIds == null || doctorIds.isEmpty()) return Map.of();
+        List<Integer> activeConsultationIds = consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
+                        .in("status", List.of("triaged", "processing")))
+                .stream()
+                .map(ConsultationRecord::getId)
+                .toList();
+        if (activeConsultationIds.isEmpty()) return Map.of();
+
+        return consultationDoctorAssignmentMapper.selectList(Wrappers.<ConsultationDoctorAssignment>query()
+                        .in("consultation_id", activeConsultationIds)
+                        .in("doctor_id", doctorIds)
+                        .eq("status", "claimed"))
+                .stream()
+                .collect(Collectors.groupingBy(
+                        ConsultationDoctorAssignment::getDoctorId,
+                        Collectors.collectingAndThen(
+                                Collectors.mapping(ConsultationDoctorAssignment::getConsultationId, Collectors.toSet()),
+                                Set::size
+                        )
+                ));
+    }
+
+    private boolean isHighPriorityConsultation(ConsultationRecord record) {
+        String actionType = trimToNull(record == null ? null : record.getTriageActionType());
+        if ("emergency".equalsIgnoreCase(actionType) || "offline".equalsIgnoreCase(actionType)) return true;
+        String levelCode = trimToNull(record == null ? null : record.getTriageLevelCode());
+        if (levelCode == null) return false;
+        String text = levelCode.toUpperCase();
+        return text.contains("EMERGENCY") || text.contains("URGENT") || text.contains("HIGH") || text.contains("RED");
+    }
+
+    private int resolveVisitTypeScore(String triageActionType, String visitType) {
+        String actionType = trimToNull(triageActionType);
+        String scheduleVisitType = trimToNull(visitType);
+        if (scheduleVisitType == null) return 6;
+        if (actionType == null) return 10;
+
+        actionType = actionType.toLowerCase();
+        scheduleVisitType = scheduleVisitType.toLowerCase();
+        return switch (actionType) {
+            case "emergency", "offline" -> switch (scheduleVisitType) {
+                case "offline" -> 28;
+                case "both" -> 26;
+                case "online" -> 10;
+                case "followup" -> 8;
+                default -> 6;
+            };
+            case "online" -> switch (scheduleVisitType) {
+                case "online" -> 24;
+                case "both" -> 22;
+                case "followup" -> 16;
+                case "offline" -> 12;
+                default -> 8;
+            };
+            case "observe" -> switch (scheduleVisitType) {
+                case "online" -> 22;
+                case "followup" -> 20;
+                case "both" -> 18;
+                case "offline" -> 10;
+                default -> 8;
+            };
+            default -> switch (scheduleVisitType) {
+                case "both" -> 18;
+                case "online", "offline" -> 16;
+                case "followup" -> 12;
+                default -> 8;
+            };
+        };
+    }
+
+    private int resolveScheduleScore(DoctorSchedule schedule,
+                                     boolean hasAvailableSchedule,
+                                     boolean highPriority) {
+        if (schedule == null) return 2;
+        long delayDays = scheduleDelayDays(schedule.getScheduleDate());
+        int timeOrder = scheduleTimeOrder(schedule.getTimePeriod());
+
+        if (hasAvailableSchedule) {
+            if (highPriority) {
+                if (delayDays == 0 && timeOrder <= 2) return 30;
+                if (delayDays == 0) return 28;
+                if (delayDays <= 1) return 24;
+                if (delayDays <= 3) return 18;
+                return 12;
+            }
+            if (delayDays == 0) return 24;
+            if (delayDays <= 1) return 21;
+            if (delayDays <= 3) return 18;
+            if (delayDays <= 7) return 12;
+            return 8;
+        }
+
+        if (delayDays <= 1) return 8;
+        if (delayDays <= 3) return 6;
+        return 4;
+    }
+
+    private int resolveCapacityScore(int remainingCapacity,
+                                     int maxCapacity,
+                                     boolean hasAvailableSchedule,
+                                     boolean highPriority) {
+        if (!hasAvailableSchedule) return maxCapacity > 0 ? 2 : 0;
+        if (maxCapacity <= 0) return highPriority ? 8 : 6;
+
+        double ratio = Math.min(Math.max((double) remainingCapacity / maxCapacity, 0D), 1D);
+        int base = highPriority ? 8 : 6;
+        int extra = (int) Math.round(ratio * (highPriority ? 10 : 8));
+        return base + extra;
+    }
+
+    private int resolveWorkloadScore(int activeConsultationCount,
+                                     boolean highPriority) {
+        return switch (Math.max(activeConsultationCount, 0)) {
+            case 0 -> highPriority ? 16 : 14;
+            case 1 -> highPriority ? 14 : 12;
+            case 2 -> highPriority ? 12 : 10;
+            case 3 -> highPriority ? 10 : 8;
+            case 4, 5 -> highPriority ? 8 : 6;
+            default -> highPriority ? 4 : 3;
+        };
+    }
+
+    private List<String> buildDoctorRecommendationReasons(ConsultationRecord record,
+                                                          DoctorSchedule schedule,
+                                                          boolean hasAvailableSchedule,
+                                                          int remainingCapacity,
+                                                          int activeConsultationCount,
+                                                          List<String> matchedServiceTags) {
+        List<String> reasons = new ArrayList<>();
+        String visitTypeReason = buildVisitTypeReason(record == null ? null : record.getTriageActionType(), schedule == null ? null : schedule.getVisitType());
+        if (visitTypeReason != null) reasons.add(visitTypeReason);
+
+        if (schedule == null) {
+            reasons.add("暂未配置后续排班，当前优先参考科室与工作负载");
+        } else if (hasAvailableSchedule) {
+            reasons.add("近期排班可接诊：" + buildScheduleText(schedule));
+        } else {
+            reasons.add("已配置排班，但最近号源较紧：" + buildScheduleText(schedule));
+        }
+
+        reasons.add(activeConsultationCount <= 1
+                ? "当前待处理量较低"
+                : activeConsultationCount <= 3
+                ? "当前待处理量适中（" + activeConsultationCount + " 单）"
+                : "当前待处理量较高（" + activeConsultationCount + " 单）");
+
+        if (!matchedServiceTags.isEmpty()) {
+            reasons.add("服务标签匹配：" + abbreviate(String.join("、", matchedServiceTags), 28));
+        } else if (remainingCapacity > 0) {
+            reasons.add("剩余号源 " + remainingCapacity + " 个");
+        }
+
+        return reasons.stream()
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private String buildVisitTypeReason(String triageActionType,
+                                        String visitType) {
+        String actionType = trimToNull(triageActionType);
+        String scheduleVisitType = trimToNull(visitType);
+        if (actionType == null || scheduleVisitType == null) return null;
+        actionType = actionType.toLowerCase();
+        scheduleVisitType = scheduleVisitType.toLowerCase();
+
+        return switch (actionType) {
+            case "emergency", "offline" -> switch (scheduleVisitType) {
+                case "offline", "both" -> "线下接诊方式更匹配当前病情";
+                case "online" -> "可先线上接诊，再决定是否转线下";
+                default -> "已有接诊方式可参考";
+            };
+            case "online" -> switch (scheduleVisitType) {
+                case "online", "both" -> "线上接诊方式更匹配当前咨询";
+                case "followup" -> "复诊随访方式更接近当前需求";
+                default -> "已有可参考排班";
+            };
+            case "observe" -> switch (scheduleVisitType) {
+                case "online", "followup", "both" -> "继续观察场景下便于线上跟进";
+                default -> "已有可参考排班";
+            };
+            default -> null;
+        };
+    }
+
+    private List<String> matchServiceTags(ConsultationRecord record,
+                                          List<String> serviceTags,
+                                          ConsultationDispatchConfig dispatchConfig) {
+        if (record == null || serviceTags == null || serviceTags.isEmpty()) return List.of();
+        String text = normalizeMatchText(String.join(" ",
+                trimToNull(record.getCategoryName()) == null ? "" : record.getCategoryName(),
+                trimToNull(record.getTitle()) == null ? "" : record.getTitle(),
+                trimToNull(record.getChiefComplaint()) == null ? "" : record.getChiefComplaint(),
+                trimToNull(record.getTriageRuleSummary()) == null ? "" : record.getTriageRuleSummary()
+        ));
+        if (text == null) return List.of();
+
+        return serviceTags.stream()
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .filter(item -> {
+                    String normalized = normalizeMatchText(item);
+                    return normalized != null && normalized.length() >= 2 && text.contains(normalized);
+                })
+                .distinct()
+                .limit(resolveMaxMatchedTags(dispatchConfig))
+                .toList();
+    }
+
+    private int scaleScore(int score, Integer weight) {
+        if (score <= 0) return 0;
+        int normalizedWeight = weight == null || weight < 0 ? 100 : weight;
+        return (int) Math.round(score * normalizedWeight / 100D);
+    }
+
+    private int resolveRecommendDoctorLimit(ConsultationDispatchConfig dispatchConfig) {
+        return normalizePositive(dispatchConfig == null ? null : dispatchConfig.getRecommendDoctorLimit(), 3);
+    }
+
+    private int resolveTagMatchScorePerHit(ConsultationDispatchConfig dispatchConfig) {
+        return normalizeNonNegative(dispatchConfig == null ? null : dispatchConfig.getTagMatchScorePerHit(), 4);
+    }
+
+    private int resolveMaxMatchedTags(ConsultationDispatchConfig dispatchConfig) {
+        return normalizePositive(dispatchConfig == null ? null : dispatchConfig.getMaxMatchedTags(), 3);
+    }
+
+    private int resolveMinRecommendationScore(ConsultationDispatchConfig dispatchConfig) {
+        return normalizeNonNegative(dispatchConfig == null ? null : dispatchConfig.getMinRecommendationScore(), 24);
+    }
+
+    private int resolveMaxRecommendationScore(ConsultationDispatchConfig dispatchConfig) {
+        int minScore = resolveMinRecommendationScore(dispatchConfig);
+        int maxScore = normalizePositive(dispatchConfig == null ? null : dispatchConfig.getMaxRecommendationScore(), 99);
+        return Math.max(minScore, maxScore);
+    }
+
+    private String normalizeMatchText(String value) {
+        String text = trimToNull(value);
+        return text == null ? null : text.replaceAll("\\s+", "").toLowerCase();
+    }
+
+    private long scheduleDelayDays(Date scheduleDate) {
+        if (scheduleDate == null) return Long.MAX_VALUE;
+        LocalDate targetDate = new java.sql.Date(scheduleDate.getTime()).toLocalDate();
+        return Math.max(0L, ChronoUnit.DAYS.between(LocalDate.now(), targetDate));
     }
 
     private int scheduleTimeOrder(String timePeriod) {
@@ -1477,6 +1726,26 @@ public class ConsultationServiceImpl implements ConsultationService {
 
     private int defaultSort(Integer value) {
         return value == null ? Integer.MAX_VALUE : value;
+    }
+
+    private int normalizePositive(Integer value, int defaultValue) {
+        return value == null || value <= 0 ? defaultValue : value;
+    }
+
+    private int normalizeNonNegative(Integer value, int defaultValue) {
+        return value == null || value < 0 ? defaultValue : value;
+    }
+
+    private record DoctorRecommendationSnapshot(Doctor doctor,
+                                                DoctorSchedule schedule,
+                                                boolean hasAvailableSchedule,
+                                                int activeConsultationCount,
+                                                int recommendationScore,
+                                                long scheduleRank,
+                                                List<String> serviceTags,
+                                                List<String> matchedServiceTags,
+                                                List<String> recommendationReasons,
+                                                String recommendationSummary) {
     }
 
     private record NormalizeResult(String value, String message) {

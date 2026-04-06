@@ -547,8 +547,19 @@
                 :key="item.id || item.name"
                 class="candidate-card"
               >
-                <strong>{{ item.name }}</strong>
+                <div class="doctor-copy-head">
+                  <strong>{{ item.name }}</strong>
+                  <span v-if="doctorRecommendationScoreText(item)" class="recommend-score">{{ doctorRecommendationScoreText(item) }}</span>
+                </div>
                 <span>{{ item.title || '医生' }}</span>
+                <div v-if="item.matchedServiceTags?.length" class="chip-row is-accent">
+                  <span v-for="tag in item.matchedServiceTags" :key="`${item.id}-matched-${tag}`">匹配 {{ tag }}</span>
+                </div>
+                <div v-if="item.recommendationReasons?.length" class="chip-row is-subtle">
+                  <span v-for="reason in item.recommendationReasons.slice(0, 3)" :key="`${item.id}-reason-${reason}`">{{ reason }}</span>
+                </div>
+                <p v-if="item.recommendationSummary" class="result-copy doctor-recommend-copy"><strong>排序说明：</strong>{{ item.recommendationSummary }}</p>
+                <p v-if="item.nextScheduleText" class="doctor-schedule">{{ item.nextScheduleText }}</p>
               </article>
             </div>
           </div>
@@ -791,11 +802,21 @@
                   />
                   <div v-else class="doctor-avatar doctor-avatar-fallback">{{ doctor.name?.slice(0, 1) || '医' }}</div>
                   <div class="doctor-copy">
-                    <strong>{{ doctor.name }}</strong>
+                    <div class="doctor-copy-head">
+                      <strong>{{ doctor.name }}</strong>
+                      <span v-if="doctorRecommendationScoreText(doctor)" class="recommend-score">{{ doctorRecommendationScoreText(doctor) }}</span>
+                    </div>
                     <span>{{ doctor.title || '医生' }}</span>
                   </div>
                 </div>
                 <p class="doctor-text">{{ doctor.expertise || doctor.introduction || '暂未配置更多医生介绍信息' }}</p>
+                <div v-if="doctor.matchedServiceTags?.length" class="chip-row is-accent">
+                  <span v-for="tag in doctor.matchedServiceTags" :key="`${doctor.id}-matched-${tag}`">匹配 {{ tag }}</span>
+                </div>
+                <div v-if="doctor.recommendationReasons?.length" class="chip-row is-subtle">
+                  <span v-for="reason in doctor.recommendationReasons.slice(0, 3)" :key="`${doctor.id}-reason-${reason}`">{{ reason }}</span>
+                </div>
+                <p v-if="doctor.recommendationSummary" class="doctor-text doctor-recommend-copy"><strong>排序说明：</strong>{{ doctor.recommendationSummary }}</p>
                 <div v-if="doctor.serviceTags?.length" class="chip-row">
                   <span v-for="tag in doctor.serviceTags" :key="tag">{{ tag }}</span>
                 </div>
@@ -1630,6 +1651,11 @@ function parseDoctorCandidates(value) {
   return parseJsonArray(value).filter(item => item && typeof item === 'object')
 }
 
+function doctorRecommendationScoreText(item) {
+  const number = Number(item?.recommendationScore)
+  return Number.isFinite(number) && number > 0 ? `优先分 ${number}` : ''
+}
+
 function formatConfidence(value) {
   const number = Number(value)
   if (Number.isNaN(number) || number <= 0) return '-'
@@ -2361,6 +2387,38 @@ onMounted(() => loadData())
   display: block;
 }
 
+.doctor-copy-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.recommend-score {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.12);
+  color: #0f6665;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chip-row.is-accent span {
+  background: rgba(77, 168, 132, 0.14);
+  color: #1f6f4f;
+}
+
+.chip-row.is-subtle span {
+  background: rgba(19, 73, 80, 0.06);
+  color: #48656d;
+}
+
+.doctor-recommend-copy {
+  margin-top: 10px;
+}
 .doctor-text,
 .doctor-schedule {
   margin: 12px 0 0;

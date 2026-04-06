@@ -2,6 +2,7 @@ package cn.gugufish.service;
 
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiSummaryVO;
+import cn.gugufish.entity.vo.response.AdminConsultationDispatchSummaryVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiFieldSampleVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiMismatchVO;
 
@@ -11,6 +12,7 @@ public interface ConsultationRecordAdminService {
     List<AdminConsultationRecordVO> listRecords();
     AdminConsultationRecordVO recordDetail(int id);
     AdminConsultationAiSummaryVO aiSummary();
+    AdminConsultationDispatchSummaryVO smartDispatchSummary();
     List<AdminConsultationAiMismatchVO> mismatchSamples(int limit,
                                                         int offset,
                                                         String keyword,

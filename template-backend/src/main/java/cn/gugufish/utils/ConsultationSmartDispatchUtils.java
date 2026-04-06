@@ -43,6 +43,9 @@ public final class ConsultationSmartDispatchUtils {
             vo.setSuggestedDoctorPhoto(trimToNull(suggestedDoctor.getPhoto()));
             vo.setSuggestedDoctorExpertise(trimToNull(suggestedDoctor.getExpertise()));
             vo.setSuggestedDoctorNextScheduleText(trimToNull(suggestedDoctor.getNextScheduleText()));
+            if (!StringUtils.hasText(vo.getRecommendationReason())) {
+                vo.setRecommendationReason(trimToNull(suggestedDoctor.getRecommendationSummary()));
+            }
         }
 
         fillStatus(vo, claimed, claimedDoctorId, trimToNull(claimedDoctorName));

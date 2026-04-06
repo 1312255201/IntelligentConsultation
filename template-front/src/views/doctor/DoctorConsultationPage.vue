@@ -614,9 +614,19 @@
                   <img v-if="item.photo" :src="resolveImagePath(item.photo)" :alt="item.name" class="triage-doctor-avatar" />
                   <div v-else class="triage-doctor-avatar triage-doctor-avatar-fallback">{{ (item.name || '医').slice(0, 1) }}</div>
                   <div class="triage-doctor-copy">
-                    <strong>{{ item.name || '未命名医生' }}</strong>
+                    <div class="triage-doctor-copy-head">
+                      <strong>{{ item.name || '未命名医生' }}</strong>
+                      <span v-if="doctorRecommendationScoreText(item)" class="recommend-score">{{ doctorRecommendationScoreText(item) }}</span>
+                    </div>
                     <span>{{ item.title || '在线医生' }}</span>
                     <p class="copy">{{ item.expertise || '暂无擅长信息' }}</p>
+                    <div v-if="item.matchedServiceTags?.length" class="triage-doctor-tags is-accent">
+                      <span v-for="tag in item.matchedServiceTags" :key="`${item.id}-matched-${tag}`">匹配 {{ tag }}</span>
+                    </div>
+                    <div v-if="item.recommendationReasons?.length" class="triage-doctor-tags">
+                      <span v-for="reason in item.recommendationReasons.slice(0, 3)" :key="`${item.id}-reason-${reason}`">{{ reason }}</span>
+                    </div>
+                    <p v-if="item.recommendationSummary" class="copy triage-doctor-summary"><strong>排序说明：</strong>{{ item.recommendationSummary }}</p>
                     <small>{{ item.nextScheduleText || '暂无后续排班' }}</small>
                   </div>
                 </article>
@@ -1462,6 +1472,10 @@ function trimText(value) {
 }
 function parseJsonArray(value) { try { const parsed = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed : [] } catch { return [] } }
 function parseDoctorCandidates(value) { return parseJsonArray(value).filter(item => item && typeof item === 'object') }
+function doctorRecommendationScoreText(item) {
+  const number = Number(item?.recommendationScore)
+  return Number.isFinite(number) && number > 0 ? `优先分 ${number}` : ''
+}
 function displayAnswer(answer) { return answer.fieldType === 'switch' ? (answer.fieldValue === '1' ? '是' : '否') : (answer.fieldValue || '-') }
 function statusLabel(value) { return ({ submitted: '已提交', triaged: '已分诊', processing: '处理中', completed: '已完成' })[value] || value || '-' }
 function handleStatusLabel(value) { return value === 'completed' ? '处理完成' : '处理中' }
@@ -1812,6 +1826,14 @@ onMounted(() => { applyRouteFilters(); refreshAll(); loadReplyTemplates() })
   flex: 1;
 }
 
+.triage-doctor-copy-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
 .triage-doctor-copy strong {
   display: block;
   margin-bottom: 6px;
@@ -1820,6 +1842,42 @@ onMounted(() => { applyRouteFilters(); refreshAll(); loadReplyTemplates() })
 .triage-doctor-copy span,
 .triage-doctor-copy small {
   color: var(--app-muted);
+}
+
+.recommend-score {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.12);
+  color: #0f6665;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.triage-doctor-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.triage-doctor-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.06);
+  color: #48656d;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.triage-doctor-tags.is-accent span {
+  background: rgba(77, 168, 132, 0.14);
+  color: #1f6f4f;
+}
+
+.triage-doctor-summary {
+  margin-top: 10px;
 }
 
 .triage-session-card {

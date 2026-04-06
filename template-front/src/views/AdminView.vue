@@ -108,6 +108,12 @@ const menuItems = [
     icon: DataAnalysis
   },
   {
+    index: '/admin/consultation-dispatch',
+    title: '智能分配策略',
+    description: '配置 AI 导诊推荐排序权重、候选医生数量和超时阈值。',
+    icon: DataAnalysis
+  },
+  {
     index: '/admin/profile',
     title: '个人信息',
     description: '维护管理员账号的邮箱、密码和头像。',

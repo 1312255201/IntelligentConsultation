@@ -4,6 +4,7 @@ import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.response.AdminConsultationAiFieldSampleVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiMismatchVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiSummaryVO;
+import cn.gugufish.entity.vo.response.AdminConsultationDispatchSummaryVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.service.ConsultationRecordAdminService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,6 +50,12 @@ public class AdminConsultationRecordController {
     @Operation(summary = "查询 AI 采纳统计摘要")
     public RestBean<AdminConsultationAiSummaryVO> aiSummary() {
         return RestBean.success(consultationRecordAdminService.aiSummary());
+    }
+
+    @GetMapping("/smart-dispatch-summary")
+    @Operation(summary = "查询智能分配运营摘要")
+    public RestBean<AdminConsultationDispatchSummaryVO> smartDispatchSummary() {
+        return RestBean.success(consultationRecordAdminService.smartDispatchSummary());
     }
 
     @GetMapping("/mismatch-samples")

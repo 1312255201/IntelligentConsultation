@@ -194,6 +194,11 @@ const router = createRouter({
           component: () => import('@/views/admin/ConsultationRecordPage.vue')
         },
         {
+          path: 'consultation-dispatch',
+          name: 'admin-consultation-dispatch',
+          component: () => import('@/views/admin/ConsultationDispatchPage.vue')
+        },
+        {
           path: 'profile',
           name: 'admin-profile',
           component: () => import('@/views/index/ProfilePage.vue')

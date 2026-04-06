@@ -916,6 +916,23 @@ CREATE TABLE IF NOT EXISTS `db_homepage_case` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_consultation_dispatch_config` (
+  `id` int NOT NULL,
+  `visit_type_weight` int NOT NULL DEFAULT 100,
+  `schedule_weight` int NOT NULL DEFAULT 100,
+  `capacity_weight` int NOT NULL DEFAULT 100,
+  `workload_weight` int NOT NULL DEFAULT 100,
+  `tag_match_weight` int NOT NULL DEFAULT 100,
+  `tag_match_score_per_hit` int NOT NULL DEFAULT 4,
+  `max_matched_tags` int NOT NULL DEFAULT 3,
+  `recommend_doctor_limit` int NOT NULL DEFAULT 3,
+  `min_recommendation_score` int NOT NULL DEFAULT 24,
+  `max_recommendation_score` int NOT NULL DEFAULT 99,
+  `waiting_overdue_hours` int NOT NULL DEFAULT 24,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Note:
 -- 1. Password values are stored as BCrypt hashes, not plain text.
 -- 2. Accounts can be created through the existing register page or /api/auth/register.

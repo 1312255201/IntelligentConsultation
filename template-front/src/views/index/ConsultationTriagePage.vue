@@ -137,9 +137,19 @@
                 <img v-if="item.photo" :src="resolveImagePath(item.photo)" :alt="item.name" class="doctor-avatar" />
                 <div v-else class="doctor-avatar doctor-avatar-fallback">{{ (item.name || '医').slice(0, 1) }}</div>
                 <div class="doctor-copy">
-                  <strong>{{ item.name }}</strong>
+                  <div class="doctor-copy-head">
+                    <strong>{{ item.name }}</strong>
+                    <span v-if="doctorRecommendationScoreText(item)" class="recommend-score">{{ doctorRecommendationScoreText(item) }}</span>
+                  </div>
                   <span>{{ item.title || '在线医生' }}</span>
                   <p>{{ item.expertise || '暂无擅长信息' }}</p>
+                  <div v-if="item.matchedServiceTags?.length" class="record-chip-row is-accent">
+                    <span v-for="tag in item.matchedServiceTags" :key="`${item.id}-matched-${tag}`">匹配 {{ tag }}</span>
+                  </div>
+                  <div v-if="item.recommendationReasons?.length" class="record-chip-row is-subtle">
+                    <span v-for="reason in item.recommendationReasons.slice(0, 3)" :key="`${item.id}-reason-${reason}`">{{ reason }}</span>
+                  </div>
+                  <p v-if="item.recommendationSummary" class="copy doctor-recommend-copy"><strong>排序说明：</strong>{{ item.recommendationSummary }}</p>
                   <small>{{ item.nextScheduleText || '暂无后续排班' }}</small>
                 </div>
               </article>
@@ -456,6 +466,11 @@ function parseDoctorCandidates(value) {
   return parseJsonArray(value).filter(item => item && typeof item === 'object')
 }
 
+function doctorRecommendationScoreText(item) {
+  const number = Number(item?.recommendationScore)
+  return Number.isFinite(number) && number > 0 ? `优先分 ${number}` : ''
+}
+
 function getSmartDispatch(record) {
   return normalizeSmartDispatch(record?.smartDispatch)
 }
@@ -701,10 +716,43 @@ onMounted(() => loadRecords())
   display: block;
 }
 
+.doctor-copy-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
 .doctor-copy p {
   margin: 10px 0 0;
   line-height: 1.7;
   color: #41575d;
+}
+
+.recommend-score {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.12);
+  color: #0f6665;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.record-chip-row.is-accent span {
+  background: rgba(77, 168, 132, 0.14);
+  color: #1f6f4f;
+}
+
+.record-chip-row.is-subtle span {
+  background: rgba(19, 73, 80, 0.06);
+  color: #48656d;
+}
+
+.doctor-recommend-copy {
+  margin-top: 10px;
 }
 
 .message-list {

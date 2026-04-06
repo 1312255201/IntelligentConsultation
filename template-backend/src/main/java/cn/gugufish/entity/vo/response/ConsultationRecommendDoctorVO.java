@@ -14,5 +14,10 @@ public class ConsultationRecommendDoctorVO {
     String introduction;
     String nextScheduleText;
     Integer remainingCapacity;
+    Integer activeConsultationCount;
+    Integer recommendationScore;
+    String recommendationSummary;
+    List<String> recommendationReasons;
     List<String> serviceTags;
+    List<String> matchedServiceTags;
 }

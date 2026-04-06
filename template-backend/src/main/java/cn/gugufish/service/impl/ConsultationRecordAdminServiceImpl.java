@@ -2,6 +2,7 @@ package cn.gugufish.service.impl;
 
 import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
+import cn.gugufish.entity.dto.ConsultationDispatchConfig;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
 import cn.gugufish.entity.dto.TriageMessage;
@@ -15,10 +16,14 @@ import cn.gugufish.entity.vo.response.AdminConsultationAiGroupVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiMismatchVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiReasonVO;
 import cn.gugufish.entity.vo.response.AdminConsultationAiSummaryVO;
+import cn.gugufish.entity.vo.response.AdminConsultationDispatchDoctorVO;
+import cn.gugufish.entity.vo.response.AdminConsultationDispatchSummaryVO;
+import cn.gugufish.entity.vo.response.AdminConsultationDispatchWaitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationAiComparisonVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
+import cn.gugufish.entity.vo.response.ConsultationSmartDispatchVO;
 import cn.gugufish.entity.vo.response.TriageMessageVO;
 import cn.gugufish.entity.vo.response.TriageRuleHitLogVO;
 import cn.gugufish.entity.vo.response.TriageResultVO;
@@ -32,6 +37,7 @@ import cn.gugufish.mapper.TriageRuleHitLogMapper;
 import cn.gugufish.mapper.TriageResultMapper;
 import cn.gugufish.mapper.TriageSessionMapper;
 import cn.gugufish.service.ConsultationDoctorAssignmentQueryService;
+import cn.gugufish.service.ConsultationDispatchConfigService;
 import cn.gugufish.service.ConsultationRecordAdminService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
@@ -41,6 +47,7 @@ import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
 import cn.gugufish.utils.ConsultationAiComparisonUtils;
 import cn.gugufish.utils.ConsultationAiMismatchReasonUtils;
+import cn.gugufish.utils.ConsultationSmartDispatchUtils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -106,6 +113,9 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
     @Resource
     ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
 
+    @Resource
+    ConsultationDispatchConfigService consultationDispatchConfigService;
+
     @Override
     public List<AdminConsultationRecordVO> listRecords() {
         List<ConsultationRecord> records = consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
@@ -114,20 +124,147 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         if (records.isEmpty()) return List.of();
 
         List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
-        Map<Integer, ConsultationDoctorAssignment> assignmentMap = new HashMap<>();
-        consultationDoctorAssignmentMapper.selectList(Wrappers.<ConsultationDoctorAssignment>query()
-                        .in("consultation_id", consultationIds))
-                .stream()
-                .forEach(item -> assignmentMap.put(item.getConsultationId(), item));
+        Map<Integer, ConsultationDoctorAssignment> assignmentMap = loadLatestAssignmentMap(consultationIds);
+        Map<Integer, TriageResult> triageResultMap = loadLatestTriageResultEntityMap(consultationIds);
 
         return records.stream()
                 .map(item -> item.asViewObject(AdminConsultationRecordVO.class, vo -> {
                     ConsultationDoctorAssignment assignment = assignmentMap.get(item.getId());
+                    TriageResult triageResult = triageResultMap.get(item.getId());
                     if (assignment != null) {
                         vo.setDoctorAssignment(assignment.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorAssignmentVO.class));
                     }
+                    vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
+                            assignment == null ? null : assignment.getDoctorId(),
+                            assignment == null ? null : assignment.getDoctorName(),
+                            assignment == null ? null : assignment.getStatus(),
+                            triageResult == null ? null : triageResult.getDoctorId(),
+                            triageResult == null ? null : triageResult.getDoctorName(),
+                            triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
+                            triageResult == null ? null : triageResult.getReasonText()
+                    ));
                 }))
                 .toList();
+    }
+
+    @Override
+    public AdminConsultationDispatchSummaryVO smartDispatchSummary() {
+        ConsultationDispatchConfig dispatchConfig = consultationDispatchConfigService.getConfig();
+        int overdueHours = resolveWaitingOverdueHours(dispatchConfig);
+        List<ConsultationRecord> records = consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
+                .orderByDesc("create_time")
+                .orderByDesc("id"));
+        if (records.isEmpty()) {
+            return emptyDispatchSummary(overdueHours);
+        }
+
+        List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
+        Map<Integer, ConsultationDoctorAssignment> assignmentMap = loadLatestAssignmentMap(consultationIds);
+        Map<Integer, TriageResult> triageResultMap = loadLatestTriageResultEntityMap(consultationIds);
+
+        int totalCount = records.size();
+        int suggestedCount = 0;
+        int waitingAcceptCount = 0;
+        int claimedBySuggestedCount = 0;
+        int claimedByOtherCount = 0;
+        int departmentQueueCount = 0;
+        int overdueWaitingCount = 0;
+        long totalClaimMinutes = 0L;
+        int claimSampleCount = 0;
+
+        Map<String, DispatchDoctorAccumulator> doctorMap = new HashMap<>();
+        List<AdminConsultationDispatchWaitVO> waitingRecords = new ArrayList<>();
+
+        for (ConsultationRecord record : records) {
+            ConsultationDoctorAssignment assignment = assignmentMap.get(record.getId());
+            TriageResult triageResult = triageResultMap.get(record.getId());
+            ConsultationSmartDispatchVO dispatch = ConsultationSmartDispatchUtils.build(
+                    assignment == null ? null : assignment.getDoctorId(),
+                    assignment == null ? null : assignment.getDoctorName(),
+                    assignment == null ? null : assignment.getStatus(),
+                    triageResult == null ? null : triageResult.getDoctorId(),
+                    triageResult == null ? null : triageResult.getDoctorName(),
+                    triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
+                    triageResult == null ? null : triageResult.getReasonText()
+            );
+
+            String dispatchStatus = trimToNull(dispatch.getStatus());
+            boolean hasSuggestedDoctor = dispatch.getSuggestedDoctorId() != null || trimToNull(dispatch.getSuggestedDoctorName()) != null;
+            if (hasSuggestedDoctor) {
+                suggestedCount++;
+                DispatchDoctorAccumulator accumulator = doctorMap.computeIfAbsent(resolveDispatchDoctorKey(dispatch), key -> new DispatchDoctorAccumulator());
+                if (accumulator.doctorId == null && dispatch.getSuggestedDoctorId() != null) {
+                    accumulator.doctorId = dispatch.getSuggestedDoctorId();
+                }
+                if (accumulator.doctorName == null) {
+                    accumulator.doctorName = normalizeGroupName(dispatch.getSuggestedDoctorName(), "未标记医生");
+                }
+                if (accumulator.departmentName == null) {
+                    accumulator.departmentName = normalizeGroupName(record.getDepartmentName(), "未分配科室");
+                }
+                accumulator.totalSuggestedCount++;
+
+                if (Objects.equals(dispatchStatus, "waiting_accept")) {
+                    accumulator.waitingAcceptCount++;
+                } else if (Objects.equals(dispatchStatus, "claimed_by_suggested")) {
+                    accumulator.acceptedCount++;
+                    Long claimMinutes = resolveClaimDurationMinutes(record, assignment);
+                    if (claimMinutes != null) {
+                        accumulator.acceptedClaimMinutes += claimMinutes;
+                        accumulator.acceptedClaimSampleCount++;
+                    }
+                } else if (Objects.equals(dispatchStatus, "claimed_by_other")) {
+                    accumulator.lostCount++;
+                }
+            }
+
+            if (Objects.equals(dispatchStatus, "waiting_accept")) {
+                waitingAcceptCount++;
+                if (isWaitingOverHours(record.getCreateTime(), overdueHours)) {
+                    overdueWaitingCount++;
+                }
+                waitingRecords.add(buildDispatchWaitItem(record, dispatch));
+            } else if (Objects.equals(dispatchStatus, "claimed_by_suggested")) {
+                claimedBySuggestedCount++;
+                Long claimMinutes = resolveClaimDurationMinutes(record, assignment);
+                if (claimMinutes != null) {
+                    totalClaimMinutes += claimMinutes;
+                    claimSampleCount++;
+                }
+            } else if (Objects.equals(dispatchStatus, "claimed_by_other")) {
+                claimedByOtherCount++;
+                Long claimMinutes = resolveClaimDurationMinutes(record, assignment);
+                if (claimMinutes != null) {
+                    totalClaimMinutes += claimMinutes;
+                    claimSampleCount++;
+                }
+            } else if (Objects.equals(dispatchStatus, "department_queue")) {
+                departmentQueueCount++;
+            }
+        }
+
+        int claimedRecommendedCount = claimedBySuggestedCount + claimedByOtherCount;
+        AdminConsultationDispatchSummaryVO summary = new AdminConsultationDispatchSummaryVO();
+        summary.setTotalRecordCount(totalCount);
+        summary.setSuggestedCount(suggestedCount);
+        summary.setWaitingAcceptCount(waitingAcceptCount);
+        summary.setClaimedBySuggestedCount(claimedBySuggestedCount);
+        summary.setClaimedByOtherCount(claimedByOtherCount);
+        summary.setDepartmentQueueCount(departmentQueueCount);
+        summary.setOverdueWaitingCount(overdueWaitingCount);
+        summary.setOverdueThresholdHours(overdueHours);
+        summary.setSuggestionCoverageText(suggestedCount + " / " + totalCount);
+        summary.setSuggestedHitRateText(formatPercent(claimedBySuggestedCount, claimedRecommendedCount));
+        summary.setClaimedByOtherRateText(formatPercent(claimedByOtherCount, claimedRecommendedCount));
+        summary.setAverageClaimDurationText(formatAverageDuration(totalClaimMinutes, claimSampleCount));
+        summary.setDoctorBreakdown(buildDispatchDoctorBreakdown(doctorMap));
+        summary.setRecentWaitingRecords(waitingRecords.stream()
+                .sorted(Comparator
+                        .comparing(AdminConsultationDispatchWaitVO::getCreateTime, Comparator.nullsLast(Date::compareTo))
+                        .thenComparing(AdminConsultationDispatchWaitVO::getConsultationId, Comparator.nullsLast(Integer::compareTo)))
+                .limit(6)
+                .toList());
+        return summary;
     }
 
     @Override
@@ -238,6 +375,15 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
             vo.setDoctorAssignment(doctorAssignment);
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
+            vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
+                    doctorAssignment == null ? null : doctorAssignment.getDoctorId(),
+                    doctorAssignment == null ? null : doctorAssignment.getDoctorName(),
+                    doctorAssignment == null ? null : doctorAssignment.getStatus(),
+                    triageResult == null ? null : triageResult.getDoctorId(),
+                    triageResult == null ? null : triageResult.getDoctorName(),
+                    triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
+                    triageResult == null ? null : triageResult.getReasonText()
+            ));
             vo.setAiComparison(ConsultationAiComparisonUtils.build(doctorConclusion, triageSession, triageResult));
             vo.setDoctorFollowUps(doctorFollowUps);
             vo.setTriageSession(triageSession);
@@ -393,11 +539,45 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         return new SampleQueryContext(records, latestConclusionMap, aiComparisonMap);
     }
 
+    private AdminConsultationDispatchSummaryVO emptyDispatchSummary(int overdueHours) {
+        AdminConsultationDispatchSummaryVO summary = new AdminConsultationDispatchSummaryVO();
+        summary.setTotalRecordCount(0);
+        summary.setSuggestedCount(0);
+        summary.setWaitingAcceptCount(0);
+        summary.setClaimedBySuggestedCount(0);
+        summary.setClaimedByOtherCount(0);
+        summary.setDepartmentQueueCount(0);
+        summary.setOverdueWaitingCount(0);
+        summary.setOverdueThresholdHours(overdueHours);
+        summary.setSuggestionCoverageText("0 / 0");
+        summary.setSuggestedHitRateText("-");
+        summary.setClaimedByOtherRateText("-");
+        summary.setAverageClaimDurationText("-");
+        summary.setDoctorBreakdown(List.of());
+        summary.setRecentWaitingRecords(List.of());
+        return summary;
+    }
+
     private <T> List<T> paginate(List<T> items, int limit, int offset) {
         return items.stream()
                 .skip(Math.max(offset, 0))
                 .limit(Math.max(1, Math.min(limit, 50)))
                 .toList();
+    }
+
+    private AdminConsultationDispatchWaitVO buildDispatchWaitItem(ConsultationRecord record,
+                                                                  ConsultationSmartDispatchVO dispatch) {
+        AdminConsultationDispatchWaitVO item = new AdminConsultationDispatchWaitVO();
+        item.setConsultationId(record.getId());
+        item.setConsultationNo(record.getConsultationNo());
+        item.setPatientName(record.getPatientName());
+        item.setCategoryName(record.getCategoryName());
+        item.setDepartmentName(record.getDepartmentName());
+        item.setSuggestedDoctorName(dispatch.getSuggestedDoctorName());
+        item.setRecommendationReason(dispatch.getRecommendationReason());
+        item.setCreateTime(record.getCreateTime());
+        item.setWaitingDurationText(formatDurationMinutes(resolveWaitingMinutes(record.getCreateTime())));
+        return item;
     }
 
     private AdminConsultationAiMismatchVO buildMismatchItem(ConsultationRecord record,
@@ -674,6 +854,79 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
                 .divide(BigDecimal.valueOf(denominator), 0, RoundingMode.HALF_UP) + "%";
     }
 
+    private String formatAverageDuration(long totalMinutes, int sampleCount) {
+        if (sampleCount <= 0 || totalMinutes <= 0) return "-";
+        return formatDurationMinutes(Math.max(1L, Math.round((double) totalMinutes / sampleCount)));
+    }
+
+    private String formatDurationMinutes(Long minutes) {
+        if (minutes == null || minutes <= 0) return "-";
+        long duration = minutes;
+        long days = duration / (24 * 60);
+        duration %= 24 * 60;
+        long hours = duration / 60;
+        long remainMinutes = duration % 60;
+        if (days > 0) {
+            return remainMinutes > 0
+                    ? days + "天 " + hours + "小时 " + remainMinutes + "分钟"
+                    : days + "天 " + hours + "小时";
+        }
+        if (hours > 0) {
+            return remainMinutes > 0 ? hours + "小时 " + remainMinutes + "分钟" : hours + "小时";
+        }
+        return duration + "分钟";
+    }
+
+    private Long resolveWaitingMinutes(Date createTime) {
+        if (createTime == null) return null;
+        long diff = System.currentTimeMillis() - createTime.getTime();
+        if (diff <= 0) return 1L;
+        return Math.max(1L, diff / 60000L);
+    }
+
+    private boolean isWaitingOverHours(Date createTime, int hours) {
+        if (createTime == null || hours <= 0) return false;
+        return System.currentTimeMillis() - createTime.getTime() >= hours * 60L * 60L * 1000L;
+    }
+
+    private int resolveWaitingOverdueHours(ConsultationDispatchConfig config) {
+        return config == null || config.getWaitingOverdueHours() == null || config.getWaitingOverdueHours() <= 0
+                ? 24
+                : config.getWaitingOverdueHours();
+    }
+
+    private Long resolveClaimDurationMinutes(ConsultationRecord record,
+                                             ConsultationDoctorAssignment assignment) {
+        if (record == null || assignment == null || record.getCreateTime() == null) return null;
+        Date claimTime = assignment.getClaimTime() != null ? assignment.getClaimTime() : assignment.getUpdateTime();
+        if (claimTime == null) return null;
+        long diff = claimTime.getTime() - record.getCreateTime().getTime();
+        if (diff <= 0) return 1L;
+        return Math.max(1L, diff / 60000L);
+    }
+
+    private Map<Integer, ConsultationDoctorAssignment> loadLatestAssignmentMap(List<Integer> consultationIds) {
+        if (consultationIds == null || consultationIds.isEmpty()) return Map.of();
+        Map<Integer, ConsultationDoctorAssignment> assignmentMap = new HashMap<>();
+        consultationDoctorAssignmentMapper.selectList(Wrappers.<ConsultationDoctorAssignment>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> assignmentMap.putIfAbsent(item.getConsultationId(), item));
+        return assignmentMap;
+    }
+
+    private Map<Integer, TriageResult> loadLatestTriageResultEntityMap(List<Integer> consultationIds) {
+        if (consultationIds == null || consultationIds.isEmpty()) return Map.of();
+        Map<Integer, TriageResult> triageResultMap = new HashMap<>();
+        triageResultMapper.selectList(Wrappers.<TriageResult>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("is_final")
+                        .orderByDesc("id"))
+                .forEach(item -> triageResultMap.putIfAbsent(item.getConsultationId(), item));
+        return triageResultMap;
+    }
+
     private Map<Integer, ConsultationDoctorConclusion> loadLatestConclusionMap(List<Integer> consultationIds) {
         if (consultationIds == null || consultationIds.isEmpty()) return Map.of();
         Map<Integer, ConsultationDoctorConclusion> latestConclusionMap = new HashMap<>();
@@ -910,7 +1163,30 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
                         .comparing(AdminConsultationAiDoctorVO::getMismatchCount, Comparator.reverseOrder())
                         .thenComparing(AdminConsultationAiDoctorVO::getComparedCount, Comparator.reverseOrder())
                         .thenComparing(AdminConsultationAiDoctorVO::getTotalCount, Comparator.reverseOrder())
-                        .thenComparing(AdminConsultationAiDoctorVO::getDoctorName))
+                .thenComparing(AdminConsultationAiDoctorVO::getDoctorName))
+                .toList();
+    }
+
+    private List<AdminConsultationDispatchDoctorVO> buildDispatchDoctorBreakdown(Map<String, DispatchDoctorAccumulator> doctorMap) {
+        return doctorMap.values().stream()
+                .map(item -> {
+                    AdminConsultationDispatchDoctorVO vo = new AdminConsultationDispatchDoctorVO();
+                    vo.setDoctorId(item.doctorId);
+                    vo.setDoctorName(item.doctorName);
+                    vo.setDepartmentName(item.departmentName);
+                    vo.setTotalSuggestedCount(item.totalSuggestedCount);
+                    vo.setWaitingAcceptCount(item.waitingAcceptCount);
+                    vo.setAcceptedCount(item.acceptedCount);
+                    vo.setLostCount(item.lostCount);
+                    vo.setHitRateText(formatPercent(item.acceptedCount, item.acceptedCount + item.lostCount));
+                    vo.setAverageClaimDurationText(formatAverageDuration(item.acceptedClaimMinutes, item.acceptedClaimSampleCount));
+                    return vo;
+                })
+                .sorted(Comparator
+                        .comparing(AdminConsultationDispatchDoctorVO::getWaitingAcceptCount, Comparator.reverseOrder())
+                        .thenComparing(AdminConsultationDispatchDoctorVO::getLostCount, Comparator.reverseOrder())
+                        .thenComparing(AdminConsultationDispatchDoctorVO::getTotalSuggestedCount, Comparator.reverseOrder())
+                        .thenComparing(AdminConsultationDispatchDoctorVO::getDoctorName))
                 .toList();
     }
 
@@ -1039,6 +1315,15 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         return "doctor:unknown";
     }
 
+    private String resolveDispatchDoctorKey(ConsultationSmartDispatchVO dispatch) {
+        if (dispatch == null) return "doctor:unknown";
+        if (dispatch.getSuggestedDoctorId() != null) {
+            return "doctor:" + dispatch.getSuggestedDoctorId();
+        }
+        String doctorName = trimToNull(dispatch.getSuggestedDoctorName());
+        return doctorName == null ? "doctor:unknown" : "doctor-name:" + doctorName;
+    }
+
     private static final class SampleQueryContext {
         final List<ConsultationRecord> records;
         final Map<Integer, ConsultationDoctorConclusion> latestConclusionMap;
@@ -1075,5 +1360,17 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         int mismatchCount;
         int pendingCount;
         Map<String, Integer> reasonCountMap = new HashMap<>();
+    }
+
+    private static final class DispatchDoctorAccumulator {
+        Integer doctorId;
+        String doctorName;
+        String departmentName;
+        int totalSuggestedCount;
+        int waitingAcceptCount;
+        int acceptedCount;
+        int lostCount;
+        long acceptedClaimMinutes;
+        int acceptedClaimSampleCount;
     }
 }
