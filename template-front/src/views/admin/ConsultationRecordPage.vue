@@ -92,12 +92,34 @@
                   <span
                     v-for="item in row.mismatchReasonBreakdown.slice(0, 3)"
                     :key="`${row.doctorId || row.doctorName}-${item.reasonCode}`"
-                    class="reason-chip"
+                    class="reason-chip is-clickable"
+                    @click="openMismatchSampleDialog({
+                      title: `${row.doctorName || '医生'} · ${item.reasonLabel}`,
+                      doctorName: row.doctorName || '',
+                      reasonCode: item.reasonCode,
+                      sourceCount: item.count
+                    })"
                   >
                     {{ item.reasonLabel }} {{ item.count }}次
                   </span>
                 </div>
                 <span v-else class="muted-copy">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="110" align="center">
+              <template #default="{ row }">
+                <el-button
+                  link
+                  type="primary"
+                  :disabled="!row.mismatchCount"
+                  @click="openMismatchSampleDialog({
+                    title: `${row.doctorName || '医生'} 的 AI 偏差样本`,
+                    doctorName: row.doctorName || '',
+                    sourceCount: row.mismatchCount
+                  })"
+                >
+                  查看样本
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -112,13 +134,71 @@
           </div>
           <div v-if="aiSummary.mismatchReasonBreakdown?.length" class="reason-list">
             <article v-for="item in aiSummary.mismatchReasonBreakdown" :key="item.reasonCode" class="reason-item">
-              <strong>{{ item.reasonLabel }}</strong>
-              <span>{{ item.count }} 次</span>
+              <div class="reason-item-main">
+                <strong>{{ item.reasonLabel }}</strong>
+                <span>{{ item.count }} 次</span>
+              </div>
+              <el-button
+                link
+                type="primary"
+                @click="openMismatchSampleDialog({
+                  title: `${item.reasonLabel} 相关偏差样本`,
+                  reasonCode: item.reasonCode,
+                  sourceCount: item.count
+                })"
+              >
+                查看样本
+              </el-button>
             </article>
           </div>
           <el-empty v-else description="当前暂无已沉淀的 AI 差异原因统计" />
         </article>
       </div>
+      <div class="head summary-subhead">
+        <div>
+          <h3>字段偏差分析</h3>
+          <p>聚焦病情等级、处理去向和随访安排三个关键字段，查看 AI 建议与医生最终结论的偏差集中点。</p>
+        </div>
+      </div>
+      <div v-if="aiSummary.fieldBreakdown?.length" class="field-grid">
+        <article v-for="item in aiSummary.fieldBreakdown" :key="item.fieldKey" class="subcard field-card">
+          <div class="field-card-head">
+            <div>
+              <strong>{{ item.fieldLabel }}</strong>
+              <p>已对比 {{ item.comparedCount }} / {{ item.totalCount }}</p>
+            </div>
+            <span class="field-rate">{{ item.mismatchRateText === '-' ? '偏差率 -' : `偏差率 ${item.mismatchRateText}` }}</span>
+          </div>
+          <div class="field-metrics">
+            <article>
+              <span>一致</span>
+              <strong>{{ item.matchCount }}</strong>
+            </article>
+            <article>
+              <span>偏差</span>
+              <strong>{{ item.mismatchCount }}</strong>
+            </article>
+            <article>
+              <span>待补充</span>
+              <strong>{{ item.pendingCount }}</strong>
+            </article>
+          </div>
+          <div>
+            <small class="field-reason-title">偏差关联原因</small>
+            <div v-if="item.mismatchReasonBreakdown?.length" class="reason-chip-list">
+              <span v-for="reason in item.mismatchReasonBreakdown.slice(0, 4)" :key="`${item.fieldKey}-${reason.reasonCode}`" class="reason-chip">
+                {{ reason.reasonLabel }} {{ reason.count }}次
+              </span>
+            </div>
+            <span v-else class="muted-copy">当前暂无可关联的差异原因</span>
+          </div>
+          <div class="field-card-actions">
+            <el-button link type="danger" :disabled="!item.mismatchCount" @click="openFieldSampleDialog(item, 'mismatch')">查看偏差样本</el-button>
+            <el-button link type="primary" :disabled="!item.pendingCount" @click="openFieldSampleDialog(item, 'pending')">查看待补充样本</el-button>
+          </div>
+        </article>
+      </div>
+      <el-empty v-else description="当前暂无字段级 AI 偏差分析数据" />
       <div class="head summary-subhead">
         <div>
           <h3>最近差异记录</h3>
@@ -204,6 +284,137 @@
         </el-table-column>
       </el-table>
     </section>
+
+    <el-dialog v-model="fieldSampleVisible" :title="fieldSampleDialogTitle" width="920px" destroy-on-close>
+      <div class="field-sample-toolbar">
+        <div class="chips">
+          <span>{{ fieldSampleMeta.fieldLabel || '-' }}</span>
+          <span v-if="fieldSampleMeta.mismatchCount !== null">偏差 {{ fieldSampleMeta.mismatchCount }}</span>
+          <span v-if="fieldSampleMeta.pendingCount !== null">待补充 {{ fieldSampleMeta.pendingCount }}</span>
+        </div>
+        <div class="field-sample-status-group">
+          <el-button :type="fieldSampleStatus === 'mismatch' ? 'danger' : 'default'" plain @click="switchFieldSampleStatus('mismatch')">偏差样本</el-button>
+          <el-button :type="fieldSampleStatus === 'pending' ? 'primary' : 'default'" plain @click="switchFieldSampleStatus('pending')">待补充样本</el-button>
+          <el-button plain :disabled="!fieldSampleMeta.fieldKey" :loading="fieldSampleExporting" @click="exportFieldSamples">Export CSV</el-button>
+        </div>
+      </div>
+      <div class="field-sample-filter-bar">
+        <el-input
+          v-model="fieldSampleFilters.keyword"
+          clearable
+          placeholder="搜索单号、患者、医生或字段取值"
+          style="width: 240px"
+          @keyup.enter="loadFieldSamples"
+        />
+        <el-select v-model="fieldSampleFilters.doctorName" clearable placeholder="全部医生" style="width: 160px">
+          <el-option v-for="item in fieldSampleDoctorOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select v-model="fieldSampleFilters.categoryName" clearable placeholder="全部分类" style="width: 160px">
+          <el-option v-for="item in fieldSampleCategoryOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select v-model="fieldSampleFilters.departmentName" clearable placeholder="全部科室" style="width: 160px">
+          <el-option v-for="item in fieldSampleDepartmentOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-button type="primary" plain @click="loadFieldSamples">筛选</el-button>
+        <el-button @click="resetFieldSampleFilters">重置</el-button>
+      </div>
+      <div v-loading="fieldSampleLoading">
+        <template v-if="fieldSamples.length">
+          <div class="field-sample-list">
+          <article v-for="item in fieldSamples" :key="`${item.fieldKey}-${item.consultationId}-${item.compareStatus}`" class="subcard field-sample-card">
+            <div class="chips">
+              <span>{{ item.consultationNo }}</span>
+              <span>{{ item.patientName }}</span>
+              <span>{{ item.categoryName }}</span>
+              <span>{{ item.departmentName || '未分配科室' }}</span>
+              <span :class="['compare-badge', comparisonStatusClass(item.compareStatus)]">{{ comparisonStatusLabel(item.compareStatus) }}</span>
+              <span>{{ formatDate(item.updateTime) }}</span>
+            </div>
+            <p class="copy"><strong>处理医生：</strong>{{ item.doctorName || '待处理' }}</p>
+            <p class="copy"><strong>{{ item.fieldLabel }}：</strong>AI {{ item.aiValueText || '未提供' }} / 医生 {{ item.doctorValueText || '待补充' }}</p>
+            <div v-if="mismatchReasonLabels(item.mismatchReasonCodes).length" class="chips danger">
+              <span v-for="tag in mismatchReasonLabels(item.mismatchReasonCodes)" :key="`${item.consultationId}-${tag}`">{{ tag }}</span>
+            </div>
+            <p v-if="item.mismatchRemark" class="copy"><strong>差异说明：</strong>{{ item.mismatchRemark }}</p>
+            <div class="field-sample-actions">
+              <el-button link type="primary" @click="openDetailFromFieldSample(item.consultationId)">查看详情</el-button>
+            </div>
+          </article>
+        </div>
+        </template>
+        <el-empty v-else :description="fieldSampleStatus === 'mismatch' ? '当前暂无该字段的偏差样本' : '当前暂无该字段的待补充样本'" />
+        <div v-if="fieldSamples.length" class="sample-footer">
+          <span class="muted-copy">已加载 {{ fieldSamples.length }} 条样本</span>
+          <el-button v-if="fieldSampleHasMore" plain :loading="fieldSampleLoading" @click="loadMoreFieldSamples">加载更多</el-button>
+        </div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="mismatchSampleVisible" :title="mismatchSampleDialogTitle" width="920px" destroy-on-close>
+      <div class="field-sample-toolbar">
+        <div class="chips">
+          <span>AI 偏差样本</span>
+          <span v-if="mismatchSampleFilters.doctorName">医生 {{ mismatchSampleFilters.doctorName }}</span>
+          <span v-if="mismatchSampleFilters.reasonCode">原因 {{ aiMismatchReasonLabel(mismatchSampleFilters.reasonCode) }}</span>
+          <span v-if="mismatchSampleMeta.sourceCount !== null">命中 {{ mismatchSampleMeta.sourceCount }}</span>
+        </div>
+        <el-button :loading="mismatchSampleLoading" @click="loadMismatchSamples">刷新样本</el-button>
+      </div>
+      <div class="field-sample-filter-bar">
+        <el-input
+          v-model="mismatchSampleFilters.keyword"
+          clearable
+          placeholder="搜索单号、患者、医生或 AI 推荐依据"
+          style="width: 240px"
+          @keyup.enter="loadMismatchSamples"
+        />
+        <el-select v-model="mismatchSampleFilters.doctorName" clearable placeholder="全部医生" style="width: 160px">
+          <el-option v-for="item in fieldSampleDoctorOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select v-model="mismatchSampleFilters.reasonCode" clearable placeholder="全部原因" style="width: 180px">
+          <el-option v-for="item in mismatchSampleReasonOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-select v-model="mismatchSampleFilters.categoryName" clearable placeholder="全部分类" style="width: 160px">
+          <el-option v-for="item in fieldSampleCategoryOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select v-model="mismatchSampleFilters.departmentName" clearable placeholder="全部科室" style="width: 160px">
+          <el-option v-for="item in fieldSampleDepartmentOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-button type="primary" plain @click="loadMismatchSamples">筛选</el-button>
+        <el-button @click="resetMismatchSampleFilters">重置</el-button>
+        <el-button plain :loading="mismatchSampleExporting" @click="exportMismatchSamples">Export CSV</el-button>
+      </div>
+      <div v-loading="mismatchSampleLoading">
+        <div v-if="mismatchSamples.length" class="mismatch-list">
+          <article v-for="item in mismatchSamples" :key="`${item.consultationId}-${item.updateTime || ''}`" class="subcard mismatch-card">
+            <div class="chips">
+              <span>{{ item.consultationNo }}</span>
+              <span>{{ item.patientName }}</span>
+              <span>{{ item.categoryName }}</span>
+              <span>{{ item.departmentName || '未分配科室' }}</span>
+              <span>{{ formatDate(item.updateTime) }}</span>
+            </div>
+            <p class="copy"><strong>处理医生：</strong>{{ item.doctorName || '未记录' }}</p>
+            <p class="copy"><strong>病情等级：</strong>AI {{ item.aiConditionLevel ? conditionLevelLabel(item.aiConditionLevel) : '未提供' }} / 医生 {{ item.doctorConditionLevel ? conditionLevelLabel(item.doctorConditionLevel) : '未填写' }}</p>
+            <p class="copy"><strong>处理去向：</strong>AI {{ item.aiDisposition ? dispositionLabel(item.aiDisposition) : '未提供' }} / 医生 {{ item.doctorDisposition ? dispositionLabel(item.doctorDisposition) : '未填写' }}</p>
+            <p class="copy"><strong>随访安排：</strong>AI {{ item.aiFollowUpText || '未提供' }} / 医生 {{ item.doctorFollowUpText || '未填写' }}</p>
+            <p v-if="item.aiReasonText" class="copy"><strong>AI 推荐依据：</strong>{{ item.aiReasonText }}</p>
+            <div v-if="mismatchReasonLabels(item.mismatchReasonCodes).length" class="chips danger">
+              <span v-for="tag in mismatchReasonLabels(item.mismatchReasonCodes)" :key="`${item.consultationId}-${tag}`">{{ tag }}</span>
+            </div>
+            <p v-if="item.mismatchRemark" class="copy"><strong>偏差说明：</strong>{{ item.mismatchRemark }}</p>
+            <div class="actions">
+              <el-button link type="primary" @click="openDetailFromMismatchSample(item.consultationId)">查看详情</el-button>
+            </div>
+          </article>
+        </div>
+        <el-empty v-else description="当前暂无符合条件的 AI 偏差样本" />
+        <div v-if="mismatchSamples.length" class="sample-footer">
+          <span class="muted-copy">已加载 {{ mismatchSamples.length }} 条样本</span>
+          <el-button v-if="mismatchSampleHasMore" plain :loading="mismatchSampleLoading" @click="loadMoreMismatchSamples">加载更多</el-button>
+        </div>
+      </div>
+    </el-dialog>
 
     <el-dialog v-model="detailVisible" title="问诊记录详情" width="1080px" destroy-on-close>
       <div v-loading="detailLoading">
@@ -461,22 +672,40 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, ref } from 'vue'
-import { get, resolveImagePath } from '@/net'
-import { aiMismatchReasonLabel, comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { download, get, resolveImagePath } from '@/net'
+import { aiMismatchReasonLabel, aiMismatchReasonOptions, comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 
+const SAMPLE_PAGE_SIZE = 20
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
 const summaryLoading = ref(false)
+const mismatchSampleVisible = ref(false)
+const mismatchSampleLoading = ref(false)
+const mismatchSampleExporting = ref(false)
+const mismatchSampleOffset = ref(0)
+const mismatchSampleHasMore = ref(false)
+const fieldSampleVisible = ref(false)
+const fieldSampleLoading = ref(false)
+const fieldSampleExporting = ref(false)
+const fieldSampleOffset = ref(0)
+const fieldSampleHasMore = ref(false)
 const records = ref([])
 const detail = ref(null)
 const aiSummary = ref(createEmptyAiSummary())
+const mismatchSamples = ref([])
+const fieldSamples = ref([])
 const keyword = ref('')
 const categoryFilter = ref('')
 const triageFilter = ref('')
 const statusFilter = ref('')
 const assignmentFilter = ref('')
+const mismatchSampleMeta = ref(createEmptyMismatchSampleMeta())
+const mismatchSampleFilters = reactive(createEmptyMismatchSampleFilters())
+const fieldSampleStatus = ref('mismatch')
+const fieldSampleMeta = ref(createEmptyFieldSampleMeta())
+const fieldSampleFilters = reactive(createEmptyFieldSampleFilters())
 
 function createEmptyAiSummary() {
   return {
@@ -489,9 +718,46 @@ function createEmptyAiSummary() {
     consistentRateText: '-',
     departmentBreakdown: [],
     categoryBreakdown: [],
+    fieldBreakdown: [],
     doctorBreakdown: [],
     mismatchReasonBreakdown: [],
     recentMismatchRecords: []
+  }
+}
+
+function createEmptyFieldSampleMeta() {
+  return {
+    fieldKey: '',
+    fieldLabel: '',
+    mismatchCount: null,
+    pendingCount: null
+  }
+}
+
+function createEmptyMismatchSampleMeta() {
+  return {
+    title: 'AI 偏差样本',
+    sourceCount: null,
+    defaultFilters: createEmptyMismatchSampleFilters()
+  }
+}
+
+function createEmptyMismatchSampleFilters() {
+  return {
+    keyword: '',
+    doctorName: '',
+    reasonCode: '',
+    categoryName: '',
+    departmentName: ''
+  }
+}
+
+function createEmptyFieldSampleFilters() {
+  return {
+    keyword: '',
+    doctorName: '',
+    categoryName: '',
+    departmentName: ''
   }
 }
 
@@ -503,6 +769,27 @@ const todayCount = computed(() => {
 })
 const categoryOptions = computed(() => [...new Set(records.value.map(item => item.categoryName).filter(Boolean))])
 const triageOptions = computed(() => [...new Set(records.value.map(item => item.triageLevelName).filter(Boolean))])
+const fieldSampleDoctorOptions = computed(() => [...new Set((aiSummary.value.doctorBreakdown || []).map(item => item.doctorName).filter(Boolean))])
+const fieldSampleCategoryOptions = computed(() => [...new Set(records.value.map(item => item.categoryName).filter(Boolean))])
+const fieldSampleDepartmentOptions = computed(() => [...new Set(records.value.map(item => item.departmentName).filter(Boolean))])
+/* const mismatchSampleReasonOptions = computed(() => aiMismatchReasonOptions.map(option => {
+  const count = (aiSummary.value.mismatchReasonBreakdown || []).find(item => item.reasonCode === option.value)?.count
+  return {
+    ...option,
+    label: count ? `${option.label}（${count}）` : option.label
+  }
+}))
+const mismatchSampleDialogTitle = computed(() => mismatchSampleMeta.value.title || 'AI 偏差样本')
+*/
+const mismatchSampleReasonOptions = computed(() => aiMismatchReasonOptions.map(option => {
+  const count = (aiSummary.value.mismatchReasonBreakdown || []).find(item => item.reasonCode === option.value)?.count
+  return {
+    ...option,
+    label: count ? `${option.label} (${count})` : option.label
+  }
+}))
+const mismatchSampleDialogTitle = computed(() => mismatchSampleMeta.value.title || 'AI 偏差样本')
+const fieldSampleDialogTitle = computed(() => `${fieldSampleMeta.value.fieldLabel || '字段'}${fieldSampleStatus.value === 'mismatch' ? '偏差样本' : '待补充样本'}`)
 const filteredRecords = computed(() => records.value.filter(item => {
   const search = keyword.value.trim().toLowerCase()
   const matchesKeyword = !search || [item.consultationNo, item.patientName, item.title, item.chiefComplaint].filter(Boolean).some(text => `${text}`.toLowerCase().includes(search))
@@ -536,6 +823,181 @@ function loadAiSummary() {
     summaryLoading.value = false
     ElMessage.warning(message || 'AI 采纳统计加载失败')
   })
+}
+function openMismatchSampleDialog({
+  title = 'AI 偏差样本',
+  doctorName = '',
+  reasonCode = '',
+  categoryName = '',
+  departmentName = '',
+  sourceCount = null
+} = {}) {
+  const defaultFilters = {
+    ...createEmptyMismatchSampleFilters(),
+    doctorName,
+    reasonCode,
+    categoryName,
+    departmentName
+  }
+  mismatchSampleMeta.value = {
+    title,
+    sourceCount,
+    defaultFilters
+  }
+  Object.assign(mismatchSampleFilters, createEmptyMismatchSampleFilters(), defaultFilters)
+  mismatchSampleOffset.value = 0
+  mismatchSampleHasMore.value = false
+  mismatchSampleVisible.value = true
+  loadMismatchSamples()
+}
+function buildMismatchSampleQuery({ offset = 0, includePaging = true } = {}) {
+  const query = []
+  if (includePaging) {
+    query.push(`limit=${SAMPLE_PAGE_SIZE}`, `offset=${offset}`)
+  }
+  if (`${mismatchSampleFilters.keyword || ''}`.trim()) query.push(`keyword=${encodeURIComponent(`${mismatchSampleFilters.keyword}`.trim())}`)
+  if (mismatchSampleFilters.doctorName) query.push(`doctorName=${encodeURIComponent(mismatchSampleFilters.doctorName)}`)
+  if (mismatchSampleFilters.reasonCode) query.push(`reasonCode=${encodeURIComponent(mismatchSampleFilters.reasonCode)}`)
+  if (mismatchSampleFilters.categoryName) query.push(`categoryName=${encodeURIComponent(mismatchSampleFilters.categoryName)}`)
+  if (mismatchSampleFilters.departmentName) query.push(`departmentName=${encodeURIComponent(mismatchSampleFilters.departmentName)}`)
+  return query
+}
+function loadMismatchSamples({ append = false } = {}) {
+  mismatchSampleLoading.value = true
+  const nextOffset = append ? mismatchSampleOffset.value : 0
+  if (!append) mismatchSamples.value = []
+  const query = buildMismatchSampleQuery({ offset: nextOffset })
+  get(`/api/admin/consultation-record/mismatch-samples?${query.join('&')}`, data => {
+    const list = data || []
+    mismatchSamples.value = append ? [...mismatchSamples.value, ...list] : list
+    mismatchSampleOffset.value = nextOffset + list.length
+    mismatchSampleHasMore.value = list.length >= SAMPLE_PAGE_SIZE
+    mismatchSampleLoading.value = false
+  }, message => {
+    mismatchSampleLoading.value = false
+    ElMessage.warning(message || 'AI 偏差样本加载失败')
+  })
+}
+function resetMismatchSampleFilters() {
+  Object.assign(
+    mismatchSampleFilters,
+    createEmptyMismatchSampleFilters(),
+    mismatchSampleMeta.value.defaultFilters || createEmptyMismatchSampleFilters()
+  )
+  mismatchSampleOffset.value = 0
+  mismatchSampleHasMore.value = false
+  loadMismatchSamples()
+}
+function loadMoreMismatchSamples() {
+  if (!mismatchSampleHasMore.value || mismatchSampleLoading.value) return
+  loadMismatchSamples({ append: true })
+}
+function exportMismatchSamples() {
+  mismatchSampleExporting.value = true
+  const query = buildMismatchSampleQuery({ includePaging: false })
+  download(`/api/admin/consultation-record/mismatch-samples/export?${query.join('&')}`, 'consultation-mismatch-samples.csv', () => {
+    mismatchSampleExporting.value = false
+    ElMessage.success('CSV download started')
+  }, message => {
+    mismatchSampleExporting.value = false
+    ElMessage.warning(message || 'Mismatch sample export failed')
+  }, error => {
+    mismatchSampleExporting.value = false
+    console.error(error)
+    ElMessage.error('Mismatch sample export failed')
+  })
+}
+function openFieldSampleDialog(item, status = 'mismatch') {
+  fieldSampleMeta.value = {
+    fieldKey: item?.fieldKey || '',
+    fieldLabel: item?.fieldLabel || '',
+    mismatchCount: item?.mismatchCount ?? 0,
+    pendingCount: item?.pendingCount ?? 0
+  }
+  Object.assign(fieldSampleFilters, createEmptyFieldSampleFilters())
+  fieldSampleOffset.value = 0
+  fieldSampleHasMore.value = false
+  fieldSampleStatus.value = status === 'pending' ? 'pending' : 'mismatch'
+  fieldSampleVisible.value = true
+  loadFieldSamples()
+}
+function switchFieldSampleStatus(status) {
+  const nextStatus = status === 'pending' ? 'pending' : 'mismatch'
+  if (fieldSampleStatus.value === nextStatus) return
+  fieldSampleStatus.value = nextStatus
+  fieldSampleOffset.value = 0
+  fieldSampleHasMore.value = false
+  if (fieldSampleVisible.value) loadFieldSamples()
+}
+function buildFieldSampleQuery({ offset = 0, includePaging = true } = {}) {
+  const query = [
+    `fieldKey=${encodeURIComponent(fieldSampleMeta.value.fieldKey)}`,
+    `status=${encodeURIComponent(fieldSampleStatus.value)}`
+  ]
+  if (includePaging) {
+    query.push(`limit=${SAMPLE_PAGE_SIZE}`, `offset=${offset}`)
+  }
+  if (`${fieldSampleFilters.keyword || ''}`.trim()) query.push(`keyword=${encodeURIComponent(`${fieldSampleFilters.keyword}`.trim())}`)
+  if (fieldSampleFilters.doctorName) query.push(`doctorName=${encodeURIComponent(fieldSampleFilters.doctorName)}`)
+  if (fieldSampleFilters.categoryName) query.push(`categoryName=${encodeURIComponent(fieldSampleFilters.categoryName)}`)
+  if (fieldSampleFilters.departmentName) query.push(`departmentName=${encodeURIComponent(fieldSampleFilters.departmentName)}`)
+  return query
+}
+function loadFieldSamples({ append = false } = {}) {
+  if (!fieldSampleMeta.value.fieldKey) {
+    fieldSamples.value = []
+    fieldSampleOffset.value = 0
+    fieldSampleHasMore.value = false
+    return
+  }
+  fieldSampleLoading.value = true
+  const nextOffset = append ? fieldSampleOffset.value : 0
+  if (!append) fieldSamples.value = []
+  const query = buildFieldSampleQuery({ offset: nextOffset })
+  get(`/api/admin/consultation-record/field-samples?${query.join('&')}`, data => {
+    const list = data || []
+    fieldSamples.value = append ? [...fieldSamples.value, ...list] : list
+    fieldSampleOffset.value = nextOffset + list.length
+    fieldSampleHasMore.value = list.length >= SAMPLE_PAGE_SIZE
+    fieldSampleLoading.value = false
+  }, message => {
+    fieldSampleLoading.value = false
+    ElMessage.warning(message || '字段样本加载失败')
+  })
+}
+function resetFieldSampleFilters() {
+  Object.assign(fieldSampleFilters, createEmptyFieldSampleFilters())
+  fieldSampleOffset.value = 0
+  fieldSampleHasMore.value = false
+  loadFieldSamples()
+}
+function loadMoreFieldSamples() {
+  if (!fieldSampleHasMore.value || fieldSampleLoading.value) return
+  loadFieldSamples({ append: true })
+}
+function exportFieldSamples() {
+  if (!fieldSampleMeta.value.fieldKey) return
+  fieldSampleExporting.value = true
+  const query = buildFieldSampleQuery({ includePaging: false })
+  download(`/api/admin/consultation-record/field-samples/export?${query.join('&')}`, 'consultation-field-samples.csv', () => {
+    fieldSampleExporting.value = false
+    ElMessage.success('CSV download started')
+  }, message => {
+    fieldSampleExporting.value = false
+    ElMessage.warning(message || 'Field sample export failed')
+  }, error => {
+    fieldSampleExporting.value = false
+    console.error(error)
+    ElMessage.error('Field sample export failed')
+  })
+}
+function openDetailFromMismatchSample(id) {
+  mismatchSampleVisible.value = false
+  openDetail(id)
+}
+function openDetailFromFieldSample(id) {
+  fieldSampleVisible.value = false
+  openDetail(id)
 }
 function openDetail(id) {
   detailVisible.value = true
@@ -602,6 +1064,7 @@ onMounted(() => refreshAll())
 }
 
 .breakdown-grid,
+.field-grid,
 .answer-grid,
 .mismatch-list,
 .compare-grid {
@@ -673,6 +1136,10 @@ onMounted(() => refreshAll())
 
 .breakdown-grid {
   margin-top: 18px;
+}
+
+.field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .breakdown-card {
@@ -804,6 +1271,118 @@ onMounted(() => refreshAll())
   color: #9f4336;
 }
 
+.field-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field-card-actions,
+.field-sample-toolbar,
+.field-sample-filter-bar,
+.field-sample-status-group,
+.field-sample-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-card-head,
+.field-metrics {
+  display: flex;
+  gap: 12px;
+}
+
+.field-card-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.field-card-head strong,
+.field-metrics strong,
+.field-reason-title {
+  display: block;
+}
+
+.field-card-head p,
+.field-metrics span,
+.field-reason-title {
+  color: var(--app-muted);
+}
+
+.field-card-head p,
+.field-reason-title {
+  margin: 6px 0 0;
+  line-height: 1.6;
+}
+
+.field-rate {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.field-metrics {
+  justify-content: space-between;
+}
+
+.field-metrics article {
+  flex: 1;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(19, 73, 80, 0.04);
+}
+
+.field-metrics strong {
+  margin-top: 10px;
+  font-size: 24px;
+}
+
+.field-card-actions {
+  justify-content: flex-end;
+}
+
+.field-sample-toolbar {
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.field-sample-filter-bar {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.field-sample-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field-sample-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field-sample-actions {
+  justify-content: flex-end;
+}
+
+.sample-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
 .reason-chip-list {
   display: flex;
   gap: 8px;
@@ -819,6 +1398,16 @@ onMounted(() => refreshAll())
   color: #9f4336;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.reason-chip.is-clickable {
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.reason-chip.is-clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(159, 67, 54, 0.12);
 }
 
 .muted-copy {
@@ -841,6 +1430,12 @@ onMounted(() => refreshAll())
   background: rgba(19, 73, 80, 0.04);
 }
 
+.reason-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .reason-item strong {
   display: block;
 }
@@ -854,6 +1449,7 @@ onMounted(() => refreshAll())
   .stats,
   .summary-grid,
   .breakdown-grid,
+  .field-grid,
   .meta,
   .answer-grid,
   .mismatch-list,
@@ -867,7 +1463,14 @@ onMounted(() => refreshAll())
   .toolbar,
   .compare-item,
   .actions,
-  .breakdown-head {
+  .breakdown-head,
+  .field-card-head,
+  .field-metrics,
+  .field-sample-toolbar,
+  .field-sample-filter-bar,
+  .field-sample-status-group,
+  .field-card-actions,
+  .field-sample-actions {
     flex-direction: column;
     align-items: flex-start;
   }

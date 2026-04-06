@@ -52,6 +52,7 @@
               <span>{{ item.triageLevelName || '待评估' }}</span>
               <span>{{ triageActionLabel(item.triageActionType) }}</span>
             </div>
+            <small>{{ smartDispatchStatusLabel(item.smartDispatch) }}</small>
             <small>{{ item.chiefComplaint || '暂无主诉摘要' }}</small>
             <div class="record-foot">
               <span>{{ item.consultationNo }}</span>
@@ -147,6 +148,26 @@
 
           <section class="card-section">
             <div class="section-head">
+              <strong>智能分配进度</strong>
+              <el-tag :type="smartDispatchTagType(detailRecord.smartDispatch)" effect="light">
+                {{ smartDispatchStatusLabel(detailRecord.smartDispatch) }}
+              </el-tag>
+            </div>
+            <p class="copy">{{ smartDispatchHintText(detailRecord.smartDispatch) }}</p>
+            <div class="record-chip-row">
+              <span v-if="getSmartDispatch(detailRecord).suggestedDoctorName">
+                首推 {{ getSmartDispatch(detailRecord).suggestedDoctorName }}{{ getSmartDispatch(detailRecord).suggestedDoctorTitle ? ` / ${getSmartDispatch(detailRecord).suggestedDoctorTitle}` : '' }}
+              </span>
+              <span v-if="getSmartDispatch(detailRecord).candidateCount">候选 {{ getSmartDispatch(detailRecord).candidateCount }} 位</span>
+              <span v-if="getSmartDispatch(detailRecord).suggestedDoctorNextScheduleText">{{ getSmartDispatch(detailRecord).suggestedDoctorNextScheduleText }}</span>
+            </div>
+            <p v-if="getSmartDispatch(detailRecord).recommendationReason" class="copy">
+              <strong>推荐依据：</strong>{{ getSmartDispatch(detailRecord).recommendationReason }}
+            </p>
+          </section>
+
+          <section class="card-section">
+            <div class="section-head">
               <strong>导诊留痕</strong>
               <span>{{ detailRecord.triageSession?.messageCount || 0 }} 条消息</span>
             </div>
@@ -226,6 +247,7 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, post, resolveImagePath } from '@/net'
+import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveTriageMessageInsight } from '@/triage/insight'
 
 const router = useRouter()
@@ -274,7 +296,10 @@ const triageAiSendHint = computed(() => {
 function loadRecords() {
   loading.value = true
   get('/api/user/consultation/record/list', (data) => {
-    records.value = data || []
+    records.value = (data || []).map(item => ({
+      ...item,
+      smartDispatch: normalizeSmartDispatch(item?.smartDispatch)
+    }))
     loading.value = false
     ensureActiveRecord()
   }, (message) => {
@@ -322,7 +347,10 @@ function openRecord(recordId, updateRoute = true) {
 
   detailLoading.value = true
   get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
-    detailRecord.value = data || null
+    detailRecord.value = data ? {
+      ...data,
+      smartDispatch: normalizeSmartDispatch(data?.smartDispatch)
+    } : null
     detailLoading.value = false
   }, (message) => {
     detailLoading.value = false
@@ -426,6 +454,10 @@ function parseJsonArray(value) {
 
 function parseDoctorCandidates(value) {
   return parseJsonArray(value).filter(item => item && typeof item === 'object')
+}
+
+function getSmartDispatch(record) {
+  return normalizeSmartDispatch(record?.smartDispatch)
 }
 
 function formatConfidence(value) {

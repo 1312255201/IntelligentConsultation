@@ -157,3 +157,81 @@
 2. 医生待办 / 跟进看板
 3. AI 追问消息接入当前消息流
 4. 用户端问诊进度时间线增强
+
+## 9. 2026-04-05 增量完善：消息未读状态与摘要
+
+这一轮沿着上面的第 1 项继续推进，把“消息流”从单纯能聊天，升级成“可提醒、可筛选、可形成医生待办”的基础能力。
+
+### 9.1 SQL 与数据结构
+
+更新：
+
+- `sql/mysql57-init.sql`
+- `sql/mysql57-upgrade-2026-04-05-consultation-message-read-status.sql`
+
+新增字段：
+
+- `read_status`：消息是否已被接收方查看
+- `read_time`：首次被查看时间
+
+这样后续无论做患者提醒、医生待办还是消息已读反馈，都可以直接复用同一份消息底座。
+
+### 9.2 后端聚合能力
+
+更新：
+
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/ConsultationMessageVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/ConsultationMessageSummaryVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/AdminConsultationRecordVO.java`
+- `template-backend/src/main/java/cn/gugufish/entity/vo/response/ConsultationRecordVO.java`
+- `template-backend/src/main/java/cn/gugufish/service/ConsultationMessageService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/ConsultationMessageServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/DoctorWorkspaceServiceImpl.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/ConsultationServiceImpl.java`
+
+新增/增强效果：
+
+- 患者发送消息后，默认记为“医生未读”
+- 医生发送消息后，默认记为“患者未读”
+- 医生查询消息列表时，会自动把患者消息标记为已读
+- 患者查询消息列表时，会自动把医生消息标记为已读
+- 问诊记录列表和详情都会附带 `messageSummary`
+
+当前摘要字段包含：
+
+- 总消息数
+- 患者消息数
+- 医生消息数
+- 当前查看者未读数
+- 最近发送方
+- 最近消息类型
+- 最近消息预览
+- 最近消息时间
+
+### 9.3 医生端列表增强
+
+更新：
+
+- `template-front/src/views/doctor/DoctorConsultationPage.vue`
+
+页面增强效果：
+
+- 顶部统计补充“消息未读”“待回复”
+- 列表工具栏新增“沟通筛选”
+- 列表新增“沟通进展”“最近消息”两列
+- 问诊详情消息头部显示消息总数、未读数、最近更新时间
+- 医生发送的消息在详情中可看到“患者已读 / 患者未读”
+
+这一步完成后，医生端已经可以较直观地看出：
+
+- 哪些问诊单有患者新消息
+- 哪些问诊单最后一条消息来自患者，仍待医生回复
+- 最近一条沟通大致说了什么
+
+## 10. 当前更适合继续推进的下一步
+
+在消息摘要和未读状态已经补齐之后，下一优先级建议收敛为：
+
+1. 医生待办 / 跟进看板
+2. 患者侧未读提醒与问诊列表状态增强
+3. AI 追问消息与医患沟通消息流进一步融合

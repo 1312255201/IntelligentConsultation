@@ -15,6 +15,7 @@ public class AdminConsultationAiSummaryVO {
     String consistentRateText;
     List<AdminConsultationAiGroupVO> departmentBreakdown;
     List<AdminConsultationAiGroupVO> categoryBreakdown;
+    List<AdminConsultationAiFieldVO> fieldBreakdown;
     List<AdminConsultationAiDoctorVO> doctorBreakdown;
     List<AdminConsultationAiReasonVO> mismatchReasonBreakdown;
     List<AdminConsultationAiMismatchVO> recentMismatchRecords;

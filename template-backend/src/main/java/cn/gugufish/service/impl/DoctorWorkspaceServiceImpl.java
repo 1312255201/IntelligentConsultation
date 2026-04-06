@@ -10,11 +10,13 @@ import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.DoctorSchedule;
 import cn.gugufish.entity.dto.DoctorServiceTag;
+import cn.gugufish.entity.dto.TriageResult;
 import cn.gugufish.entity.dto.TriageRuleHitLog;
 import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationFollowUpSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
+import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
 import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
@@ -29,7 +31,9 @@ import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.DoctorScheduleMapper;
 import cn.gugufish.mapper.DoctorServiceTagMapper;
+import cn.gugufish.mapper.TriageResultMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
+import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.ConsultationDoctorAssignmentQueryService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
@@ -40,14 +44,18 @@ import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
 import cn.gugufish.utils.ConsultationAiComparisonUtils;
 import cn.gugufish.utils.ConsultationAiMismatchReasonUtils;
+import cn.gugufish.utils.ConsultationSmartDispatchUtils;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -68,6 +76,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
     @Resource
     DoctorScheduleMapper doctorScheduleMapper;
+
+    @Resource
+    TriageResultMapper triageResultMapper;
 
     @Resource
     ConsultationRecordMapper consultationRecordMapper;
@@ -111,6 +122,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
     @Resource
     ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
 
+    @Resource
+    ConsultationMessageService consultationMessageService;
+
     @Override
     public DoctorWorkbenchVO workbench(int accountId) {
         Doctor doctor = currentDoctor(accountId);
@@ -121,10 +135,18 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setConsultationCount(0);
             vo.setTodayConsultationCount(0);
             vo.setRiskConsultationCount(0);
+            vo.setUnreadConsultationCount(0);
+            vo.setWaitingReplyConsultationCount(0);
+            vo.setPendingFollowUpCount(0);
+            vo.setRecommendedConsultationCount(0);
             vo.setUpcomingScheduleCount(0);
             vo.setServiceTagCount(0);
             vo.setServiceTags(List.of());
             vo.setRecentConsultations(List.of());
+            vo.setRecommendedConsultations(List.of());
+            vo.setUnreadConsultations(List.of());
+            vo.setWaitingReplyConsultations(List.of());
+            vo.setPendingFollowUpConsultations(List.of());
             vo.setUpcomingSchedules(List.of());
             return vo;
         }
@@ -149,6 +171,10 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         int riskCount = (int) consultations.stream()
                 .filter(this::isRiskConsultation)
                 .count();
+        List<AdminConsultationRecordVO> recommendedConsultations = buildRecommendedConsultations(consultations, doctor.getId());
+        List<AdminConsultationRecordVO> unreadConsultations = buildUnreadConsultations(consultations, doctor.getId());
+        List<AdminConsultationRecordVO> waitingReplyConsultations = buildWaitingReplyConsultations(consultations, doctor.getId());
+        List<AdminConsultationRecordVO> pendingFollowUpConsultations = buildPendingFollowUpConsultations(consultations, doctor.getId());
 
         DoctorWorkbenchVO vo = new DoctorWorkbenchVO();
         vo.setBound(1);
@@ -168,10 +194,18 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         vo.setConsultationCount(consultations.size());
         vo.setTodayConsultationCount(todayCount);
         vo.setRiskConsultationCount(riskCount);
+        vo.setUnreadConsultationCount(unreadConsultations.size());
+        vo.setWaitingReplyConsultationCount(waitingReplyConsultations.size());
+        vo.setPendingFollowUpCount(pendingFollowUpConsultations.size());
+        vo.setRecommendedConsultationCount(recommendedConsultations.size());
         vo.setUpcomingScheduleCount(schedules.size());
         vo.setServiceTagCount(serviceTags.size());
         vo.setServiceTags(serviceTags);
         vo.setRecentConsultations(consultations.stream().limit(6).toList());
+        vo.setRecommendedConsultations(recommendedConsultations.stream().limit(5).toList());
+        vo.setUnreadConsultations(unreadConsultations.stream().limit(5).toList());
+        vo.setWaitingReplyConsultations(waitingReplyConsultations.stream().limit(5).toList());
+        vo.setPendingFollowUpConsultations(pendingFollowUpConsultations.stream().limit(5).toList());
         vo.setUpcomingSchedules(schedules.stream().limit(6).toList());
         return vo;
     }
@@ -190,15 +224,35 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
         Map<Integer, ConsultationDoctorAssignment> assignmentMap = new HashMap<>();
         consultationDoctorAssignmentMapper.selectList(Wrappers.<ConsultationDoctorAssignment>query()
-                        .in("consultation_id", consultationIds))
-                .forEach(item -> assignmentMap.put(item.getConsultationId(), item));
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> assignmentMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, TriageResult> triageResultMap = new HashMap<>();
+        triageResultMapper.selectList(Wrappers.<TriageResult>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("is_final")
+                        .orderByDesc("id"))
+                .forEach(item -> triageResultMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, ConsultationMessageSummaryVO> messageSummaryMap = consultationMessageService.summarizeDoctorMessages(consultationIds);
 
         return records.stream()
                 .map(item -> item.asViewObject(AdminConsultationRecordVO.class, vo -> {
                     ConsultationDoctorAssignment assignment = assignmentMap.get(item.getId());
+                    TriageResult triageResult = triageResultMap.get(item.getId());
                     if (assignment != null) {
                         vo.setDoctorAssignment(assignment.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorAssignmentVO.class));
                     }
+                    vo.setMessageSummary(messageSummaryMap.get(item.getId()));
+                    vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
+                            assignment == null ? null : assignment.getDoctorId(),
+                            assignment == null ? null : assignment.getDoctorName(),
+                            assignment == null ? null : assignment.getStatus(),
+                            triageResult == null ? null : triageResult.getDoctorId(),
+                            triageResult == null ? null : triageResult.getDoctorName(),
+                            triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
+                            triageResult == null ? null : triageResult.getReasonText()
+                    ));
                 }))
                 .toList();
     }
@@ -234,6 +288,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         var triageSession = triageSessionQueryService.detailByConsultationId(recordId);
         var triageResult = triageResultQueryService.detailByConsultationId(recordId);
         var triageFeedback = triageFeedbackQueryService.detailByConsultationId(recordId);
+        ConsultationMessageSummaryVO messageSummary = consultationMessageService.summarizeDoctorMessages(List.of(recordId)).get(recordId);
 
         return record.asViewObject(AdminConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
@@ -241,6 +296,16 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setDoctorAssignment(doctorAssignment);
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
+            vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
+                    doctorAssignment == null ? null : doctorAssignment.getDoctorId(),
+                    doctorAssignment == null ? null : doctorAssignment.getDoctorName(),
+                    doctorAssignment == null ? null : doctorAssignment.getStatus(),
+                    triageResult == null ? null : triageResult.getDoctorId(),
+                    triageResult == null ? null : triageResult.getDoctorName(),
+                    triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
+                    triageResult == null ? null : triageResult.getReasonText()
+            ));
+            vo.setMessageSummary(messageSummary);
             vo.setAiComparison(ConsultationAiComparisonUtils.build(doctorConclusion, triageSession, triageResult));
             vo.setDoctorFollowUps(doctorFollowUps);
             vo.setTriageSession(triageSession);
@@ -677,6 +742,159 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 .last("limit 1"));
     }
 
+    private List<AdminConsultationRecordVO> buildRecommendedConsultations(List<AdminConsultationRecordVO> consultations, Integer doctorId) {
+        return consultations.stream()
+                .filter(item -> isRecommendedToDoctor(item, doctorId))
+                .sorted(Comparator
+                        .comparing(this::isRiskConsultation).reversed()
+                        .thenComparing(this::messageSortTime, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(AdminConsultationRecordVO::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    private List<AdminConsultationRecordVO> buildUnreadConsultations(List<AdminConsultationRecordVO> consultations, Integer doctorId) {
+        return consultations.stream()
+                .filter(item -> isActionableForDoctor(item, doctorId))
+                .filter(item -> item.getMessageSummary() != null && defaultInt(item.getMessageSummary().getUnreadCount()) > 0)
+                .sorted(Comparator
+                        .comparing(this::messageSortTime, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(AdminConsultationRecordVO::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    private List<AdminConsultationRecordVO> buildWaitingReplyConsultations(List<AdminConsultationRecordVO> consultations, Integer doctorId) {
+        return consultations.stream()
+                .filter(item -> isActionableForDoctor(item, doctorId))
+                .filter(this::isWaitingReplyConsultation)
+                .sorted(Comparator
+                        .comparing(this::messageSortTime, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(AdminConsultationRecordVO::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    private List<AdminConsultationRecordVO> buildPendingFollowUpConsultations(List<AdminConsultationRecordVO> consultations, Integer doctorId) {
+        List<Integer> consultationIds = consultations.stream()
+                .map(AdminConsultationRecordVO::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (consultationIds.isEmpty()) return List.of();
+
+        Map<Integer, ConsultationDoctorHandle> handleMap = new HashMap<>();
+        consultationDoctorHandleMapper.selectList(Wrappers.<ConsultationDoctorHandle>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> handleMap.putIfAbsent(item.getConsultationId(), item));
+
+        Map<Integer, ConsultationDoctorConclusion> conclusionMap = new HashMap<>();
+        consultationDoctorConclusionMapper.selectList(Wrappers.<ConsultationDoctorConclusion>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
+                        .orderByDesc("id"))
+                .forEach(item -> conclusionMap.putIfAbsent(item.getConsultationId(), item));
+
+        Map<Integer, ConsultationDoctorFollowUp> latestFollowUpMap = new HashMap<>();
+        consultationDoctorFollowUpMapper.selectList(Wrappers.<ConsultationDoctorFollowUp>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .forEach(item -> latestFollowUpMap.putIfAbsent(item.getConsultationId(), item));
+
+        return consultations.stream()
+                .filter(item -> "completed".equals(item.getStatus()))
+                .filter(item -> {
+                    ConsultationDoctorHandle handle = handleMap.get(item.getId());
+                    ConsultationDoctorConclusion conclusion = conclusionMap.get(item.getId());
+                    ConsultationDoctorFollowUp latestFollowUp = latestFollowUpMap.get(item.getId());
+                    return isPendingFollowUp(item, doctorId, handle, conclusion, latestFollowUp);
+                })
+                .map(item -> {
+                    ConsultationDoctorHandle handle = handleMap.get(item.getId());
+                    ConsultationDoctorConclusion conclusion = conclusionMap.get(item.getId());
+                    ConsultationDoctorFollowUp latestFollowUp = latestFollowUpMap.get(item.getId());
+                    AdminConsultationRecordVO target = copyRecord(item);
+                    if (handle != null) {
+                        target.setDoctorHandle(handle.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO.class));
+                    }
+                    if (conclusion != null) {
+                        target.setDoctorConclusion(conclusion.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO.class));
+                    }
+                    target.setDoctorFollowUps(latestFollowUp == null
+                            ? List.of()
+                            : List.of(latestFollowUp.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO.class)));
+                    return target;
+                })
+                .sorted(Comparator
+                        .comparing(this::followUpDueTime, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(AdminConsultationRecordVO::getUpdateTime, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    private boolean isActionableForDoctor(AdminConsultationRecordVO record, Integer doctorId) {
+        if (record == null || doctorId == null) return false;
+        var assignment = record.getDoctorAssignment();
+        return assignment == null
+                || !"claimed".equals(assignment.getStatus())
+                || Objects.equals(assignment.getDoctorId(), doctorId);
+    }
+
+    private boolean isRecommendedToDoctor(AdminConsultationRecordVO record, Integer doctorId) {
+        if (record == null || doctorId == null || record.getSmartDispatch() == null) return false;
+        return Objects.equals(record.getSmartDispatch().getSuggestedDoctorId(), doctorId)
+                && "waiting_accept".equals(record.getSmartDispatch().getStatus());
+    }
+
+    private boolean isWaitingReplyConsultation(AdminConsultationRecordVO record) {
+        if (record == null || record.getMessageSummary() == null) return false;
+        return defaultInt(record.getMessageSummary().getTotalCount()) > 0
+                && "user".equals(record.getMessageSummary().getLatestSenderType());
+    }
+
+    private boolean isPendingFollowUp(AdminConsultationRecordVO record,
+                                      Integer doctorId,
+                                      ConsultationDoctorHandle handle,
+                                      ConsultationDoctorConclusion conclusion,
+                                      ConsultationDoctorFollowUp latestFollowUp) {
+        if (record == null || doctorId == null) return false;
+        if (handle == null || !Objects.equals(handle.getDoctorId(), doctorId)) return false;
+        if (conclusion == null || !Objects.equals(conclusion.getNeedFollowUp(), 1)) return false;
+        return latestFollowUp == null || Objects.equals(latestFollowUp.getNeedRevisit(), 1);
+    }
+
+    private Date messageSortTime(AdminConsultationRecordVO record) {
+        if (record == null || record.getMessageSummary() == null) return record == null ? null : record.getUpdateTime();
+        return record.getMessageSummary().getLatestTime() == null ? record.getUpdateTime() : record.getMessageSummary().getLatestTime();
+    }
+
+    private Date followUpDueTime(AdminConsultationRecordVO record) {
+        if (record == null) return null;
+        if (record.getDoctorFollowUps() != null && !record.getDoctorFollowUps().isEmpty()) {
+            Date nextFollowUpDate = record.getDoctorFollowUps().get(0).getNextFollowUpDate();
+            if (nextFollowUpDate != null) return nextFollowUpDate;
+        }
+        if (record.getDoctorConclusion() != null && record.getDoctorConclusion().getFollowUpWithinDays() != null) {
+            Date baseTime = record.getDoctorConclusion().getUpdateTime();
+            if (baseTime == null) {
+                baseTime = record.getDoctorHandle() == null ? record.getUpdateTime() : record.getDoctorHandle().getCompleteTime();
+            }
+            if (baseTime != null) {
+                return Date.from(baseTime.toInstant()
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate()
+                        .plus(record.getDoctorConclusion().getFollowUpWithinDays(), ChronoUnit.DAYS)
+                        .atStartOfDay(ZoneId.systemDefault())
+                        .toInstant());
+            }
+        }
+        return record.getUpdateTime();
+    }
+
+    private AdminConsultationRecordVO copyRecord(AdminConsultationRecordVO source) {
+        AdminConsultationRecordVO target = new AdminConsultationRecordVO();
+        BeanUtils.copyProperties(source, target);
+        return target;
+    }
+
     private boolean isRiskConsultation(AdminConsultationRecordVO record) {
         if (record.getTriageActionType() == null) return false;
         return switch (record.getTriageActionType()) {
@@ -704,5 +922,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         if (value == null) return null;
         String text = value.trim();
         return text.isEmpty() ? null : text;
+    }
+
+    private int defaultInt(Integer value) {
+        return value == null ? 0 : value;
     }
 }

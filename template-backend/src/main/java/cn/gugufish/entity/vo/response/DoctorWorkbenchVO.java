@@ -21,9 +21,17 @@ public class DoctorWorkbenchVO {
     Integer consultationCount;
     Integer todayConsultationCount;
     Integer riskConsultationCount;
+    Integer unreadConsultationCount;
+    Integer waitingReplyConsultationCount;
+    Integer pendingFollowUpCount;
+    Integer recommendedConsultationCount;
     Integer upcomingScheduleCount;
     Integer serviceTagCount;
     List<String> serviceTags;
     List<AdminConsultationRecordVO> recentConsultations;
+    List<AdminConsultationRecordVO> recommendedConsultations;
+    List<AdminConsultationRecordVO> unreadConsultations;
+    List<AdminConsultationRecordVO> waitingReplyConsultations;
+    List<AdminConsultationRecordVO> pendingFollowUpConsultations;
     List<DoctorScheduleVO> upcomingSchedules;
 }

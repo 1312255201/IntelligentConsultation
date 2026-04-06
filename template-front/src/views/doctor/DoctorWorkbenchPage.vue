@@ -39,8 +39,168 @@
             <strong>{{ summary.riskConsultationCount || 0 }}</strong>
           </article>
           <article class="stat-card">
+            <span>患者新消息</span>
+            <strong>{{ summary.unreadConsultationCount || 0 }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>待医生回复</span>
+            <strong>{{ summary.waitingReplyConsultationCount || 0 }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>待随访</span>
+            <strong>{{ summary.pendingFollowUpCount || 0 }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>系统推荐给我</span>
+            <strong>{{ summary.recommendedConsultationCount || 0 }}</strong>
+          </article>
+          <article class="stat-card">
             <span>近期排班</span>
             <strong>{{ summary.upcomingScheduleCount || 0 }}</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <div class="panel-head">
+          <div>
+            <h3>待办看板</h3>
+            <p>把患者新消息、待回复和待随访集中到一个入口，便于医生快速切入处理。</p>
+          </div>
+          <el-button text @click="openConsultationList()">进入问诊列表</el-button>
+        </div>
+
+        <div class="todo-grid">
+          <article class="todo-card">
+            <div class="todo-card-head">
+              <div>
+                <strong>系统推荐给我</strong>
+                <p>系统根据当前分诊结果、科室和排班优先建议由你先接手。</p>
+              </div>
+              <el-tag type="primary" effect="light">{{ summary.recommendedConsultationCount || 0 }}</el-tag>
+            </div>
+            <div v-if="summary.recommendedConsultations?.length" class="todo-list">
+              <button
+                v-for="item in summary.recommendedConsultations"
+                :key="`recommended-${item.id}`"
+                type="button"
+                class="todo-item"
+                @click="goToConsultation(item.id)"
+              >
+                <div class="todo-item-head">
+                  <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+                  <span>{{ formatDate(item.createTime) }}</span>
+                </div>
+                <p>{{ item.smartDispatch?.hint || item.chiefComplaint || '系统建议由你优先接手当前问诊。' }}</p>
+                <div class="todo-item-meta">
+                  <span>{{ item.categoryName || '未分类' }}</span>
+                  <span>{{ item.triageLevelName || triageActionLabel(item.triageActionType) }}</span>
+                </div>
+              </button>
+            </div>
+            <el-empty v-else description="当前没有系统优先推荐给你的问诊" />
+            <div class="todo-foot">
+              <el-button text @click="openConsultationList({ dispatchFilter: 'recommended_to_me' })">查看全部推荐问诊</el-button>
+            </div>
+          </article>
+
+          <article class="todo-card">
+            <div class="todo-card-head">
+              <div>
+                <strong>患者新消息</strong>
+                <p>患者刚补充了病情变化、检查结果或恢复情况。</p>
+              </div>
+              <el-tag type="danger" effect="light">{{ summary.unreadConsultationCount || 0 }}</el-tag>
+            </div>
+            <div v-if="summary.unreadConsultations?.length" class="todo-list">
+              <button
+                v-for="item in summary.unreadConsultations"
+                :key="`unread-${item.id}`"
+                type="button"
+                class="todo-item"
+                @click="goToConsultation(item.id)"
+              >
+                <div class="todo-item-head">
+                  <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+                  <span>{{ formatDate(item.messageSummary?.latestTime || item.updateTime) }}</span>
+                </div>
+                <p>{{ item.messageSummary?.latestMessagePreview || item.chiefComplaint || '暂无更多沟通内容' }}</p>
+                <div class="todo-item-meta">
+                  <span>{{ item.categoryName || '未分类' }}</span>
+                  <span>未读 {{ item.messageSummary?.unreadCount || 0 }} 条</span>
+                </div>
+              </button>
+            </div>
+            <el-empty v-else description="当前没有患者新消息" />
+            <div class="todo-foot">
+              <el-button text @click="openConsultationList({ messageFilter: 'unread' })">查看全部新消息</el-button>
+            </div>
+          </article>
+
+          <article class="todo-card">
+            <div class="todo-card-head">
+              <div>
+                <strong>待医生回复</strong>
+                <p>最后一条消息来自患者，建议尽快继续回复或接手处理。</p>
+              </div>
+              <el-tag type="warning" effect="light">{{ summary.waitingReplyConsultationCount || 0 }}</el-tag>
+            </div>
+            <div v-if="summary.waitingReplyConsultations?.length" class="todo-list">
+              <button
+                v-for="item in summary.waitingReplyConsultations"
+                :key="`reply-${item.id}`"
+                type="button"
+                class="todo-item"
+                @click="goToConsultation(item.id)"
+              >
+                <div class="todo-item-head">
+                  <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+                  <span>{{ formatDate(item.messageSummary?.latestTime || item.updateTime) }}</span>
+                </div>
+                <p>{{ item.messageSummary?.latestMessagePreview || item.chiefComplaint || '暂无更多沟通内容' }}</p>
+                <div class="todo-item-meta">
+                  <span>{{ item.categoryName || '未分类' }}</span>
+                  <span>{{ assignmentOwnerText(item) }}</span>
+                </div>
+              </button>
+            </div>
+            <el-empty v-else description="当前没有待回复问诊" />
+            <div class="todo-foot">
+              <el-button text @click="openConsultationList({ messageFilter: 'waiting_reply' })">查看全部待回复</el-button>
+            </div>
+          </article>
+
+          <article class="todo-card">
+            <div class="todo-card-head">
+              <div>
+                <strong>待随访</strong>
+                <p>已经完成接诊，但仍需要继续跟进恢复情况或安排再次随访。</p>
+              </div>
+              <el-tag type="success" effect="light">{{ summary.pendingFollowUpCount || 0 }}</el-tag>
+            </div>
+            <div v-if="summary.pendingFollowUpConsultations?.length" class="todo-list">
+              <button
+                v-for="item in summary.pendingFollowUpConsultations"
+                :key="`followup-${item.id}`"
+                type="button"
+                class="todo-item"
+                @click="goToConsultation(item.id)"
+              >
+                <div class="todo-item-head">
+                  <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+                  <span>{{ followUpDueText(item) }}</span>
+                </div>
+                <p>{{ item.doctorHandle?.summary || item.chiefComplaint || '当前暂无更多处理摘要' }}</p>
+                <div class="todo-item-meta">
+                  <span>{{ item.categoryName || '未分类' }}</span>
+                  <span>{{ followUpPlanText(item) }}</span>
+                </div>
+              </button>
+            </div>
+            <el-empty v-else description="当前没有待随访问诊" />
+            <div class="todo-foot">
+              <el-button text @click="openConsultationList({ status: 'completed' })">查看全部已完成问诊</el-button>
+            </div>
           </article>
         </div>
       </section>
@@ -94,10 +254,26 @@
           <el-button text @click="router.push('/doctor/consultation')">进入问诊列表</el-button>
         </div>
 
-        <el-table :data="summary.recentConsultations || []" border>
+          <el-table :data="summary.recentConsultations || []" border>
           <el-table-column prop="patientName" label="就诊人" min-width="100" />
           <el-table-column prop="categoryName" label="问诊分类" min-width="120" />
           <el-table-column prop="chiefComplaint" label="主诉" min-width="220" show-overflow-tooltip />
+          <el-table-column label="智能分配" min-width="180">
+            <template #default="{ row }">
+              <div class="recent-message-cell">
+                <strong>{{ smartDispatchStatusLabel(row.smartDispatch) }}</strong>
+                <span>{{ smartDispatchHintText(row.smartDispatch) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="沟通进展" min-width="220">
+            <template #default="{ row }">
+              <div class="recent-message-cell">
+                <strong>{{ consultationMessageStatus(row) }}</strong>
+                <span>{{ row.messageSummary?.latestMessagePreview || '暂无沟通消息' }}</span>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="分诊结果" min-width="120">
             <template #default="{ row }">
               {{ row.triageLevelName || '待评估' }}
@@ -124,61 +300,53 @@ import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, resolveImagePath } from '@/net'
+import { smartDispatchHintText, smartDispatchStatusLabel } from '@/triage/dispatch'
 
 const router = useRouter()
 
-const summary = reactive({
-  bound: 0,
-  bindingMessage: '',
-  doctorId: null,
-  doctorStatus: 0,
-  accountId: null,
-  departmentId: null,
-  departmentName: '',
-  doctorName: '',
-  doctorTitle: '',
-  photo: '',
-  introduction: '',
-  expertise: '',
-  consultationCount: 0,
-  todayConsultationCount: 0,
-  riskConsultationCount: 0,
-  upcomingScheduleCount: 0,
-  serviceTagCount: 0,
-  serviceTags: [],
-  recentConsultations: [],
-  upcomingSchedules: []
-})
+const summary = reactive(createEmptySummary())
 
 const profileTitle = computed(() => [summary.doctorTitle, summary.expertise].filter(Boolean).join(' · ') || '暂未完善医生职称与专长')
 
 function loadSummary() {
   get('/api/doctor/workbench/summary', (data) => {
-    Object.assign(summary, {
-      bound: 0,
-      bindingMessage: '',
-      doctorId: null,
-      doctorStatus: 0,
-      accountId: null,
-      departmentId: null,
-      departmentName: '',
-      doctorName: '',
-      doctorTitle: '',
-      photo: '',
-      introduction: '',
-      expertise: '',
-      consultationCount: 0,
-      todayConsultationCount: 0,
-      riskConsultationCount: 0,
-      upcomingScheduleCount: 0,
-      serviceTagCount: 0,
-      serviceTags: [],
-      recentConsultations: [],
-      upcomingSchedules: []
-    }, data || {})
+    Object.assign(summary, createEmptySummary(), data || {})
   }, (message) => {
     ElMessage.warning(message || '医生工作台加载失败，请稍后再试')
   })
+}
+
+function createEmptySummary() {
+  return {
+    bound: 0,
+    bindingMessage: '',
+    doctorId: null,
+    doctorStatus: 0,
+    accountId: null,
+    departmentId: null,
+    departmentName: '',
+    doctorName: '',
+    doctorTitle: '',
+    photo: '',
+    introduction: '',
+    expertise: '',
+    consultationCount: 0,
+    todayConsultationCount: 0,
+    riskConsultationCount: 0,
+    unreadConsultationCount: 0,
+    waitingReplyConsultationCount: 0,
+    pendingFollowUpCount: 0,
+    recommendedConsultationCount: 0,
+    upcomingScheduleCount: 0,
+    serviceTagCount: 0,
+    serviceTags: [],
+    recentConsultations: [],
+    recommendedConsultations: [],
+    unreadConsultations: [],
+    waitingReplyConsultations: [],
+    pendingFollowUpConsultations: [],
+    upcomingSchedules: []
+  }
 }
 
 function goToConsultation(id) {
@@ -186,6 +354,43 @@ function goToConsultation(id) {
     path: '/doctor/consultation',
     query: { id }
   })
+}
+
+function openConsultationList(query = {}) {
+  router.push({
+    path: '/doctor/consultation',
+    query
+  })
+}
+
+function assignmentOwnerText(item) {
+  const assignment = item?.doctorAssignment
+  if (!assignment || assignment.status !== 'claimed') return '待认领'
+  return assignment.doctorId === summary.doctorId ? '我已认领' : `由 ${assignment.doctorName || '其他医生'} 认领`
+}
+
+function consultationMessageStatus(item) {
+  const summaryInfo = item?.messageSummary
+  if (!summaryInfo?.totalCount) return '暂无沟通'
+  if ((summaryInfo.unreadCount || 0) > 0) return `患者新消息 ${summaryInfo.unreadCount} 条`
+  if (summaryInfo.latestSenderType === 'user') return '待医生回复'
+  if (summaryInfo.latestSenderType === 'doctor') return '已回复患者'
+  return '沟通中'
+}
+
+function followUpDueText(item) {
+  const latestFollowUpDate = item?.doctorFollowUps?.[0]?.nextFollowUpDate
+  if (latestFollowUpDate) return `下次随访 ${formatDate(latestFollowUpDate, true)}`
+  const days = Number(item?.doctorConclusion?.followUpWithinDays || 0)
+  if (days > 0) return `${days} 天内随访`
+  return '待安排随访'
+}
+
+function followUpPlanText(item) {
+  const latestFollowUp = item?.doctorFollowUps?.[0]
+  if (latestFollowUp?.needRevisit === 1) return '仍需继续随访'
+  if (latestFollowUp?.needRevisit === 0) return '当前轮次已记录'
+  return item?.doctorConclusion?.needFollowUp === 1 ? '建议继续跟进' : '待确认'
 }
 
 function remainingCapacity(item) {
@@ -207,6 +412,14 @@ function visitTypeLabel(value) {
   if (value === 'followup') return '复诊随访'
   if (value === 'both') return '线上 / 线下'
   return '待定方式'
+}
+
+function triageActionLabel(value) {
+  if (value === 'emergency') return '立即急诊'
+  if (value === 'offline') return '尽快线下'
+  if (value === 'followup') return '复诊随访'
+  if (value === 'online') return '线上继续'
+  return '继续关注'
 }
 
 function formatDate(value, onlyDate = false) {
@@ -287,7 +500,7 @@ onMounted(() => loadSummary())
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
 }
 
@@ -348,6 +561,106 @@ onMounted(() => loadSummary())
   color: #27646d;
 }
 
+.todo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.todo-card {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(19, 73, 80, 0.04);
+  border: 1px solid rgba(19, 73, 80, 0.08);
+}
+
+.todo-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.todo-card-head strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.todo-card-head p {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.7;
+}
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.todo-item {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(19, 73, 80, 0.08);
+  border-radius: 18px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.todo-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(15, 102, 101, 0.26);
+  box-shadow: 0 12px 24px rgba(19, 73, 80, 0.08);
+}
+
+.todo-item-head,
+.todo-item-meta,
+.recent-message-cell {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.todo-item-head strong,
+.recent-message-cell strong {
+  color: #31474d;
+}
+
+.todo-item-head span,
+.todo-item-meta span,
+.recent-message-cell span {
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.todo-item p,
+.recent-message-cell span {
+  margin: 8px 0 0;
+}
+
+.todo-item p {
+  color: #41575d;
+  line-height: 1.7;
+}
+
+.todo-item-meta {
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.todo-foot {
+  margin-top: 14px;
+}
+
+.recent-message-cell {
+  flex-direction: column;
+}
+
 .schedule-list {
   display: flex;
   flex-direction: column;
@@ -378,7 +691,8 @@ onMounted(() => loadSummary())
 
 @media (max-width: 1100px) {
   .hero-card,
-  .content-grid {
+  .content-grid,
+  .todo-grid {
     grid-template-columns: 1fr;
   }
 }

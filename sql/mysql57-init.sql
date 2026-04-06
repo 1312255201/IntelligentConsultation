@@ -470,10 +470,13 @@ CREATE TABLE IF NOT EXISTS `db_consultation_message` (
   `content` varchar(2000) DEFAULT NULL,
   `attachments_json` text,
   `status` tinyint(1) NOT NULL DEFAULT 1,
+  `read_status` tinyint(1) NOT NULL DEFAULT 0,
+  `read_time` datetime DEFAULT NULL,
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_consultation_message_consultation_time` (`consultation_id`, `create_time`),
+  KEY `idx_consultation_message_read_status` (`consultation_id`, `read_status`, `create_time`),
   KEY `idx_consultation_message_sender_time` (`sender_type`, `sender_id`, `create_time`),
   KEY `idx_consultation_message_status` (`status`, `create_time`),
   CONSTRAINT `fk_consultation_message_consultation`

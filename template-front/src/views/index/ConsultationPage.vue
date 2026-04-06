@@ -17,6 +17,10 @@
         <span>今日新增</span>
         <strong>{{ todayCount }}</strong>
       </article>
+      <article class="stat-card">
+        <span>医生新回复</span>
+        <strong>{{ unreadDoctorReplyCount }}</strong>
+      </article>
     </section>
 
     <section class="entry-layout">
@@ -271,6 +275,22 @@
             <el-tag type="warning" effect="light">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="智能分配" min-width="220">
+          <template #default="{ row }">
+            <div class="record-message-cell">
+              <strong>{{ smartDispatchStatusLabel(row.smartDispatch) }}</strong>
+              <span>{{ smartDispatchLine(row) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="沟通状态" min-width="220">
+          <template #default="{ row }">
+            <div class="record-message-cell">
+              <strong>{{ recordMessageStatus(row) }}</strong>
+              <span>{{ recordMessagePreview(row) }}</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="healthSummary" label="健康摘要" min-width="220" show-overflow-tooltip />
         <el-table-column label="提交时间" min-width="170">
           <template #default="{ row }">
@@ -323,6 +343,30 @@
             </div>
             <p><strong>系统建议：</strong>{{ detailRecord.triageSuggestion || '已保存当前问诊资料，请留意后续处理结果。' }}</p>
             <p v-if="detailRecord.triageRuleSummary"><strong>风险提示：</strong>{{ detailRecord.triageRuleSummary }}</p>
+          </div>
+
+          <div class="result-panel">
+            <div class="doctor-recommend-head">
+              <div>
+                <strong>智能分配进度</strong>
+                <span>{{ smartDispatchHintText(detailRecord.smartDispatch) }}</span>
+              </div>
+              <el-tag :type="smartDispatchTagType(detailRecord.smartDispatch)" effect="light">
+                {{ smartDispatchStatusLabel(detailRecord.smartDispatch) }}
+              </el-tag>
+            </div>
+            <div class="session-meta">
+              <span v-if="getSmartDispatch(detailRecord).suggestedDoctorName">
+                首推医生 {{ getSmartDispatch(detailRecord).suggestedDoctorName }}{{ getSmartDispatch(detailRecord).suggestedDoctorTitle ? ` / ${getSmartDispatch(detailRecord).suggestedDoctorTitle}` : '' }}
+              </span>
+              <span v-if="getSmartDispatch(detailRecord).candidateCount">候选 {{ getSmartDispatch(detailRecord).candidateCount }} 位</span>
+              <span v-if="getSmartDispatch(detailRecord).suggestedDoctorNextScheduleText">{{ getSmartDispatch(detailRecord).suggestedDoctorNextScheduleText }}</span>
+            </div>
+            <p class="result-copy">{{ smartDispatchHintText(detailRecord.smartDispatch) }}</p>
+            <p v-if="smartDispatchReason(detailRecord)" class="result-copy"><strong>推荐依据：</strong>{{ smartDispatchReason(detailRecord) }}</p>
+            <p v-if="getSmartDispatch(detailRecord).suggestedDoctorExpertise" class="result-copy">
+              <strong>医生专长：</strong>{{ getSmartDispatch(detailRecord).suggestedDoctorExpertise }}
+            </p>
           </div>
 
           <div v-if="detailRecord.triageSession" class="session-panel">
@@ -403,8 +447,15 @@
 
           <div class="result-panel">
             <div class="doctor-recommend-head">
-              <strong>医患沟通</strong>
-              <span>可在这里补充病情变化、检查图片和恢复情况，医生接手后会继续查看。</span>
+              <div>
+                <strong>医患沟通</strong>
+                <span>可在这里补充病情变化、检查图片和恢复情况，医生接手后会继续查看。</span>
+              </div>
+              <div class="conversation-summary">
+                <span>{{ detailMessageSummary.totalCount }} 条消息</span>
+                <span v-if="detailMessageSummary.unreadCount">医生新回复 {{ detailMessageSummary.unreadCount }} 条</span>
+                <span v-if="detailMessageSummary.latestTime">最近更新 {{ formatDate(detailMessageSummary.latestTime) }}</span>
+              </div>
             </div>
             <el-alert
               v-if="messageSendHint"
@@ -783,6 +834,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
 import { comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
+import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveTriageMessageInsight } from '@/triage/insight'
 
 const router = useRouter()
@@ -836,6 +888,9 @@ const detailTriageMessages = computed(() => (detailRecord.value?.triageSession?.
   ...message,
   insight: resolveTriageMessageInsight(message)
 })))
+const latestTriageInsight = computed(() => [...detailTriageMessages.value]
+  .reverse()
+  .find(message => message.insight)?.insight || null)
 const canSendTriageAiMessage = computed(() => !!detailRecord.value?.triageSession)
 const triageAiSendHint = computed(() => {
   if (!detailRecord.value?.triageSession) return '当前问诊还没有导诊会话。'
@@ -859,6 +914,8 @@ const todayCount = computed(() => {
   const today = new Date().toDateString()
   return records.value.filter(item => new Date(item.createTime).toDateString() === today).length
 })
+const unreadDoctorReplyCount = computed(() => records.value.filter(recordHasUnreadDoctorReply).length)
+const detailMessageSummary = computed(() => getMessageSummary(detailRecord.value))
 
 watch(activeCategoryId, (value) => {
   if (value) loadTemplate(value)
@@ -921,7 +978,11 @@ function loadTemplate(categoryId) {
 function loadRecords(callback) {
   historyLoading.value = true
   get('/api/user/consultation/record/list', (data) => {
-    records.value = data || []
+    records.value = (data || []).map(item => ({
+      ...item,
+      smartDispatch: normalizeSmartDispatch(item?.smartDispatch),
+      messageSummary: normalizeMessageSummary(item?.messageSummary)
+    }))
     historyLoading.value = false
     callback?.(records.value)
   }, () => {
@@ -1232,7 +1293,11 @@ function openRecordDetail(row) {
   resetTriageAiDraft()
   resetMessageDraft()
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
-    detailRecord.value = data
+    detailRecord.value = data ? {
+      ...data,
+      smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+      messageSummary: normalizeMessageSummary(data?.messageSummary)
+    } : null
     applyFeedbackForm(data?.triageFeedback)
     loadConsultationMessages(row.id)
     detailLoading.value = false
@@ -1252,7 +1317,11 @@ function refreshRecordDetail(recordId = detailRecord.value?.id, options = {}) {
   if (!recordId) return
   const { reloadConversation = false } = options
   get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
-    detailRecord.value = data
+    detailRecord.value = data ? {
+      ...data,
+      smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+      messageSummary: normalizeMessageSummary(data?.messageSummary)
+    } : null
     applyFeedbackForm(data?.triageFeedback)
     if (reloadConversation) loadConsultationMessages(recordId)
   }, (message) => {
@@ -1293,12 +1362,107 @@ function loadConsultationMessages(recordId = detailRecord.value?.id) {
   messageLoading.value = true
   get(`/api/user/consultation/message/list?recordId=${recordId}`, (data) => {
     consultationMessages.value = data || []
+    syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
     messageLoading.value = false
   }, (message) => {
     consultationMessages.value = []
     messageLoading.value = false
     ElMessage.warning(message || '问诊沟通消息加载失败')
   })
+}
+
+function normalizeMessageSummary(summary) {
+  return {
+    totalCount: Number(summary?.totalCount || 0),
+    userMessageCount: Number(summary?.userMessageCount || 0),
+    doctorMessageCount: Number(summary?.doctorMessageCount || 0),
+    unreadCount: Number(summary?.unreadCount || 0),
+    latestSenderType: summary?.latestSenderType || '',
+    latestSenderName: summary?.latestSenderName || '',
+    latestMessageType: summary?.latestMessageType || '',
+    latestMessagePreview: summary?.latestMessagePreview || '',
+    latestTime: summary?.latestTime || null
+  }
+}
+
+function getMessageSummary(record) {
+  return normalizeMessageSummary(record?.messageSummary)
+}
+
+function recordHasUnreadDoctorReply(record) {
+  return getMessageSummary(record).unreadCount > 0
+}
+
+function recordMessageStatus(record) {
+  const summary = getMessageSummary(record)
+  if (summary.totalCount <= 0) return '暂无沟通'
+  if (summary.unreadCount > 0) return `医生新回复 ${summary.unreadCount} 条`
+  if (summary.latestSenderType === 'user') return '已发送，待医生处理'
+  if (summary.latestSenderType === 'doctor') return '医生已回复'
+  return '沟通中'
+}
+
+function recordMessagePreview(record) {
+  return getMessageSummary(record).latestMessagePreview || '暂未产生沟通消息'
+}
+
+function getSmartDispatch(record) {
+  return normalizeSmartDispatch(record?.smartDispatch)
+}
+
+function smartDispatchLine(record) {
+  const summary = getSmartDispatch(record)
+  if (summary.suggestedDoctorName) return `首推 ${summary.suggestedDoctorName}`
+  return smartDispatchHintText(summary)
+}
+
+function smartDispatchReason(record) {
+  const summary = getSmartDispatch(record)
+  if (record?.id === detailRecord.value?.id) {
+    return summary.recommendationReason || latestTriageInsight.value?.doctorRecommendationReason || ''
+  }
+  return summary.recommendationReason || ''
+}
+
+function buildLocalMessageSummary(messages) {
+  const summary = normalizeMessageSummary(null)
+  ;(messages || []).forEach(item => {
+    summary.totalCount += 1
+    if (item?.senderType === 'user') summary.userMessageCount += 1
+    if (item?.senderType === 'doctor') summary.doctorMessageCount += 1
+    if (item?.senderType === 'doctor' && item?.readStatus !== 1) summary.unreadCount += 1
+    summary.latestSenderType = item?.senderType || ''
+    summary.latestSenderName = item?.senderName || ''
+    summary.latestMessageType = item?.messageType || ''
+    summary.latestMessagePreview = buildLocalMessagePreview(item)
+    summary.latestTime = item?.createTime || null
+  })
+  return summary
+}
+
+function buildLocalMessagePreview(message) {
+  const content = `${message?.content || ''}`.trim()
+  const attachmentCount = messageAttachments(message).length
+  const imageSuffix = attachmentCount <= 0
+    ? ''
+    : attachmentCount === 1 ? '[图片]' : `[图片 x${attachmentCount}]`
+  if (content && imageSuffix) return abbreviateText(`${content} ${imageSuffix}`, 72)
+  if (content) return abbreviateText(content, 72)
+  if (imageSuffix) return imageSuffix
+  return '暂未产生沟通消息'
+}
+
+function syncRecordMessageSummary(recordId, summary) {
+  const nextSummary = normalizeMessageSummary(summary)
+  records.value = records.value.map(item => item.id === recordId
+    ? { ...item, messageSummary: nextSummary }
+    : item)
+  if (detailRecord.value?.id === recordId) {
+    detailRecord.value = {
+      ...detailRecord.value,
+      messageSummary: nextSummary
+    }
+  }
 }
 
 function resetMessageDraft() {
@@ -1404,7 +1568,11 @@ function submitFeedback() {
     feedbackSubmitting.value = false
     ElMessage.success('导诊反馈已保存')
     get(`/api/user/consultation/record/detail?recordId=${detailRecord.value.id}`, (data) => {
-      detailRecord.value = data
+      detailRecord.value = data ? {
+        ...data,
+        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+        messageSummary: normalizeMessageSummary(data?.messageSummary)
+      } : null
       applyFeedbackForm(data?.triageFeedback)
     })
   }, (message) => {
@@ -1477,6 +1645,12 @@ function displayAnswer(answer) {
   return answer.fieldValue || '-'
 }
 
+function abbreviateText(value, maxLength = 80) {
+  const text = `${value || ''}`.trim()
+  if (!text || text.length <= maxLength) return text
+  return `${text.slice(0, Math.max(maxLength - 3, 0))}...`
+}
+
 function formatDate(value) {
   if (!value) return '-'
   return new Intl.DateTimeFormat('zh-CN', {
@@ -1524,7 +1698,7 @@ onMounted(() => loadData())
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 18px;
 }
 
@@ -1809,6 +1983,24 @@ onMounted(() => loadData())
   justify-content: space-between;
   align-items: center;
   margin-bottom: 14px;
+}
+
+.record-message-cell,
+.conversation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.record-message-cell strong {
+  color: #31474d;
+}
+
+.record-message-cell span,
+.conversation-summary span {
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .doctor-list {

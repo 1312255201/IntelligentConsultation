@@ -26,6 +26,8 @@ public class ConsultationMessage implements BaseData {
     String content;
     String attachmentsJson;
     Integer status;
+    Integer readStatus;
+    Date readTime;
     Date createTime;
     Date updateTime;
 }

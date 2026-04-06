@@ -5,6 +5,9 @@
       <article class="card stat"><span>科室问诊</span><strong>{{ records.length }}</strong></article>
       <article class="card stat"><span>待认领</span><strong>{{ unclaimedCount }}</strong></article>
       <article class="card stat"><span>我认领的</span><strong>{{ mineCount }}</strong></article>
+      <article class="card stat"><span>系统推荐给我</span><strong>{{ recommendedToMeCount }}</strong></article>
+      <article class="card stat"><span>消息未读</span><strong>{{ unreadRecordCount }}</strong></article>
+      <article class="card stat"><span>待回复</span><strong>{{ pendingReplyCount }}</strong></article>
       <article class="card stat"><span>高优先级</span><strong>{{ riskCount }}</strong></article>
     </section>
 
@@ -28,6 +31,18 @@
             <el-option label="处理中" value="processing" />
             <el-option label="已完成" value="completed" />
           </el-select>
+          <el-select v-model="messageFilter" style="width:160px">
+            <el-option label="全部沟通" value="all" />
+            <el-option label="有未读消息" value="unread" />
+            <el-option label="等待医生回复" value="waiting_reply" />
+            <el-option label="暂无沟通" value="no_message" />
+          </el-select>
+          <el-select v-model="dispatchFilter" style="width:170px">
+            <el-option label="全部分配" value="all" />
+            <el-option label="系统推荐给我" value="recommended_to_me" />
+            <el-option label="等待首推医生" value="waiting_accept" />
+            <el-option label="已被其他医生接手" value="claimed_by_other" />
+          </el-select>
           <el-button @click="refreshAll">刷新</el-button>
         </div>
       </div>
@@ -49,6 +64,32 @@
         </el-table-column>
         <el-table-column label="状态" min-width="100">
           <template #default="{ row }"><el-tag :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="智能分配" min-width="200">
+          <template #default="{ row }">
+            <div class="message-summary-cell">
+              <el-tag :type="smartDispatchTagType(row.smartDispatch)" effect="light">{{ smartDispatchStatusLabel(row.smartDispatch) }}</el-tag>
+              <span>{{ smartDispatchLine(row) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="沟通进展" min-width="170">
+          <template #default="{ row }">
+            <div class="message-summary-cell">
+              <el-tag :type="messageProgressType(row)" effect="light">{{ messageProgressLabel(row) }}</el-tag>
+              <span v-if="hasUnreadMessages(row)">未读 {{ getMessageSummary(row).unreadCount }} 条</span>
+              <span v-else-if="getMessageSummary(row).totalCount">{{ getMessageSummary(row).totalCount }} 条消息</span>
+              <span v-else>暂无沟通</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="最近消息" min-width="260">
+          <template #default="{ row }">
+            <div class="message-brief">
+              <strong>{{ messagePreview(row) }}</strong>
+              <span>{{ messageMetaLabel(row) }}</span>
+            </div>
+          </template>
         </el-table-column>
         <el-table-column label="提交时间" min-width="160">
           <template #default="{ row }">{{ formatDate(row.createTime) }}</template>
@@ -103,6 +144,28 @@
           </section>
 
           <section class="card panel">
+            <div class="head">
+              <div>
+                <h3>智能分配</h3>
+                <p>{{ smartDispatchHintText(detail?.smartDispatch) }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ smartDispatchStatusLabel(detail?.smartDispatch) }}</span>
+                <span v-if="getSmartDispatch(detail).suggestedDoctorName">首推：{{ getSmartDispatch(detail).suggestedDoctorName }}</span>
+                <span v-if="getSmartDispatch(detail).candidateCount">候选 {{ getSmartDispatch(detail).candidateCount }} 位</span>
+              </div>
+            </div>
+            <div class="subcard">
+              <p class="copy"><strong>分配提示：</strong>{{ smartDispatchHintText(detail?.smartDispatch) }}</p>
+              <p v-if="smartDispatchReason(detail)" class="copy"><strong>推荐依据：</strong>{{ smartDispatchReason(detail) }}</p>
+              <p v-if="getSmartDispatch(detail).suggestedDoctorName" class="copy">
+                <strong>优先医生：</strong>{{ getSmartDispatch(detail).suggestedDoctorName }}{{ getSmartDispatch(detail).suggestedDoctorTitle ? ` / ${getSmartDispatch(detail).suggestedDoctorTitle}` : '' }}
+              </p>
+              <p v-if="getSmartDispatch(detail).suggestedDoctorNextScheduleText" class="copy"><strong>近期排班：</strong>{{ getSmartDispatch(detail).suggestedDoctorNextScheduleText }}</p>
+            </div>
+          </section>
+
+          <section class="card panel">
             <h3>主诉与健康摘要</h3>
             <p class="copy">{{ detail.chiefComplaint || '暂无主诉信息' }}</p>
             <p class="copy">{{ detail.healthSummary || '暂无健康摘要' }}</p>
@@ -131,8 +194,10 @@
               </div>
               <div class="head-actions">
                 <div class="chips">
-                  <span>{{ consultationMessages.length }} 条消息</span>
-                  <span v-if="consultationMessages.length">最近更新 {{ formatDate(consultationMessages[consultationMessages.length - 1]?.createTime) }}</span>
+                  <span>{{ detailMessageSummary.totalCount }} 条消息</span>
+                  <span v-if="detailMessageSummary.unreadCount">未读 {{ detailMessageSummary.unreadCount }} 条</span>
+                  <span v-if="detailMessageSummary.totalCount">{{ messageProgressLabel(detail) }}</span>
+                  <span v-if="detailMessageSummary.latestTime">最近更新 {{ formatDate(detailMessageSummary.latestTime) }}</span>
                 </div>
                 <el-button text @click="loadConsultationMessages(detail.id)">刷新消息</el-button>
               </div>
@@ -153,7 +218,12 @@
                 >
                   <div class="message-meta">
                     <strong>{{ messageSenderLabel(item) }}</strong>
-                    <span>{{ formatDate(item.createTime) }}</span>
+                    <div class="message-meta-tags">
+                      <span>{{ formatDate(item.createTime) }}</span>
+                      <el-tag v-if="item.senderType === 'doctor'" size="small" effect="plain" :type="messageReadStatusType(item)">
+                        {{ messageReadStatusLabel(item) }}
+                      </el-tag>
+                    </div>
                   </div>
                   <p v-if="item.content" class="message-content">{{ item.content }}</p>
                   <div v-if="messageAttachments(item).length" class="message-image-list">
@@ -624,6 +694,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
 import { aiMismatchReasonLabel, aiMismatchReasonOptions } from '@/triage/comparison'
+import { isRecommendedToDoctor, normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveTriageMessageInsight } from '@/triage/insight'
 
 const route = useRoute()
@@ -645,6 +716,8 @@ const assignType = ref('')
 const keyword = ref('')
 const ownerFilter = ref('all')
 const statusFilter = ref('')
+const messageFilter = ref('all')
+const dispatchFilter = ref('all')
 const records = ref([])
 const detail = ref(null)
 const consultationMessages = ref([])
@@ -679,14 +752,20 @@ const templateSelection = reactive({
 
 const filteredRecords = computed(() => records.value.filter(item => {
   const search = keyword.value.trim().toLowerCase()
-  const matchesKeyword = !search || [item.patientName, item.categoryName, item.chiefComplaint, item.status].filter(Boolean).some(text => `${text}`.toLowerCase().includes(search))
+  const matchesKeyword = !search || [item.patientName, item.categoryName, item.chiefComplaint, item.status, messagePreview(item)].filter(Boolean).some(text => `${text}`.toLowerCase().includes(search))
   const matchesOwner = ownerFilter.value === 'all' || ownerType(item) === ownerFilter.value
   const matchesStatus = !statusFilter.value || item.status === statusFilter.value
-  return matchesKeyword && matchesOwner && matchesStatus
+  const matchesMessage = matchesMessageFilter(item)
+  const matchesDispatch = matchesDispatchFilter(item)
+  return matchesKeyword && matchesOwner && matchesStatus && matchesMessage && matchesDispatch
 }))
 const unclaimedCount = computed(() => records.value.filter(item => ownerType(item) === 'unclaimed').length)
 const mineCount = computed(() => records.value.filter(item => ownerType(item) === 'mine').length)
+const recommendedToMeCount = computed(() => records.value.filter(item => isRecommendedToDoctor(item?.smartDispatch, doctor.doctorId)).length)
+const unreadRecordCount = computed(() => records.value.filter(hasUnreadMessages).length)
+const pendingReplyCount = computed(() => records.value.filter(waitingDoctorReply).length)
 const riskCount = computed(() => records.value.filter(item => ['emergency', 'offline'].includes(item.triageActionType)).length)
+const detailMessageSummary = computed(() => getMessageSummary(detail.value))
 const canClaimCurrent = computed(() => canClaim(detail.value))
 const canReleaseCurrent = computed(() => canRelease(detail.value))
 const canEdit = computed(() => doctor.bound === 1 && !claimedByOther(detail.value?.doctorAssignment))
@@ -838,6 +917,17 @@ const messageUploadAction = computed(() => `${backendBaseUrl()}/api/image/cache`
 const messageUploadHeaders = computed(() => authHeader())
 
 function refreshAll() { loadDoctor(); loadRecords() }
+function applyRouteFilters() {
+  const messageValue = trimText(route.query.messageFilter)
+  const ownerValue = trimText(route.query.ownerFilter)
+  const statusValue = trimText(route.query.status)
+  const dispatchValue = trimText(route.query.dispatchFilter)
+
+  if (['all', 'unread', 'waiting_reply', 'no_message'].includes(messageValue)) messageFilter.value = messageValue
+  if (['all', 'unclaimed', 'mine', 'others'].includes(ownerValue)) ownerFilter.value = ownerValue
+  if (['submitted', 'triaged', 'processing', 'completed'].includes(statusValue)) statusFilter.value = statusValue
+  if (['all', 'recommended_to_me', 'waiting_accept', 'claimed_by_other'].includes(dispatchValue)) dispatchFilter.value = dispatchValue
+}
 function loadReplyTemplates() {
   templateLoading.value = true
   get('/api/doctor/reply-template/list', data => {
@@ -858,7 +948,11 @@ function loadDoctor() {
 function loadRecords(callback) {
   loading.value = true
   get('/api/doctor/consultation/list', data => {
-    records.value = data || []
+    records.value = (data || []).map(item => ({
+      ...item,
+      smartDispatch: normalizeSmartDispatch(item?.smartDispatch),
+      messageSummary: normalizeMessageSummary(item?.messageSummary)
+    }))
     loading.value = false
     callback?.()
     autoOpen()
@@ -879,7 +973,11 @@ function openDetail(id) {
   messageSending.value = false
   resetMessageDraft()
   get(`/api/doctor/consultation/detail?id=${id}`, data => {
-    detail.value = data || null
+    detail.value = data ? {
+      ...data,
+      smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+      messageSummary: normalizeMessageSummary(data?.messageSummary)
+    } : null
     syncForms()
     loadConsultationMessages(id)
     detailLoading.value = false
@@ -927,12 +1025,125 @@ function loadConsultationMessages(recordId = detail.value?.id) {
   messageLoading.value = true
   get(`/api/doctor/consultation/message/list?recordId=${recordId}`, data => {
     consultationMessages.value = data || []
+    syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
     messageLoading.value = false
   }, message => {
     consultationMessages.value = []
     messageLoading.value = false
     ElMessage.warning(message || '问诊沟通消息加载失败')
   })
+}
+function normalizeMessageSummary(summary) {
+  return {
+    totalCount: Number(summary?.totalCount || 0),
+    userMessageCount: Number(summary?.userMessageCount || 0),
+    doctorMessageCount: Number(summary?.doctorMessageCount || 0),
+    unreadCount: Number(summary?.unreadCount || 0),
+    latestSenderType: summary?.latestSenderType || '',
+    latestSenderName: summary?.latestSenderName || '',
+    latestMessageType: summary?.latestMessageType || '',
+    latestMessagePreview: summary?.latestMessagePreview || '',
+    latestTime: summary?.latestTime || null
+  }
+}
+function getMessageSummary(record) {
+  return normalizeMessageSummary(record?.messageSummary)
+}
+function hasUnreadMessages(record) {
+  return getMessageSummary(record).unreadCount > 0
+}
+function waitingDoctorReply(record) {
+  const summary = getMessageSummary(record)
+  return summary.totalCount > 0 && summary.latestSenderType === 'user'
+}
+function matchesMessageFilter(record) {
+  if (messageFilter.value === 'unread') return hasUnreadMessages(record)
+  if (messageFilter.value === 'waiting_reply') return waitingDoctorReply(record)
+  if (messageFilter.value === 'no_message') return getMessageSummary(record).totalCount <= 0
+  return true
+}
+function getSmartDispatch(record) {
+  return normalizeSmartDispatch(record?.smartDispatch)
+}
+function matchesDispatchFilter(record) {
+  const summary = getSmartDispatch(record)
+  if (dispatchFilter.value === 'recommended_to_me') return isRecommendedToDoctor(summary, doctor.doctorId)
+  if (dispatchFilter.value === 'waiting_accept') return summary.status === 'waiting_accept'
+  if (dispatchFilter.value === 'claimed_by_other') return summary.status === 'claimed_by_other'
+  return true
+}
+function smartDispatchLine(record) {
+  const summary = getSmartDispatch(record)
+  if (summary.suggestedDoctorName) return `首推 ${summary.suggestedDoctorName}`
+  return smartDispatchHintText(summary)
+}
+function smartDispatchReason(record) {
+  const summary = getSmartDispatch(record)
+  return trimText(summary.recommendationReason || latestAiInsight.value?.doctorRecommendationReason)
+}
+function messageProgressLabel(record) {
+  const summary = getMessageSummary(record)
+  if (summary.totalCount <= 0) return '未沟通'
+  if (summary.unreadCount > 0) return '患者新消息'
+  if (summary.latestSenderType === 'user') return '待医生回复'
+  if (summary.latestSenderType === 'doctor') return '已回复患者'
+  return '沟通中'
+}
+function messageProgressType(record) {
+  const summary = getMessageSummary(record)
+  if (summary.totalCount <= 0) return 'info'
+  if (summary.unreadCount > 0) return 'danger'
+  if (summary.latestSenderType === 'user') return 'warning'
+  if (summary.latestSenderType === 'doctor') return 'success'
+  return 'info'
+}
+function messagePreview(record) {
+  const summary = getMessageSummary(record)
+  return summary.latestMessagePreview || '暂无消息'
+}
+function messageMetaLabel(record) {
+  const summary = getMessageSummary(record)
+  if (!summary.latestTime) return '还没有沟通记录'
+  const senderName = trimText(summary.latestSenderName) || (summary.latestSenderType === 'doctor' ? '医生' : '患者')
+  return `${senderName} · ${formatDate(summary.latestTime)}`
+}
+function buildLocalMessageSummary(messages) {
+  const summary = normalizeMessageSummary(null)
+  ;(messages || []).forEach(item => {
+    summary.totalCount += 1
+    if (item?.senderType === 'user') summary.userMessageCount += 1
+    if (item?.senderType === 'doctor') summary.doctorMessageCount += 1
+    if (item?.senderType === 'user' && item?.readStatus !== 1) summary.unreadCount += 1
+    summary.latestSenderType = item?.senderType || ''
+    summary.latestSenderName = item?.senderName || ''
+    summary.latestMessageType = item?.messageType || ''
+    summary.latestMessagePreview = buildLocalMessagePreview(item)
+    summary.latestTime = item?.createTime || null
+  })
+  return summary
+}
+function buildLocalMessagePreview(message) {
+  const content = trimText(message?.content)
+  const attachmentCount = messageAttachments(message).length
+  const imageSuffix = attachmentCount <= 0
+    ? ''
+    : attachmentCount === 1 ? '[图片]' : `[图片 x${attachmentCount}]`
+  if (content && imageSuffix) return abbreviateText(`${content} ${imageSuffix}`, 72)
+  if (content) return abbreviateText(content, 72)
+  if (imageSuffix) return imageSuffix
+  return '暂无消息'
+}
+function syncRecordMessageSummary(recordId, summary) {
+  const nextSummary = normalizeMessageSummary(summary)
+  records.value = records.value.map(item => item.id === recordId
+    ? { ...item, messageSummary: nextSummary }
+    : item)
+  if (detail.value?.id === recordId) {
+    detail.value = {
+      ...detail.value,
+      messageSummary: nextSummary
+    }
+  }
 }
 function resetMessageDraft() {
   messageDraft.content = ''
@@ -950,6 +1161,12 @@ function messageSenderLabel(message) {
   if (message?.senderType === 'user') return message.senderName || detail.value?.patientName || '患者'
   const roleName = message?.senderRoleName ? ` · ${message.senderRoleName}` : ''
   return `${message?.senderName || '医生'}${roleName}`
+}
+function messageReadStatusLabel(message) {
+  return message?.readStatus === 1 ? '患者已读' : '患者未读'
+}
+function messageReadStatusType(message) {
+  return message?.readStatus === 1 ? 'success' : 'info'
 }
 function beforeMessageUpload(file) {
   const isImage = `${file.type || ''}`.startsWith('image/')
@@ -1294,7 +1511,7 @@ watch(detailVisible, value => {
 watch(() => conclusionForm.isConsistentWithAi, value => { if (value !== 0) clearAiMismatchReview() })
 watch(() => conclusionForm.needFollowUp, value => { if (value !== 1) conclusionForm.followUpWithinDays = null })
 watch(() => followUpForm.needRevisit, value => { if (value !== 1) followUpForm.nextFollowUpDate = '' })
-onMounted(() => { refreshAll(); loadReplyTemplates() })
+onMounted(() => { applyRouteFilters(); refreshAll(); loadReplyTemplates() })
 </script>
 
 <style scoped>
@@ -1306,7 +1523,7 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 18px;
 }
 
@@ -1720,6 +1937,29 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   margin-bottom: 10px;
 }
 
+.message-summary-cell,
+.message-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.message-summary-cell span,
+.message-brief span {
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.message-brief strong {
+  color: #31474d;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .message-board {
   margin-bottom: 16px;
 }
@@ -1761,6 +2001,13 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 .message-attachment-actions span {
   color: var(--app-muted);
   font-size: 13px;
+}
+
+.message-meta-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .message-content {

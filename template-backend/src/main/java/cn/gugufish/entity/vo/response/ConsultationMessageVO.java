@@ -17,6 +17,8 @@ public class ConsultationMessageVO {
     String content;
     String attachmentsJson;
     Integer status;
+    Integer readStatus;
+    Date readTime;
     Date createTime;
     Date updateTime;
     List<String> attachments;

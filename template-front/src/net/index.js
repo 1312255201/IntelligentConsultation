@@ -122,6 +122,73 @@ function internalGet(url, headers, success, failure, error = defaultError) {
   }).catch(err => error(err))
 }
 
+async function parseBlobPayload(blob) {
+  if (!(typeof Blob !== 'undefined' && blob instanceof Blob)) return null
+  const text = await blob.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { message: text }
+  }
+}
+
+function resolveDownloadFilename(headers = {}, fallbackFilename = 'download.csv') {
+  const contentDisposition = headers['content-disposition'] || headers['Content-Disposition']
+  if (!contentDisposition) return fallbackFilename
+
+  const encodedMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1])
+    } catch {
+      return encodedMatch[1]
+    }
+  }
+
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+  return plainMatch?.[1] || fallbackFilename
+}
+
+function triggerDownload(blob, filename) {
+  const objectUrl = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = filename
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(objectUrl)
+}
+
+async function internalDownload(url, headers, fallbackFilename, success, failure, error = defaultError) {
+  try {
+    const response = await axios.get(url, {
+      headers,
+      responseType: 'blob'
+    })
+    const filename = resolveDownloadFilename(response.headers, fallbackFilename)
+    triggerDownload(response.data, filename)
+    success(filename)
+  } catch (err) {
+    const payload = await parseBlobPayload(err?.response?.data)
+    const status = payload?.code || err?.response?.status
+    const message = payload?.message
+
+    if (status === 401) {
+      failure(message || '登录状态已过期，请重新登录', status, url)
+      deleteAccessToken(true)
+      return
+    }
+    if (message) {
+      failure(message, status, url)
+      return
+    }
+    error(err)
+  }
+}
+
 function login(username, password, remember, success, failure = defaultFailure) {
   internalPost('/api/auth/login', new URLSearchParams({
     username,
@@ -145,6 +212,10 @@ function get(url, success, failure = defaultFailure) {
 
 function getPublic(url, success, failure = defaultFailure) {
   internalGet(url, {}, success, failure)
+}
+
+function download(url, fallbackFilename, success = () => {}, failure = defaultFailure, error = defaultError) {
+  internalDownload(url, authHeader(), fallbackFilename, success, failure, error)
 }
 
 function upload(url, data, success, failure = defaultFailure, error = defaultError) {
@@ -179,6 +250,7 @@ function resolveImagePath(path) {
 export {
   authHeader,
   backendBaseUrl,
+  download,
   get,
   getPublic,
   login,

@@ -2,6 +2,7 @@ package cn.gugufish.service.impl;
 
 import cn.gugufish.entity.dto.BodyPartDict;
 import cn.gugufish.entity.dto.ConsultationCategory;
+import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
 import cn.gugufish.entity.dto.ConsultationIntakeField;
 import cn.gugufish.entity.dto.ConsultationIntakeTemplate;
 import cn.gugufish.entity.dto.ConsultationRecord;
@@ -30,6 +31,7 @@ import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
 import cn.gugufish.entity.vo.response.ConsultationEntryCategoryVO;
 import cn.gugufish.entity.vo.response.ConsultationIntakeFieldVO;
 import cn.gugufish.entity.vo.response.ConsultationIntakeTemplateVO;
+import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
 import cn.gugufish.entity.vo.response.ConsultationRecommendDoctorVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordVO;
@@ -37,6 +39,7 @@ import cn.gugufish.mapper.BodyPartDictMapper;
 import cn.gugufish.mapper.ConsultationCategoryMapper;
 import cn.gugufish.mapper.ConsultationIntakeFieldMapper;
 import cn.gugufish.mapper.ConsultationIntakeTemplateMapper;
+import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
 import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
 import cn.gugufish.mapper.DepartmentMapper;
@@ -54,6 +57,7 @@ import cn.gugufish.mapper.TriageMessageMapper;
 import cn.gugufish.mapper.TriageSessionMapper;
 import cn.gugufish.mapper.TriageLevelDictMapper;
 import cn.gugufish.service.ConsultationService;
+import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
@@ -63,6 +67,7 @@ import cn.gugufish.service.TriageFeedbackService;
 import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
 import cn.gugufish.utils.ConsultationAiComparisonUtils;
+import cn.gugufish.utils.ConsultationSmartDispatchUtils;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
@@ -107,6 +112,7 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationCategoryMapper consultationCategoryMapper;
     @Resource ConsultationIntakeTemplateMapper consultationIntakeTemplateMapper;
     @Resource ConsultationIntakeFieldMapper consultationIntakeFieldMapper;
+    @Resource ConsultationDoctorAssignmentMapper consultationDoctorAssignmentMapper;
     @Resource ConsultationRecordMapper consultationRecordMapper;
     @Resource ConsultationRecordAnswerMapper consultationRecordAnswerMapper;
     @Resource DepartmentMapper departmentMapper;
@@ -132,6 +138,7 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationDoctorHandleQueryService consultationDoctorHandleQueryService;
     @Resource ConsultationAiEnrichmentService consultationAiEnrichmentService;
     @Resource TriageFeedbackService triageFeedbackService;
+    @Resource ConsultationMessageService consultationMessageService;
 
     @Override
     public List<ConsultationEntryCategoryVO> listEntryCategories() {
@@ -216,12 +223,43 @@ public class ConsultationServiceImpl implements ConsultationService {
 
     @Override
     public List<ConsultationRecordVO> listRecords(int accountId) {
-        return consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
-                        .eq("account_id", accountId)
-                        .orderByDesc("create_time")
+        List<ConsultationRecord> records = consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
+                .eq("account_id", accountId)
+                .orderByDesc("create_time")
+                .orderByDesc("id"));
+        if (records.isEmpty()) return List.of();
+
+        List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
+        Map<Integer, ConsultationMessageSummaryVO> messageSummaryMap = consultationMessageService.summarizeUserMessages(consultationIds);
+        Map<Integer, ConsultationDoctorAssignment> assignmentMap = new HashMap<>();
+        consultationDoctorAssignmentMapper.selectList(Wrappers.<ConsultationDoctorAssignment>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("update_time")
                         .orderByDesc("id"))
+                .forEach(item -> assignmentMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, TriageResult> triageResultMap = new HashMap<>();
+        triageResultMapper.selectList(Wrappers.<TriageResult>query()
+                        .in("consultation_id", consultationIds)
+                        .orderByDesc("is_final")
+                        .orderByDesc("id"))
+                .forEach(item -> triageResultMap.putIfAbsent(item.getConsultationId(), item));
+
+        return records
                 .stream()
-                .map(item -> item.asViewObject(ConsultationRecordVO.class))
+                .map(item -> item.asViewObject(ConsultationRecordVO.class, vo -> {
+                    TriageResult triageResult = triageResultMap.get(item.getId());
+                    ConsultationDoctorAssignment assignment = assignmentMap.get(item.getId());
+                    vo.setMessageSummary(messageSummaryMap.get(item.getId()));
+                    vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
+                            assignment == null ? null : assignment.getDoctorId(),
+                            assignment == null ? null : assignment.getDoctorName(),
+                            assignment == null ? null : assignment.getStatus(),
+                            triageResult == null ? null : triageResult.getDoctorId(),
+                            triageResult == null ? null : triageResult.getDoctorName(),
+                            triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
+                            triageResult == null ? null : triageResult.getReasonText()
+                    ));
+                }))
                 .toList();
     }
 
@@ -245,12 +283,28 @@ public class ConsultationServiceImpl implements ConsultationService {
         var triageSession = triageSessionQueryService.detailByConsultationId(id);
         var triageResult = triageResultQueryService.detailByConsultationId(id);
         var triageFeedback = triageFeedbackQueryService.detailByConsultationId(id);
+        ConsultationDoctorAssignment assignment = consultationDoctorAssignmentMapper.selectOne(Wrappers.<ConsultationDoctorAssignment>query()
+                .eq("consultation_id", id)
+                .orderByDesc("update_time")
+                .orderByDesc("id")
+                .last("limit 1"));
+        ConsultationMessageSummaryVO messageSummary = consultationMessageService.summarizeUserMessages(List.of(id)).get(id);
 
         return record.asViewObject(ConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
             vo.setRecommendedDoctors(buildRecommendedDoctors(record));
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
+            vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
+                    assignment == null ? null : assignment.getDoctorId(),
+                    assignment == null ? null : assignment.getDoctorName(),
+                    assignment == null ? null : assignment.getStatus(),
+                    triageResult == null ? null : triageResult.getDoctorId(),
+                    triageResult == null ? null : triageResult.getDoctorName(),
+                    triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
+                    triageResult == null ? null : triageResult.getReasonText()
+            ));
+            vo.setMessageSummary(messageSummary);
             vo.setAiComparison(ConsultationAiComparisonUtils.build(doctorConclusion, triageSession, triageResult));
             vo.setDoctorFollowUps(doctorFollowUps);
             vo.setTriageSession(triageSession);
