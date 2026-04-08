@@ -311,7 +311,7 @@ function menuBadgeCount(item) {
   if ((item?.badgeKey || item?.index) === 'patient-reminder' || item?.index === '/index/reminder') {
     return workspaceSummary.totalReminderCount
   }
-  if ((item?.badgeKey || item?.index) === 'doctor-consultation' || item?.index === '/doctor/consultation') {
+  if (item?.badgeKey === 'doctor-reminder' || item?.index === '/doctor/reminder') {
     return doctorWorkspaceSummary.actionableConsultationCount
   }
   return 0
@@ -324,7 +324,7 @@ function menuBadgeType(item) {
     }
     return 'primary'
   }
-  if ((item?.badgeKey || item?.index) === 'doctor-consultation' || item?.index === '/doctor/consultation') {
+  if (item?.badgeKey === 'doctor-reminder' || item?.index === '/doctor/reminder') {
     if (doctorWorkspaceSummary.highPriorityUnclaimedCount > 0 || doctorWorkspaceSummary.overdueFollowUpCount > 0) {
       return 'danger'
     }

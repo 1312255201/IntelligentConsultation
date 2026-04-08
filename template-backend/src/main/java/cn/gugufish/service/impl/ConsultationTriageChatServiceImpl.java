@@ -2,6 +2,7 @@ package cn.gugufish.service.impl;
 
 import cn.gugufish.ai.AiTriageAdvice;
 import cn.gugufish.ai.AiTriageContext;
+import cn.gugufish.ai.AiTriageProperties;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
 import cn.gugufish.entity.dto.TriageMessage;
@@ -51,6 +52,9 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
 
     @Resource
     AiTriageService aiTriageService;
+
+    @Resource
+    AiTriageProperties properties;
 
     @Override
     @Transactional
@@ -209,6 +213,8 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
     private String buildReplyStructuredContent(Integer consultationId, AiTriageAdvice advice) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("consultationId", consultationId);
+        payload.put("promptVersion", properties.getPromptVersion());
+        payload.put("source", "deepseek");
         payload.put("reply", advice.getReply());
         payload.put("summary", advice.getSummary());
         payload.put("riskFlags", advice.getRiskFlags());
@@ -224,8 +230,10 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
     }
 
     private String buildQuestionStructuredContent(Integer consultationId, AiTriageAdvice advice) {
-        Map<String, Object> payload = new HashMap<>();
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("consultationId", consultationId);
+        payload.put("promptVersion", properties.getPromptVersion());
+        payload.put("source", "deepseek");
         payload.put("nextQuestions", advice.getNextQuestions());
         return JSON.toJSONString(payload);
     }

@@ -114,6 +114,12 @@ const menuItems = [
     icon: DataAnalysis
   },
   {
+    index: '/admin/consultation-ai',
+    title: 'AI 导诊配置',
+    description: '查看 DeepSeek 接入状态、Prompt 版本、模型参数和 AI 导诊产出概况。',
+    icon: DataAnalysis
+  },
+  {
     index: '/admin/profile',
     title: '个人信息',
     description: '维护管理员账号的邮箱、密码和头像。',

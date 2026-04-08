@@ -41,6 +41,10 @@ function formatConfidence(value) {
   return Number.isNaN(number) || number <= 0 ? '' : `${Math.round(number * 100)}%`
 }
 
+function normalizeFlag(value) {
+  return value === 1 || value === true ? 1 : 0
+}
+
 function visitTypeLabel(value) {
   return ({
     emergency: '立即急诊',
@@ -50,7 +54,7 @@ function visitTypeLabel(value) {
   })[`${value || ''}`.toLowerCase()] || ''
 }
 
-function resolveTriageMessageInsight(message) {
+function extractTriageMessageInsight(message) {
   const payload = parseObject(message?.structuredContent)
   if (!payload) return null
 
@@ -69,22 +73,11 @@ function resolveTriageMessageInsight(message) {
   const recommendedVisitTypeCode = safeText(payload.recommendedVisitType).toLowerCase()
   const recommendedVisitType = visitTypeLabel(payload.recommendedVisitType)
   const confidenceText = formatConfidence(payload.confidenceScore)
-  const shouldEscalateToHuman = payload.shouldEscalateToHuman === 1 ? 1 : 0
-  const suggestOfflineImmediately = payload.suggestOfflineImmediately === 1 ? 1 : 0
-
-  if (!summary
-    && !reply
-    && !riskFlags.length
-    && !recommendedDoctors.length
-    && !recommendedDoctorIds.length
-    && !doctorRecommendationReason
-    && !recommendedDepartmentName
-    && !recommendedVisitType
-    && !confidenceText
-    && shouldEscalateToHuman !== 1
-    && suggestOfflineImmediately !== 1) {
-    return null
-  }
+  const shouldEscalateToHuman = normalizeFlag(payload.shouldEscalateToHuman)
+  const suggestOfflineImmediately = normalizeFlag(payload.suggestOfflineImmediately)
+  const nextQuestions = normalizeStringList(payload.nextQuestions).slice(0, 5)
+  const promptVersion = safeText(payload.promptVersion)
+  const source = safeText(payload.source).toLowerCase()
 
   return {
     summary,
@@ -99,10 +92,45 @@ function resolveTriageMessageInsight(message) {
     recommendedVisitType,
     shouldEscalateToHuman,
     suggestOfflineImmediately,
-    confidenceText
+    confidenceText,
+    nextQuestions,
+    promptVersion,
+    source
   }
 }
 
+function hasPrimaryInsight(insight) {
+  return !!(insight?.summary
+    || insight?.reply
+    || insight?.riskFlags?.length
+    || insight?.recommendedDoctors?.length
+    || insight?.recommendedDoctorIds?.length
+    || insight?.doctorRecommendationReason
+    || insight?.recommendedDepartmentName
+    || insight?.recommendedVisitType
+    || insight?.confidenceText
+    || insight?.shouldEscalateToHuman === 1
+    || insight?.suggestOfflineImmediately === 1)
+}
+
+function hasAuditInsight(insight) {
+  return hasPrimaryInsight(insight)
+    || !!insight?.nextQuestions?.length
+    || !!insight?.promptVersion
+    || !!insight?.source
+}
+
+function resolveTriageMessageInsight(message) {
+  const insight = extractTriageMessageInsight(message)
+  return hasPrimaryInsight(insight) ? insight : null
+}
+
+function resolveTriageMessageAuditInsight(message) {
+  const insight = extractTriageMessageInsight(message)
+  return hasAuditInsight(insight) ? insight : null
+}
+
 export {
+  resolveTriageMessageAuditInsight,
   resolveTriageMessageInsight
 }

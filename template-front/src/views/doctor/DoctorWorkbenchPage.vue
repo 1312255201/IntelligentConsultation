@@ -83,7 +83,7 @@
             <h3>待办看板</h3>
             <p>把“先认领，再处理，再随访”的关键入口集中在首页，方便连续处理医生侧全流程。</p>
           </div>
-          <el-button text @click="openConsultationList()">进入问诊列表</el-button>
+          <el-button text @click="openReminderCenter()">进入待办中心</el-button>
         </div>
 
         <div class="todo-grid">
@@ -444,6 +444,10 @@ function openConsultationList(query = {}) {
     path: '/doctor/consultation',
     query
   })
+}
+
+function openReminderCenter() {
+  router.push('/doctor/reminder')
 }
 
 function isRiskConsultation(item) {

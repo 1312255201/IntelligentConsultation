@@ -102,6 +102,11 @@ const router = createRouter({
           component: () => import('@/views/doctor/DoctorWorkbenchPage.vue')
         },
         {
+          path: 'reminder',
+          name: 'doctor-reminder',
+          component: () => import('@/views/doctor/DoctorReminderPage.vue')
+        },
+        {
           path: 'consultation',
           name: 'doctor-consultation',
           component: () => import('@/views/doctor/DoctorConsultationPage.vue')
@@ -202,6 +207,11 @@ const router = createRouter({
           path: 'consultation-dispatch',
           name: 'admin-consultation-dispatch',
           component: () => import('@/views/admin/ConsultationDispatchPage.vue')
+        },
+        {
+          path: 'consultation-ai',
+          name: 'admin-consultation-ai',
+          component: () => import('@/views/admin/ConsultationAiConfigPage.vue')
         },
         {
           path: 'profile',

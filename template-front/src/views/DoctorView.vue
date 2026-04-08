@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import { Calendar, ChatLineSquare, DataAnalysis, Document, User } from '@element-plus/icons-vue'
+import { Bell, Calendar, ChatLineSquare, DataAnalysis, Document, User } from '@element-plus/icons-vue'
 import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
@@ -21,11 +21,17 @@ const menuItems = [
     icon: DataAnalysis
   },
   {
+    index: '/doctor/reminder',
+    title: '消息与待办',
+    description: '集中查看待认领问诊、患者新消息、待回复与随访事项，并带着上下文进入详情处理。',
+    icon: Bell,
+    badgeKey: 'doctor-reminder'
+  },
+  {
     index: '/doctor/consultation',
     title: '科室问诊列表',
     description: '查看当前科室下的问诊记录、分诊结果和反馈信息。',
-    icon: Document,
-    badgeKey: 'doctor-consultation'
+    icon: Document
   },
   {
     index: '/doctor/schedule',
@@ -47,5 +53,5 @@ const menuItems = [
   }
 ]
 
-const footerText = '当前版本先完成医生侧的工作台、科室问诊查看和排班概览，后续再继续补接诊处理动作。'
+const footerText = '当前医生侧已经形成“工作台 -> 消息与待办 -> 问诊列表 -> 问诊详情”的主链路，后续继续完善通知、协作和诊后运营能力。'
 </script>

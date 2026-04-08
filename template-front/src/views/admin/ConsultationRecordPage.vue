@@ -522,7 +522,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="问诊记录详情" width="1080px" destroy-on-close>
+    <el-dialog v-model="detailVisible" title="问诊记录详情" width="1080px" destroy-on-close @closed="handleDetailDialogClosed">
       <div v-loading="detailLoading">
         <template v-if="detail">
           <div class="meta">
@@ -800,15 +800,19 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { download, get, resolveImagePath } from '@/net'
 import { aiMismatchReasonLabel, aiMismatchReasonOptions, comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 
 const SAMPLE_PAGE_SIZE = 20
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
+const currentDetailId = ref(null)
 const summaryLoading = ref(false)
 const dispatchSummaryLoading = ref(false)
 const mismatchSampleVisible = ref(false)
@@ -1167,11 +1171,16 @@ function openDetailFromFieldSample(id) {
   fieldSampleVisible.value = false
   openDetail(id)
 }
-function openDetail(id) {
+function openDetail(id, options = {}) {
+  const { syncRoute = true } = options
+  const detailId = normalizePositiveId(id)
+  if (!detailId) return
+  currentDetailId.value = detailId
   detailVisible.value = true
   detailLoading.value = true
   detail.value = null
-  get(`/api/admin/consultation-record/detail?id=${id}`, data => {
+  if (syncRoute) syncDetailRouteQuery(detailId)
+  get(`/api/admin/consultation-record/detail?id=${detailId}`, data => {
     detail.value = data ? {
       ...data,
       smartDispatch: normalizeSmartDispatch(data?.smartDispatch)
@@ -1180,8 +1189,32 @@ function openDetail(id) {
   }, message => {
     detailLoading.value = false
     detailVisible.value = false
+    detail.value = null
+    currentDetailId.value = null
+    syncDetailRouteQuery(null)
     ElMessage.warning(message || '问诊记录详情加载失败')
   })
+}
+function handleDetailDialogClosed() {
+  detail.value = null
+  currentDetailId.value = null
+  syncDetailRouteQuery(null)
+}
+function syncDetailRouteQuery(id) {
+  const nextId = normalizePositiveId(id)
+  const currentId = normalizePositiveId(route.query.detailId)
+  if (currentId === nextId) return
+  const nextQuery = { ...route.query }
+  if (nextId) nextQuery.detailId = `${nextId}`
+  else delete nextQuery.detailId
+  router.replace({
+    path: route.path,
+    query: nextQuery
+  }).catch(() => {})
+}
+function normalizePositiveId(value) {
+  const number = Number(value)
+  return Number.isInteger(number) && number > 0 ? number : null
 }
 function assignmentKey(assignment) {
   if (!assignment) return 'unclaimed'
@@ -1226,6 +1259,15 @@ function formatDate(value) {
   if (!value) return '-'
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
+watch(() => route.query.detailId, value => {
+  const detailId = normalizePositiveId(value)
+  if (!detailId) {
+    if (detailVisible.value) detailVisible.value = false
+    return
+  }
+  if (currentDetailId.value === detailId && detailVisible.value) return
+  openDetail(detailId, { syncRoute: false })
+}, { immediate: true })
 onMounted(() => refreshAll())
 </script>
 

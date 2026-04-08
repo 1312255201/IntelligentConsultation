@@ -735,6 +735,25 @@ import { ElMessage } from 'element-plus'
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
+import {
+  compareDateAsc,
+  compareRecentDoctorRecord as compareRecentRecord,
+  followUpDueDate,
+  followUpLine,
+  followUpState,
+  followUpTagLabel,
+  followUpTagType,
+  formatDoctorReminderDate as formatDate,
+  getDoctorMessageSummary as getMessageSummary,
+  hasUnreadMessages,
+  isPendingFollowUpRecord,
+  isRiskConsultation,
+  messageProgressLabel,
+  messageProgressType,
+  normalizeDoctorMessageSummary as normalizeMessageSummary,
+  ownerType as resolveOwnerType,
+  waitingDoctorReply
+} from '@/doctor/reminder'
 import { aiMismatchReasonLabel, aiMismatchReasonOptions } from '@/triage/comparison'
 import { isRecommendedToDoctor, normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveTriageMessageInsight } from '@/triage/insight'
@@ -1121,29 +1140,6 @@ function loadConsultationMessages(recordId = detail.value?.id) {
     ElMessage.warning(message || '问诊沟通消息加载失败')
   })
 }
-function normalizeMessageSummary(summary) {
-  return {
-    totalCount: Number(summary?.totalCount || 0),
-    userMessageCount: Number(summary?.userMessageCount || 0),
-    doctorMessageCount: Number(summary?.doctorMessageCount || 0),
-    unreadCount: Number(summary?.unreadCount || 0),
-    latestSenderType: summary?.latestSenderType || '',
-    latestSenderName: summary?.latestSenderName || '',
-    latestMessageType: summary?.latestMessageType || '',
-    latestMessagePreview: summary?.latestMessagePreview || '',
-    latestTime: summary?.latestTime || null
-  }
-}
-function getMessageSummary(record) {
-  return normalizeMessageSummary(record?.messageSummary)
-}
-function hasUnreadMessages(record) {
-  return getMessageSummary(record).unreadCount > 0
-}
-function waitingDoctorReply(record) {
-  const summary = getMessageSummary(record)
-  return summary.totalCount > 0 && summary.latestSenderType === 'user'
-}
 function matchesMessageFilter(record) {
   if (messageFilter.value === 'unread') return hasUnreadMessages(record)
   if (messageFilter.value === 'waiting_reply') return waitingDoctorReply(record)
@@ -1160,55 +1156,11 @@ function matchesDispatchFilter(record) {
   if (dispatchFilter.value === 'claimed_by_other') return summary.status === 'claimed_by_other'
   return true
 }
-function latestFollowUp(record) {
-  return Array.isArray(record?.doctorFollowUps) && record.doctorFollowUps.length
-    ? record.doctorFollowUps[0]
-    : null
-}
-function followUpDueDate(record) {
-  const latest = latestFollowUp(record)
-  if (latest?.nextFollowUpDate) return latest.nextFollowUpDate
-  if (record?.doctorConclusion?.needFollowUp !== 1) return null
-  const followUpWithinDays = Number(record?.doctorConclusion?.followUpWithinDays || 0)
-  if (!Number.isFinite(followUpWithinDays) || followUpWithinDays <= 0) return null
-  const baseTime = record?.doctorConclusion?.updateTime || record?.doctorHandle?.completeTime || record?.updateTime
-  if (!baseTime) return null
-  const dueDate = new Date(baseTime)
-  dueDate.setHours(0, 0, 0, 0)
-  dueDate.setDate(dueDate.getDate() + followUpWithinDays)
-  return dueDate
-}
-function isPendingFollowUpRecord(record) {
-  if (record?.status !== 'completed') return false
-  if (record?.doctorHandle?.status !== 'completed') return false
-  if (record?.doctorConclusion?.needFollowUp !== 1) return false
-  return latestFollowUp(record)?.needRevisit !== 0
-}
-function followUpState(record) {
-  if (!record) return 'none'
-  if (!isPendingFollowUpRecord(record)) {
-    return record?.doctorConclusion?.needFollowUp === 1 && latestFollowUp(record)?.needRevisit === 0
-      ? 'done'
-      : 'none'
-  }
-  const dueValue = followUpDueDate(record)
-  if (!dueValue) return 'pending'
-  const dueDate = new Date(dueValue)
-  dueDate.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  if (dueDate.getTime() < today.getTime()) return 'overdue'
-  if (dueDate.getTime() === today.getTime()) return 'due_today'
-  return 'pending'
-}
 function matchesFollowUpFilter(record) {
   if (followUpFilter.value === 'pending') return isPendingFollowUpRecord(record)
   if (followUpFilter.value === 'due_today') return followUpState(record) === 'due_today'
   if (followUpFilter.value === 'overdue') return followUpState(record) === 'overdue'
   return true
-}
-function isRiskConsultation(record) {
-  return ['emergency', 'offline'].includes(record?.triageActionType)
 }
 function matchesRiskFilter(record) {
   if (riskFilter.value === 'high_priority') return isRiskConsultation(record)
@@ -1230,56 +1182,9 @@ function compareFollowUpPriority(left, right) {
   if (dueDiff !== 0) return dueDiff
   return 0
 }
-function compareRecentRecord(left, right) {
-  const createTimeDiff = compareDateDesc(left?.createTime, right?.createTime)
-  if (createTimeDiff !== 0) return createTimeDiff
-  return compareNumber(Number(right?.id || 0), Number(left?.id || 0))
-}
-function compareDateAsc(left, right) {
-  const leftTime = toTimestamp(left)
-  const rightTime = toTimestamp(right)
-  if (leftTime === rightTime) return 0
-  if (leftTime === null) return 1
-  if (rightTime === null) return -1
-  return compareNumber(leftTime, rightTime)
-}
-function compareDateDesc(left, right) {
-  return compareDateAsc(right, left)
-}
 function compareNumber(left, right) {
   if (left === right) return 0
   return left < right ? -1 : 1
-}
-function toTimestamp(value) {
-  if (!value) return null
-  const time = new Date(value).getTime()
-  return Number.isNaN(time) ? null : time
-}
-function followUpTagLabel(record) {
-  const state = followUpState(record)
-  if (state === 'overdue') return '已逾期'
-  if (state === 'due_today') return '今日到期'
-  if (state === 'pending') return '待随访'
-  if (state === 'done') return '本轮已完成'
-  return '无需随访'
-}
-function followUpTagType(record) {
-  const state = followUpState(record)
-  if (state === 'overdue') return 'danger'
-  if (state === 'due_today') return 'warning'
-  if (state === 'pending') return 'primary'
-  if (state === 'done') return 'success'
-  return 'info'
-}
-function followUpLine(record) {
-  const latest = latestFollowUp(record)
-  const dueValue = followUpDueDate(record)
-  const state = followUpState(record)
-  if (state === 'overdue') return `应于 ${formatDate(dueValue, true)} 前完成随访`
-  if (state === 'due_today') return '建议今天完成本轮随访'
-  if (state === 'pending') return dueValue ? `计划于 ${formatDate(dueValue, true)} 跟进` : '已标记后续继续跟进'
-  if (state === 'done') return latest?.createTime ? `最近随访 ${formatDate(latest.createTime)}` : '当前轮次已完成'
-  return '当前未设置继续随访'
 }
 function followUpReminderText(record) {
   const state = followUpState(record)
@@ -1308,22 +1213,6 @@ function smartDispatchLine(record) {
 function smartDispatchReason(record) {
   const summary = getSmartDispatch(record)
   return trimText(summary.recommendationReason || latestAiInsight.value?.doctorRecommendationReason)
-}
-function messageProgressLabel(record) {
-  const summary = getMessageSummary(record)
-  if (summary.totalCount <= 0) return '未沟通'
-  if (summary.unreadCount > 0) return '患者新消息'
-  if (summary.latestSenderType === 'user') return '待医生回复'
-  if (summary.latestSenderType === 'doctor') return '已回复患者'
-  return '沟通中'
-}
-function messageProgressType(record) {
-  const summary = getMessageSummary(record)
-  if (summary.totalCount <= 0) return 'info'
-  if (summary.unreadCount > 0) return 'danger'
-  if (summary.latestSenderType === 'user') return 'warning'
-  if (summary.latestSenderType === 'doctor') return 'success'
-  return 'info'
 }
 function messagePreview(record) {
   const summary = getMessageSummary(record)
@@ -1645,9 +1534,7 @@ function submitFollowUp() {
   })
 }
 function ownerType(record) {
-  const assignment = record?.doctorAssignment
-  if (!assignment || assignment.status !== 'claimed') return 'unclaimed'
-  return assignment.doctorId === doctor.doctorId ? 'mine' : 'others'
+  return resolveOwnerType(record, doctor.doctorId)
 }
 function canClaim(record) { return !!record && doctor.bound === 1 && record.status !== 'completed' && ownerType(record) === 'unclaimed' }
 function canRelease(record) {
@@ -1728,13 +1615,6 @@ function patientStatusLabel(value) { return ({ improved: '明显好转', stable:
 function formatConfidence(value) {
   const number = Number(value)
   return Number.isNaN(number) || number <= 0 ? '-' : `${Math.round(number * 100)}%`
-}
-function formatDate(value, onlyDate = false) {
-  if (!value) return '-'
-  return new Intl.DateTimeFormat('zh-CN', onlyDate
-    ? { year: 'numeric', month: '2-digit', day: '2-digit' }
-    : { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
-  ).format(new Date(value))
 }
 watch(detailVisible, value => {
   if (!value) {
