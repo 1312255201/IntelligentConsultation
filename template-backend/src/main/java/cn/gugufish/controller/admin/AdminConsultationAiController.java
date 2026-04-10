@@ -1,6 +1,8 @@
 package cn.gugufish.controller.admin;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsageOverviewVO;
+import cn.gugufish.entity.vo.response.AdminDoctorMessageAiUsageOverviewVO;
 import cn.gugufish.entity.vo.response.ConsultationAiAuditItemVO;
 import cn.gugufish.entity.vo.response.ConsultationAiOverviewVO;
 import cn.gugufish.service.ConsultationAiAdminService;
@@ -44,6 +46,18 @@ public class AdminConsultationAiController {
     @Operation(summary = "查询 AI 导诊运行概览")
     public RestBean<ConsultationAiOverviewVO> overview() {
         return RestBean.success(consultationAiAdminService.overview());
+    }
+
+    @GetMapping("/doctor-message-usage")
+    @Operation(summary = "查询医生端 AI 沟通草稿使用概览")
+    public RestBean<AdminDoctorMessageAiUsageOverviewVO> doctorMessageUsageOverview() {
+        return RestBean.success(consultationAiAdminService.doctorMessageUsageOverview());
+    }
+
+    @GetMapping("/doctor-form-usage")
+    @Operation(summary = "查询医生端处理/随访 AI 草稿使用概览")
+    public RestBean<AdminDoctorFormAiUsageOverviewVO> doctorFormUsageOverview() {
+        return RestBean.success(consultationAiAdminService.doctorFormUsageOverview());
     }
 
     @GetMapping("/audit-list")

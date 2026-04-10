@@ -6,6 +6,7 @@ import cn.gugufish.entity.dto.ConsultationMessage;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
+import cn.gugufish.entity.dto.DoctorMessageAiLog;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
@@ -15,6 +16,7 @@ import cn.gugufish.mapper.ConsultationMessageMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
 import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
+import cn.gugufish.mapper.DoctorMessageAiLogMapper;
 import cn.gugufish.service.ConsultationMessageService;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -47,6 +49,9 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
     DoctorMapper doctorMapper;
 
     @Resource
+    DoctorMessageAiLogMapper doctorMessageAiLogMapper;
+
+    @Resource
     DepartmentMapper departmentMapper;
 
     @Override
@@ -77,8 +82,9 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
                 .eq("id", vo.getRecordId())
                 .eq("account_id", accountId));
         if (record == null) return "问诊记录不存在或暂无发送权限";
+        if (!hasMessagePayload(vo)) return "请至少填写消息内容或上传图片附件";
 
-        return saveMessage(
+        ConsultationMessage message = saveMessage(
                 record.getId(),
                 "user",
                 accountId,
@@ -87,6 +93,7 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
                 vo,
                 new Date()
         );
+        return message == null ? "问诊消息发送失败" : null;
     }
 
     @Override
@@ -94,6 +101,7 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
     public String sendDoctorMessage(int accountId, ConsultationMessageSendVO vo) {
         Doctor doctor = validDoctor(accountId);
         if (doctor == null) return "当前 doctor 账号尚未绑定有效医生档案";
+        if (!hasMessagePayload(vo)) return "请至少填写消息内容或上传图片附件";
 
         ConsultationRecord record = consultationRecordMapper.selectById(vo.getRecordId());
         if (record == null) return "问诊记录不存在";
@@ -109,7 +117,7 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         String claimMessage = ensureClaimed(vo.getRecordId(), doctor, departmentName, now);
         if (claimMessage != null) return claimMessage;
 
-        return saveMessage(
+        ConsultationMessage message = saveMessage(
                 record.getId(),
                 "doctor",
                 doctor.getId(),
@@ -118,6 +126,11 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
                 vo,
                 now
         );
+        if (message == null) return "问诊消息发送失败";
+        String processingMessage = syncDoctorProcessingState(record, handle, doctor, departmentName, now);
+        if (processingMessage != null) return processingMessage;
+        markDoctorAiLogSent(vo, doctor, record, message, now);
+        return null;
     }
 
     @Override
@@ -194,16 +207,16 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         return summaryMap;
     }
 
-    private String saveMessage(int consultationId,
-                               String senderType,
-                               Integer senderId,
-                               String senderName,
-                               String senderRoleName,
-                               ConsultationMessageSendVO vo,
-                               Date now) {
+    private ConsultationMessage saveMessage(int consultationId,
+                                            String senderType,
+                                            Integer senderId,
+                                            String senderName,
+                                            String senderRoleName,
+                                            ConsultationMessageSendVO vo,
+                                            Date now) {
         String content = trimToNull(vo.getContent());
         List<String> attachments = normalizeAttachments(vo.getAttachments());
-        if (content == null && attachments.isEmpty()) return "请至少填写消息内容或上传图片附件";
+        if (content == null && attachments.isEmpty()) return null;
 
         String messageType = attachments.isEmpty()
                 ? "text"
@@ -225,7 +238,31 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
                 now,
                 now
         );
-        return consultationMessageMapper.insert(message) > 0 ? null : "问诊消息发送失败";
+        return consultationMessageMapper.insert(message) > 0 ? message : null;
+    }
+
+    private boolean hasMessagePayload(ConsultationMessageSendVO vo) {
+        if (vo == null) return false;
+        return trimToNull(vo.getContent()) != null || !normalizeAttachments(vo.getAttachments()).isEmpty();
+    }
+
+    private void markDoctorAiLogSent(ConsultationMessageSendVO vo,
+                                     Doctor doctor,
+                                     ConsultationRecord record,
+                                     ConsultationMessage message,
+                                     Date now) {
+        if (vo == null || vo.getAiLogId() == null || doctor == null || record == null || message == null) return;
+        DoctorMessageAiLog logRecord = doctorMessageAiLogMapper.selectById(vo.getAiLogId());
+        if (logRecord == null) return;
+        if (!Objects.equals(logRecord.getDoctorId(), doctor.getId())) return;
+        if (!Objects.equals(logRecord.getConsultationId(), record.getId())) return;
+
+        logRecord.setSentStatus(1);
+        logRecord.setSentMessageId(message.getId());
+        logRecord.setSentContentPreview(abbreviateText(trimToNull(message.getContent()), 500));
+        logRecord.setSentTime(now);
+        logRecord.setUpdateTime(now);
+        doctorMessageAiLogMapper.updateById(logRecord);
     }
 
     private List<String> parseAttachments(String attachmentsJson) {
@@ -362,6 +399,63 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         assignment.setReleaseTime(null);
         assignment.setUpdateTime(now);
         return consultationDoctorAssignmentMapper.updateById(assignment) > 0 ? null : "问诊认领失败";
+    }
+
+    private String syncDoctorProcessingState(ConsultationRecord record,
+                                             ConsultationDoctorHandle handle,
+                                             Doctor doctor,
+                                             String departmentName,
+                                             Date now) {
+        if (record == null || doctor == null || now == null) return null;
+        if ("completed".equals(record.getStatus())) return null;
+        if (handle != null && "completed".equals(handle.getStatus())) return null;
+
+        if (handle == null) {
+            ConsultationDoctorHandle processingHandle = new ConsultationDoctorHandle(
+                    null,
+                    record.getId(),
+                    doctor.getId(),
+                    doctor.getName(),
+                    doctor.getDepartmentId(),
+                    departmentName,
+                    "processing",
+                    null,
+                    null,
+                    null,
+                    null,
+                    now,
+                    null,
+                    now,
+                    now
+            );
+            if (consultationDoctorHandleMapper.insert(processingHandle) <= 0) {
+                return "问诊接诊状态更新失败";
+            }
+        } else {
+            handle.setDoctorId(doctor.getId());
+            handle.setDoctorName(doctor.getName());
+            handle.setDepartmentId(doctor.getDepartmentId());
+            handle.setDepartmentName(departmentName);
+            if (!"completed".equals(handle.getStatus())) {
+                handle.setStatus("processing");
+            }
+            if (handle.getReceiveTime() == null) {
+                handle.setReceiveTime(now);
+            }
+            handle.setUpdateTime(now);
+            if (consultationDoctorHandleMapper.updateById(handle) <= 0) {
+                return "问诊接诊状态更新失败";
+            }
+        }
+
+        if (!"processing".equals(record.getStatus())) {
+            record.setStatus("processing");
+            record.setUpdateTime(now);
+            if (consultationRecordMapper.updateById(record) <= 0) {
+                return "问诊状态更新失败";
+            }
+        }
+        return null;
     }
 
     private String resolveDepartmentName(Doctor doctor, ConsultationRecord record) {

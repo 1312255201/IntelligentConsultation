@@ -176,6 +176,64 @@
 
 这样管理员现在打开 AI 配置页，就能先盯“最需要人工看”的高风险样本，而不是先从全部 AI 输出里手动翻。
 
+### 2.7 补齐 AI 审计样本筛选与 CSV 导出
+
+更新文件：
+
+- `template-backend/src/main/java/cn/gugufish/controller/admin/AdminConsultationAiController.java`
+- `template-backend/src/main/java/cn/gugufish/service/ConsultationAiAdminService.java`
+- `template-backend/src/main/java/cn/gugufish/service/impl/ConsultationAiAdminServiceImpl.java`
+- `template-front/src/views/admin/ConsultationAiConfigPage.vue`
+
+本轮继续把 AI 治理页从“可查看”推进到“可运营”：
+
+- AI 审计列表现在支持：
+  - `keyword`
+  - `highRiskOnly`
+  - `messageType`
+- 高风险待复核队列现在支持：
+  - `keyword`
+
+其中 `keyword` 会优先匹配：
+
+- 问诊单号
+- 会话单号
+- 患者姓名
+- 问诊分类
+- 推荐科室
+
+同时也会兼容匹配部分 AI 输出摘要和风险标签，便于管理员直接按当前关注样本回查。
+
+后端本轮新增接口：
+
+- `GET /api/admin/consultation-ai/audit-list/export`
+- `GET /api/admin/consultation-ai/high-risk-review-queue/export`
+
+导出的 CSV 里会直接带上：
+
+- 问诊单号 / 会话单号 / 患者 / 分类 / 科室
+- 消息类型
+- AI 输出摘要
+- 风险标签
+- 建议方式
+- Prompt 版本
+- 模型来源
+- 复核状态
+- 医生处理进度
+- AI 一致性
+- 差异原因与差异说明
+- 创建时间
+
+前端管理页对应新增：
+
+- 高风险待复核队列关键词筛选
+- 高风险待复核队列导出
+- AI 审计样本关键词筛选
+- AI 审计样本重置
+- AI 审计样本导出
+
+这样当前 AI 配置页就不只是一个“看板”，而是已经具备了基础的运营抽样和离线复盘能力，管理员可以把当前筛中的样本直接导出交给运营、质控或研发继续分析。
+
 ## 3. 涉及文件
 
 ### 后端
@@ -204,6 +262,8 @@
 - 审计面板已经和问诊详情打通，后台复盘路径从“看到异常”缩短到了“直接点开对应问诊”
 - 审计样本已经能直接看到医生处理结果，管理员不必频繁在多个页面之间来回切换
 - 高风险样本已经被聚合成独立待复核队列，AI 治理入口开始具备轻量待办中心能力
+- AI 审计页现在支持按关键词和高风险状态收缩样本范围，日常抽查效率更高
+- 当前筛中的 AI 样本和高风险队列都可以直接导出 CSV，便于进一步做运营分析、复盘归档和线下流转
 
 ## 5. 验证
 
@@ -217,6 +277,6 @@
 建议下一轮继续沿着这个治理入口推进以下方向之一：
 
 1. 增加 Prompt 版本切换后的样本对照区
-2. 支持按指定问诊单号、患者或时间范围筛选 AI 审计样本
-3. 增加 AI 审计样本导出与人工复核备注能力
+2. 增加时间范围筛选和按医生处理阶段筛选
+3. 增加 AI 审计样本的人工复核备注与标签归档能力
 4. 为高风险待复核队列增加运营状态流转和处理人归档

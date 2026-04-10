@@ -1,17 +1,30 @@
 package cn.gugufish.service.impl;
 
 import cn.gugufish.ai.AiTriageProperties;
-import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
 import cn.gugufish.entity.dto.ConsultationDoctorHandle;
+import cn.gugufish.entity.dto.ConsultationRecord;
+import cn.gugufish.entity.dto.DoctorFormAiLog;
+import cn.gugufish.entity.dto.DoctorMessageAiLog;
 import cn.gugufish.entity.dto.TriageMessage;
 import cn.gugufish.entity.dto.TriageResult;
 import cn.gugufish.entity.dto.TriageSession;
+import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsageFieldVO;
+import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsageItemVO;
+import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsageOverviewVO;
+import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsagePromptVO;
+import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsageSceneVO;
+import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsageTemplateVO;
+import cn.gugufish.entity.vo.response.AdminDoctorMessageAiUsageItemVO;
+import cn.gugufish.entity.vo.response.AdminDoctorMessageAiUsageOverviewVO;
+import cn.gugufish.entity.vo.response.AdminDoctorMessageAiUsageSceneVO;
 import cn.gugufish.entity.vo.response.ConsultationAiAuditItemVO;
 import cn.gugufish.entity.vo.response.ConsultationAiOverviewVO;
 import cn.gugufish.mapper.ConsultationRecordMapper;
 import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
 import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
+import cn.gugufish.mapper.DoctorFormAiLogMapper;
+import cn.gugufish.mapper.DoctorMessageAiLogMapper;
 import cn.gugufish.mapper.TriageMessageMapper;
 import cn.gugufish.mapper.TriageResultMapper;
 import cn.gugufish.mapper.TriageSessionMapper;
@@ -32,6 +45,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +69,8 @@ public class ConsultationAiAdminServiceImpl implements ConsultationAiAdminServic
     private final TriageSessionMapper triageSessionMapper;
     private final TriageResultMapper triageResultMapper;
     private final TriageMessageMapper triageMessageMapper;
+    private final DoctorFormAiLogMapper doctorFormAiLogMapper;
+    private final DoctorMessageAiLogMapper doctorMessageAiLogMapper;
     private final AiTriageProperties properties;
     private final AiTriageService aiTriageService;
     private final ObjectProvider<DeepSeekChatModel> chatModelProvider;
@@ -66,6 +82,8 @@ public class ConsultationAiAdminServiceImpl implements ConsultationAiAdminServic
                                           TriageSessionMapper triageSessionMapper,
                                           TriageResultMapper triageResultMapper,
                                           TriageMessageMapper triageMessageMapper,
+                                          DoctorFormAiLogMapper doctorFormAiLogMapper,
+                                          DoctorMessageAiLogMapper doctorMessageAiLogMapper,
                                           AiTriageProperties properties,
                                           AiTriageService aiTriageService,
                                           ObjectProvider<DeepSeekChatModel> chatModelProvider,
@@ -76,6 +94,8 @@ public class ConsultationAiAdminServiceImpl implements ConsultationAiAdminServic
         this.triageSessionMapper = triageSessionMapper;
         this.triageResultMapper = triageResultMapper;
         this.triageMessageMapper = triageMessageMapper;
+        this.doctorFormAiLogMapper = doctorFormAiLogMapper;
+        this.doctorMessageAiLogMapper = doctorMessageAiLogMapper;
         this.properties = properties;
         this.aiTriageService = aiTriageService;
         this.chatModelProvider = chatModelProvider;
@@ -115,6 +135,62 @@ public class ConsultationAiAdminServiceImpl implements ConsultationAiAdminServic
         vo.setUserFollowupMessageCount(countMessagesByType("ai_user_followup"));
         vo.setLatestAiMessageTime(resolveLatestAiMessageTime());
         return vo;
+    }
+
+    @Override
+    public AdminDoctorMessageAiUsageOverviewVO doctorMessageUsageOverview() {
+        List<DoctorMessageAiLog> logs = doctorMessageAiLogMapper.selectList(Wrappers.<DoctorMessageAiLog>query()
+                .orderByDesc("generated_time")
+                .orderByDesc("id"));
+
+        AdminDoctorMessageAiUsageOverviewVO overview = new AdminDoctorMessageAiUsageOverviewVO();
+        overview.setGeneratedCount(logs.size());
+        overview.setAppliedCount((int) logs.stream().filter(item -> defaultInt(item.getApplyCount()) > 0).count());
+        overview.setSentCount((int) logs.stream().filter(item -> Objects.equals(item.getSentStatus(), 1)).count());
+        overview.setTemplateUsedCount((int) logs.stream().filter(item -> Objects.equals(item.getTemplateUsed(), 1)).count());
+        overview.setDeepseekCount((int) logs.stream().filter(item -> !Objects.equals(item.getFallback(), 1)
+                && "deepseek".equalsIgnoreCase(trimToNull(item.getSource()))).count());
+        overview.setFallbackCount((int) logs.stream().filter(item -> Objects.equals(item.getFallback(), 1)
+                || "fallback".equalsIgnoreCase(trimToNull(item.getSource()))).count());
+        overview.setApplyRate(resolveRate(overview.getAppliedCount(), overview.getGeneratedCount()));
+        overview.setSendAdoptionRate(resolveRate(overview.getSentCount(), overview.getGeneratedCount()));
+        overview.setSceneBreakdown(buildDoctorMessageSceneBreakdown(logs));
+        overview.setRecentItems(logs.stream().limit(8).map(this::toDoctorMessageUsageItem).toList());
+        return overview;
+    }
+
+    @Override
+    public AdminDoctorFormAiUsageOverviewVO doctorFormUsageOverview() {
+        List<DoctorFormAiLog> logs = doctorFormAiLogMapper.selectList(Wrappers.<DoctorFormAiLog>query()
+                .orderByDesc("generated_time")
+                .orderByDesc("id"));
+
+        AdminDoctorFormAiUsageOverviewVO overview = new AdminDoctorFormAiUsageOverviewVO();
+        overview.setGeneratedCount(logs.size());
+        overview.setFullGeneratedCount((int) logs.stream().filter(item -> trimToNull(item.getRegenerateField()) == null).count());
+        overview.setFieldRegenerateCount((int) logs.stream().filter(item -> trimToNull(item.getRegenerateField()) != null).count());
+        overview.setAppliedCount((int) logs.stream().filter(item -> defaultInt(item.getApplyCount()) > 0).count());
+        overview.setPureAiAppliedCount((int) logs.stream().filter(item -> defaultInt(item.getApplyCount()) > 0
+                && !Objects.equals(item.getTemplateUsed(), 1)).count());
+        overview.setTemplateUsedCount((int) logs.stream().filter(item -> defaultInt(item.getApplyCount()) > 0
+                && Objects.equals(item.getTemplateUsed(), 1)).count());
+        overview.setSavedCount((int) logs.stream().filter(item -> Objects.equals(item.getSavedStatus(), 1)).count());
+        overview.setDeepseekCount((int) logs.stream().filter(item -> !Objects.equals(item.getFallback(), 1)
+                && "deepseek".equalsIgnoreCase(trimToNull(item.getSource()))).count());
+        overview.setFallbackCount((int) logs.stream().filter(item -> Objects.equals(item.getFallback(), 1)
+                || "fallback".equalsIgnoreCase(trimToNull(item.getSource()))).count());
+        overview.setContextRewriteCount((int) logs.stream().filter(item -> Objects.equals(item.getDraftContextUsed(), 1)).count());
+        overview.setContextRewriteSavedCount((int) logs.stream().filter(item -> Objects.equals(item.getDraftContextUsed(), 1)
+                && Objects.equals(item.getSavedStatus(), 1)).count());
+        overview.setApplyRate(resolveRate(overview.getAppliedCount(), overview.getGeneratedCount()));
+        overview.setSaveAdoptionRate(resolveRate(overview.getSavedCount(), overview.getGeneratedCount()));
+        overview.setContextRewriteSaveRate(resolveRate(overview.getContextRewriteSavedCount(), overview.getContextRewriteCount()));
+        overview.setSceneBreakdown(buildDoctorFormSceneBreakdown(logs));
+        overview.setPromptBreakdown(buildDoctorFormPromptBreakdown(logs));
+        overview.setFieldBreakdown(buildDoctorFormFieldBreakdown(logs));
+        overview.setTemplateBreakdown(buildDoctorFormTemplateBreakdown(logs));
+        overview.setRecentItems(logs.stream().limit(8).map(this::toDoctorFormUsageItem).toList());
+        return overview;
     }
 
     @Override
@@ -607,6 +683,382 @@ public class ConsultationAiAdminServiceImpl implements ConsultationAiAdminServic
             case "received" -> "已接诊";
             default -> normalized;
         };
+    }
+
+    private List<AdminDoctorMessageAiUsageSceneVO> buildDoctorMessageSceneBreakdown(List<DoctorMessageAiLog> logs) {
+        return List.of("opening", "clarify", "check_result", "follow_up").stream()
+                .map(sceneType -> {
+                    List<DoctorMessageAiLog> sceneLogs = logs.stream()
+                            .filter(item -> sceneType.equalsIgnoreCase(trimToNull(item.getSceneType())))
+                            .toList();
+                    AdminDoctorMessageAiUsageSceneVO item = new AdminDoctorMessageAiUsageSceneVO();
+                    item.setSceneType(sceneType);
+                    item.setSceneLabel(renderDoctorMessageSceneLabel(sceneType));
+                    item.setGeneratedCount(sceneLogs.size());
+                    item.setAppliedCount((int) sceneLogs.stream().filter(log -> defaultInt(log.getApplyCount()) > 0).count());
+                    item.setSentCount((int) sceneLogs.stream().filter(log -> Objects.equals(log.getSentStatus(), 1)).count());
+                    return item;
+                })
+                .filter(item -> defaultInt(item.getGeneratedCount()) > 0)
+                .toList();
+    }
+
+    private List<AdminDoctorFormAiUsageSceneVO> buildDoctorFormSceneBreakdown(List<DoctorFormAiLog> logs) {
+        return List.of("handle", "follow_up").stream()
+                .map(sceneType -> {
+                    List<DoctorFormAiLog> sceneLogs = logs.stream()
+                            .filter(item -> sceneType.equalsIgnoreCase(trimToNull(item.getSceneType())))
+                            .toList();
+                    AdminDoctorFormAiUsageSceneVO item = new AdminDoctorFormAiUsageSceneVO();
+                    item.setSceneType(sceneType);
+                    item.setSceneLabel(renderDoctorFormSceneLabel(sceneType));
+                    item.setGeneratedCount(sceneLogs.size());
+                    item.setFullGeneratedCount((int) sceneLogs.stream().filter(log -> trimToNull(log.getRegenerateField()) == null).count());
+                    item.setFieldRegenerateCount((int) sceneLogs.stream().filter(log -> trimToNull(log.getRegenerateField()) != null).count());
+                    item.setAppliedCount((int) sceneLogs.stream().filter(log -> defaultInt(log.getApplyCount()) > 0).count());
+                    item.setPureAiAppliedCount((int) sceneLogs.stream().filter(log -> defaultInt(log.getApplyCount()) > 0
+                            && !Objects.equals(log.getTemplateUsed(), 1)).count());
+                    item.setTemplateUsedCount((int) sceneLogs.stream().filter(log -> defaultInt(log.getApplyCount()) > 0
+                            && Objects.equals(log.getTemplateUsed(), 1)).count());
+                    item.setSavedCount((int) sceneLogs.stream().filter(log -> Objects.equals(log.getSavedStatus(), 1)).count());
+                    return item;
+                })
+                .filter(item -> defaultInt(item.getGeneratedCount()) > 0)
+                .toList();
+    }
+
+    private List<AdminDoctorFormAiUsagePromptVO> buildDoctorFormPromptBreakdown(List<DoctorFormAiLog> logs) {
+        Map<String, List<DoctorFormAiLog>> groupedLogs = logs.stream()
+                .collect(Collectors.groupingBy(
+                        log -> firstText(trimToNull(log.getPromptVersion()), "unknown"),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        if (groupedLogs.isEmpty()) return List.of();
+
+        return groupedLogs.entrySet().stream()
+                .map(entry -> {
+                    List<DoctorFormAiLog> group = entry.getValue();
+                    AdminDoctorFormAiUsagePromptVO item = new AdminDoctorFormAiUsagePromptVO();
+                    item.setPromptVersion(entry.getKey());
+                    item.setGeneratedCount(group.size());
+                    item.setFullGeneratedCount((int) group.stream().filter(log -> trimToNull(log.getRegenerateField()) == null).count());
+                    item.setFieldRegenerateCount((int) group.stream().filter(log -> trimToNull(log.getRegenerateField()) != null).count());
+                    item.setContextRewriteCount((int) group.stream().filter(log -> Objects.equals(log.getDraftContextUsed(), 1)).count());
+                    item.setAppliedCount((int) group.stream().filter(log -> defaultInt(log.getApplyCount()) > 0).count());
+                    item.setSavedCount((int) group.stream().filter(log -> Objects.equals(log.getSavedStatus(), 1)).count());
+                    item.setApplyRate(resolveRate(item.getAppliedCount(), item.getGeneratedCount()));
+                    item.setSaveRate(resolveRate(item.getSavedCount(), item.getGeneratedCount()));
+                    return item;
+                })
+                .sorted((left, right) -> {
+                    int compare = Integer.compare(defaultInt(right.getGeneratedCount()), defaultInt(left.getGeneratedCount()));
+                    if (compare != 0) return compare;
+                    compare = Integer.compare(defaultInt(right.getContextRewriteCount()), defaultInt(left.getContextRewriteCount()));
+                    if (compare != 0) return compare;
+                    compare = Integer.compare(defaultInt(right.getSavedCount()), defaultInt(left.getSavedCount()));
+                    if (compare != 0) return compare;
+                    return String.valueOf(left.getPromptVersion()).compareTo(String.valueOf(right.getPromptVersion()));
+                })
+                .toList();
+    }
+
+    private List<AdminDoctorFormAiUsageFieldVO> buildDoctorFormFieldBreakdown(List<DoctorFormAiLog> logs) {
+        return List.of(
+                        "doctor_summary",
+                        "medical_advice",
+                        "follow_up_plan",
+                        "patient_instruction",
+                        "followup_summary",
+                        "followup_advice",
+                        "followup_next_step"
+                ).stream()
+                .map(fieldKey -> {
+                    AdminDoctorFormAiUsageFieldVO item = new AdminDoctorFormAiUsageFieldVO();
+                    item.setFieldKey(fieldKey);
+                    item.setFieldLabel(renderDoctorFormFieldLabel(fieldKey));
+                    item.setSceneType(resolveDoctorFormFieldSceneType(fieldKey));
+                    item.setSceneLabel(renderDoctorFormSceneLabel(item.getSceneType()));
+                    int relatedCount = (int) logs.stream()
+                            .filter(log -> matchesDoctorFormFieldUsage(log, fieldKey))
+                            .count();
+                    item.setRelatedCount(relatedCount);
+                    item.setRegenerateCount((int) logs.stream()
+                            .filter(log -> fieldKey.equalsIgnoreCase(trimToNull(log.getRegenerateField())))
+                            .count());
+                    item.setTemplateComposeCount((int) logs.stream()
+                            .filter(log -> Objects.equals(log.getTemplateUsed(), 1))
+                            .filter(log -> fieldKey.equalsIgnoreCase(resolveDoctorFormFieldKeyFromTemplateScene(log.getTemplateSceneType())))
+                            .count());
+                    item.setContextRewriteCount((int) logs.stream()
+                            .filter(log -> Objects.equals(log.getDraftContextUsed(), 1))
+                            .filter(log -> matchesDoctorFormFieldUsage(log, fieldKey))
+                            .count());
+                    item.setAppliedCount((int) logs.stream()
+                            .filter(log -> defaultInt(log.getApplyCount()) > 0)
+                            .filter(log -> matchesDoctorFormFieldUsage(log, fieldKey))
+                            .count());
+                    item.setSavedCount((int) logs.stream()
+                            .filter(log -> Objects.equals(log.getSavedStatus(), 1))
+                            .filter(log -> matchesDoctorFormFieldUsage(log, fieldKey))
+                            .count());
+                    item.setContextRewriteSavedCount((int) logs.stream()
+                            .filter(log -> Objects.equals(log.getDraftContextUsed(), 1))
+                            .filter(log -> Objects.equals(log.getSavedStatus(), 1))
+                            .filter(log -> matchesDoctorFormFieldUsage(log, fieldKey))
+                            .count());
+                    item.setApplyRate(resolveRate(item.getAppliedCount(), relatedCount));
+                    item.setSaveRate(resolveRate(item.getSavedCount(), relatedCount));
+                    item.setContextRewriteSaveRate(resolveRate(item.getContextRewriteSavedCount(), item.getContextRewriteCount()));
+                    return item;
+                })
+                .filter(item -> defaultInt(item.getRelatedCount()) > 0
+                        || defaultInt(item.getRegenerateCount()) > 0
+                        || defaultInt(item.getTemplateComposeCount()) > 0
+                        || defaultInt(item.getContextRewriteCount()) > 0
+                        || defaultInt(item.getAppliedCount()) > 0
+                        || defaultInt(item.getSavedCount()) > 0)
+                .sorted((left, right) -> {
+                    int compare = Integer.compare(defaultInt(right.getRelatedCount()), defaultInt(left.getRelatedCount()));
+                    if (compare != 0) return compare;
+                    compare = Integer.compare(defaultInt(right.getRegenerateCount()), defaultInt(left.getRegenerateCount()));
+                    if (compare != 0) return compare;
+                    compare = Integer.compare(defaultInt(right.getTemplateComposeCount()), defaultInt(left.getTemplateComposeCount()));
+                    if (compare != 0) return compare;
+                    compare = Integer.compare(defaultInt(right.getSavedCount()), defaultInt(left.getSavedCount()));
+                    if (compare != 0) return compare;
+                    return String.valueOf(left.getFieldLabel()).compareTo(String.valueOf(right.getFieldLabel()));
+                })
+                .toList();
+    }
+
+    private List<AdminDoctorFormAiUsageTemplateVO> buildDoctorFormTemplateBreakdown(List<DoctorFormAiLog> logs) {
+        Map<String, List<DoctorFormAiLog>> groupedLogs = logs.stream()
+                .filter(log -> Objects.equals(log.getTemplateUsed(), 1))
+                .filter(log -> resolveDoctorFormFieldKeyFromTemplateScene(log.getTemplateSceneType()) != null)
+                .collect(Collectors.groupingBy(
+                        this::buildDoctorFormTemplateBreakdownKey,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        if (groupedLogs.isEmpty()) return List.of();
+
+        return groupedLogs.values().stream()
+                .map(group -> {
+                    DoctorFormAiLog firstLog = group.get(0);
+                    String fieldKey = resolveDoctorFormFieldKeyFromTemplateScene(firstLog.getTemplateSceneType());
+                    if (fieldKey == null) return null;
+
+                    AdminDoctorFormAiUsageTemplateVO item = new AdminDoctorFormAiUsageTemplateVO();
+                    item.setFieldKey(fieldKey);
+                    item.setFieldLabel(renderDoctorFormFieldLabel(fieldKey));
+                    item.setSceneType(resolveDoctorFormFieldSceneType(fieldKey));
+                    item.setSceneLabel(renderDoctorFormSceneLabel(item.getSceneType()));
+                    item.setTemplateSceneType(trimToNull(firstLog.getTemplateSceneType()));
+                    item.setTemplateId(firstLog.getTemplateId());
+                    item.setTemplateTitle(trimToNull(firstLog.getTemplateTitle()));
+                    item.setTemplateLabel(resolveDoctorFormTemplateLabel(firstLog));
+                    item.setComposeCount(group.size());
+                    item.setContextRewriteCount((int) group.stream().filter(log -> Objects.equals(log.getDraftContextUsed(), 1)).count());
+                    item.setAppliedCount((int) group.stream().filter(log -> defaultInt(log.getApplyCount()) > 0).count());
+                    item.setSavedCount((int) group.stream().filter(log -> Objects.equals(log.getSavedStatus(), 1)).count());
+                    item.setContextRewriteSavedCount((int) group.stream()
+                            .filter(log -> Objects.equals(log.getDraftContextUsed(), 1))
+                            .filter(log -> Objects.equals(log.getSavedStatus(), 1))
+                            .count());
+                    item.setApplyRate(resolveRate(item.getAppliedCount(), item.getComposeCount()));
+                    item.setSaveRate(resolveRate(item.getSavedCount(), item.getComposeCount()));
+                    item.setContextRewriteSaveRate(resolveRate(item.getContextRewriteSavedCount(), item.getContextRewriteCount()));
+                    return item;
+                })
+                .filter(Objects::nonNull)
+                .sorted((left, right) -> {
+                    int compare = Integer.compare(defaultInt(right.getComposeCount()), defaultInt(left.getComposeCount()));
+                    if (compare != 0) return compare;
+                    compare = Integer.compare(defaultInt(right.getSavedCount()), defaultInt(left.getSavedCount()));
+                    if (compare != 0) return compare;
+                    compare = Double.compare(right.getSaveRate() == null ? 0D : right.getSaveRate(),
+                            left.getSaveRate() == null ? 0D : left.getSaveRate());
+                    if (compare != 0) return compare;
+                    compare = String.valueOf(left.getFieldLabel()).compareTo(String.valueOf(right.getFieldLabel()));
+                    if (compare != 0) return compare;
+                    return String.valueOf(left.getTemplateLabel()).compareTo(String.valueOf(right.getTemplateLabel()));
+                })
+                .toList();
+    }
+
+    private AdminDoctorMessageAiUsageItemVO toDoctorMessageUsageItem(DoctorMessageAiLog log) {
+        AdminDoctorMessageAiUsageItemVO item = new AdminDoctorMessageAiUsageItemVO();
+        item.setLogId(log.getId());
+        item.setConsultationId(log.getConsultationId());
+        item.setConsultationNo(log.getConsultationNo());
+        item.setPatientName(log.getPatientName());
+        item.setCategoryName(log.getCategoryName());
+        item.setDoctorId(log.getDoctorId());
+        item.setDoctorName(log.getDoctorName());
+        item.setDepartmentName(log.getDepartmentName());
+        item.setSceneType(trimToNull(log.getSceneType()));
+        item.setSource(renderSource(firstText(trimToNull(log.getSource()), Objects.equals(log.getFallback(), 1) ? "fallback" : "deepseek")));
+        item.setFallback(log.getFallback());
+        item.setApplyCount(defaultInt(log.getApplyCount()));
+        item.setLastApplyMode(trimToNull(log.getLastApplyMode()));
+        item.setTemplateUsed(log.getTemplateUsed());
+        item.setTemplateTitle(trimToNull(log.getTemplateTitle()));
+        item.setSentStatus(log.getSentStatus());
+        item.setDraftSummary(trimToNull(log.getDraftSummary()));
+        item.setDraftContent(trimToNull(log.getDraftContent()));
+        item.setSentContentPreview(trimToNull(log.getSentContentPreview()));
+        item.setGeneratedTime(log.getGeneratedTime());
+        item.setLastApplyTime(log.getLastApplyTime());
+        item.setSentTime(log.getSentTime());
+        return item;
+    }
+
+    private AdminDoctorFormAiUsageItemVO toDoctorFormUsageItem(DoctorFormAiLog log) {
+        AdminDoctorFormAiUsageItemVO item = new AdminDoctorFormAiUsageItemVO();
+        item.setLogId(log.getId());
+        item.setConsultationId(log.getConsultationId());
+        item.setConsultationNo(log.getConsultationNo());
+        item.setPatientName(log.getPatientName());
+        item.setCategoryName(log.getCategoryName());
+        item.setDoctorId(log.getDoctorId());
+        item.setDoctorName(log.getDoctorName());
+        item.setDepartmentName(log.getDepartmentName());
+        item.setSceneType(trimToNull(log.getSceneType()));
+        item.setRegenerateField(trimToNull(log.getRegenerateField()));
+        item.setSource(renderSource(firstText(trimToNull(log.getSource()), Objects.equals(log.getFallback(), 1) ? "fallback" : "deepseek")));
+        item.setPromptVersion(trimToNull(log.getPromptVersion()));
+        item.setFallback(log.getFallback());
+        item.setDraftContextUsed(log.getDraftContextUsed());
+        item.setRewriteRequirement(trimToNull(log.getRewriteRequirement()));
+        item.setApplyCount(defaultInt(log.getApplyCount()));
+        item.setLastApplyMode(trimToNull(log.getLastApplyMode()));
+        item.setLastApplyTarget(trimToNull(log.getLastApplyTarget()));
+        item.setTemplateUsed(log.getTemplateUsed());
+        item.setTemplateTitle(trimToNull(log.getTemplateTitle()));
+        item.setSavedStatus(log.getSavedStatus());
+        item.setSavedTarget(trimToNull(log.getSavedTarget()));
+        item.setDraftSummary(trimToNull(log.getDraftSummary()));
+        item.setDraftPreview(trimToNull(log.getDraftPreview()));
+        item.setSavedPreview(trimToNull(log.getSavedPreview()));
+        item.setGeneratedTime(log.getGeneratedTime());
+        item.setLastApplyTime(log.getLastApplyTime());
+        item.setSavedTime(log.getSavedTime());
+        return item;
+    }
+
+    private boolean matchesDoctorFormFieldUsage(DoctorFormAiLog log, String fieldKey) {
+        if (log == null || !StringUtils.hasText(fieldKey)) return false;
+        String normalizedFieldKey = fieldKey.trim().toLowerCase();
+        String regenerateField = trimToNull(log.getRegenerateField());
+        if (normalizedFieldKey.equalsIgnoreCase(regenerateField)) {
+            return true;
+        }
+        return normalizedFieldKey.equalsIgnoreCase(resolveDoctorFormFieldKeyFromTemplateScene(log.getTemplateSceneType()));
+    }
+
+    private String resolveDoctorFormFieldKeyFromTemplateScene(String templateSceneType) {
+        String normalized = trimToNull(templateSceneType);
+        if (normalized == null) return null;
+        normalized = normalized.toLowerCase();
+        return switch (normalized) {
+            case "handle_summary" -> "doctor_summary";
+            case "medical_advice", "follow_up_plan", "patient_instruction",
+                    "followup_summary", "followup_advice", "followup_next_step" -> normalized;
+            default -> null;
+        };
+    }
+
+    private String buildDoctorFormTemplateBreakdownKey(DoctorFormAiLog log) {
+        String fieldKey = resolveDoctorFormFieldKeyFromTemplateScene(log == null ? null : log.getTemplateSceneType());
+        String sceneType = resolveDoctorFormFieldSceneType(fieldKey);
+        String templateId = log == null || log.getTemplateId() == null ? "" : String.valueOf(log.getTemplateId());
+        String templateLabel = resolveDoctorFormTemplateLabel(log);
+        return String.join("|",
+                firstText(fieldKey, ""),
+                firstText(sceneType, ""),
+                templateId,
+                firstText(templateLabel, ""));
+    }
+
+    private String resolveDoctorFormTemplateLabel(DoctorFormAiLog log) {
+        if (log == null) return "未命名模板";
+        return firstText(
+                trimToNull(log.getTemplateTitle()),
+                firstText(renderDoctorFormTemplateSceneLabel(log.getTemplateSceneType()), "未命名模板")
+        );
+    }
+
+    private String resolveDoctorFormFieldSceneType(String fieldKey) {
+        String normalized = trimToNull(fieldKey);
+        if (normalized == null) return "handle";
+        normalized = normalized.toLowerCase();
+        return List.of("followup_summary", "followup_advice", "followup_next_step").contains(normalized)
+                ? "follow_up"
+                : "handle";
+    }
+
+    private String renderDoctorFormFieldLabel(String fieldKey) {
+        String normalized = trimToNull(fieldKey);
+        if (normalized == null) return "表单字段";
+        return switch (normalized.toLowerCase()) {
+            case "doctor_summary" -> "判断摘要";
+            case "medical_advice" -> "处理建议";
+            case "follow_up_plan" -> "随访安排";
+            case "patient_instruction" -> "患者指导";
+            case "followup_summary" -> "随访摘要";
+            case "followup_advice" -> "随访建议";
+            case "followup_next_step" -> "下一步安排";
+            default -> normalized;
+        };
+    }
+
+    private String renderDoctorFormTemplateSceneLabel(String templateSceneType) {
+        String normalized = trimToNull(templateSceneType);
+        if (normalized == null) return "未命名模板";
+        return switch (normalized.toLowerCase()) {
+            case "handle_summary" -> "处理摘要模板";
+            case "medical_advice" -> "处理建议模板";
+            case "follow_up_plan" -> "随访安排模板";
+            case "patient_instruction" -> "患者指导模板";
+            case "followup_summary" -> "随访摘要模板";
+            case "followup_advice" -> "随访建议模板";
+            case "followup_next_step" -> "下一步安排模板";
+            default -> normalized;
+        };
+    }
+
+    private String renderDoctorMessageSceneLabel(String sceneType) {
+        String normalized = trimToNull(sceneType);
+        if (normalized == null) return "沟通草稿";
+        return switch (normalized.toLowerCase()) {
+            case "opening" -> "首次接诊";
+            case "clarify" -> "补充追问";
+            case "check_result" -> "结果解读";
+            case "follow_up" -> "复诊随访";
+            default -> normalized;
+        };
+    }
+
+    private String renderDoctorFormSceneLabel(String sceneType) {
+        String normalized = trimToNull(sceneType);
+        if (normalized == null) return "表单草稿";
+        return switch (normalized.toLowerCase()) {
+            case "handle" -> "医生处理";
+            case "follow_up" -> "随访记录";
+            default -> normalized;
+        };
+    }
+
+    private Double resolveRate(Integer value, Integer total) {
+        int numerator = defaultInt(value);
+        int denominator = defaultInt(total);
+        if (denominator <= 0 || numerator <= 0) return 0D;
+        return Math.round((numerator * 10000D) / denominator) / 100D;
+    }
+
+    private int defaultInt(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private boolean containsIgnoreCase(String source, String keyword) {

@@ -1195,6 +1195,54 @@ WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临
 
 INSERT INTO `db_doctor_reply_template`
 (`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'message_opening', '首次接诊开场',
+       '您好，我已接手本次问诊。为了更准确判断，请您补充症状开始时间、目前最明显的不适，以及近期是否自行用药；如已有检查结果，也可以一并上传。',
+       45, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'message_opening' AND t.`title` = '首次接诊开场'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'message_clarify', '关键信息补充追问',
+       '为了进一步判断，请再补充一下：1）症状从什么时候开始；2）这两天是持续存在还是间断出现；3）是否伴随发热、疼痛加重或其他新的不适；4）目前是否已经自行用药。',
+       46, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'message_clarify' AND t.`title` = '关键信息补充追问'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'message_check_result', '检查结果沟通',
+       '从您上传的检查结果来看，当前需要重点关注的是异常指标的变化趋势。建议您结合目前症状继续观察，如后续出现明显加重或新的不适，请尽快线下复诊，并补充完整检查报告。',
+       47, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'message_check_result' AND t.`title` = '检查结果沟通'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
+SELECT doc.id, 'message_follow_up', '复诊随访提醒',
+       '这两天请继续观察主要症状是否缓解，并记录体温或相关指标变化。如果仍反复发作、明显加重，或出现新的高风险表现，请提前联系医生或安排线下就诊。',
+       48, 1, NOW(), NOW()
+FROM `db_doctor` doc
+WHERE doc.`name` IN ('林远航', '周雅宁', '陈知夏', '许清岚', '宋临川')
+  AND NOT EXISTS (
+    SELECT 1 FROM `db_doctor_reply_template` t
+    WHERE t.`doctor_id` = doc.id AND t.`scene_type` = 'message_follow_up' AND t.`title` = '复诊随访提醒'
+  );
+
+INSERT INTO `db_doctor_reply_template`
+(`doctor_id`, `scene_type`, `title`, `content`, `sort`, `status`, `create_time`, `update_time`)
 SELECT doc.id, 'followup_summary', '症状缓解随访',
        '本次随访较前反馈显示主要不适已有缓解，当前整体状态趋于稳定，但仍建议继续观察近期变化。',
        50, 1, NOW(), NOW()

@@ -542,6 +542,8 @@
               <span v-if="getSmartDispatch(detailRecord).suggestedDoctorName">
                 首推医生 {{ getSmartDispatch(detailRecord).suggestedDoctorName }}{{ getSmartDispatch(detailRecord).suggestedDoctorTitle ? ` / ${getSmartDispatch(detailRecord).suggestedDoctorTitle}` : '' }}
               </span>
+              <span v-if="claimedDoctorName(detailRecord)">当前接诊 {{ claimedDoctorName(detailRecord) }}</span>
+              <span v-if="detailRecord.doctorAssignment?.claimTime">认领时间 {{ formatDate(detailRecord.doctorAssignment.claimTime) }}</span>
               <span v-if="getSmartDispatch(detailRecord).candidateCount">候选 {{ getSmartDispatch(detailRecord).candidateCount }} 位</span>
               <span v-if="getSmartDispatch(detailRecord).suggestedDoctorNextScheduleText">{{ getSmartDispatch(detailRecord).suggestedDoctorNextScheduleText }}</span>
             </div>
@@ -1112,7 +1114,8 @@ const triageAiSendHint = computed(() => {
 const canSendMessage = computed(() => !!detailRecord.value)
 const messageSendHint = computed(() => {
   if (!detailRecord.value) return ''
-  if (detailRecord.value.doctorHandle?.doctorName) return `当前由医生 ${detailRecord.value.doctorHandle.doctorName} 跟进，可继续补充资料或反馈恢复情况。`
+  const doctorName = currentDoctorName(detailRecord.value)
+  if (doctorName) return `当前由医生 ${doctorName} 跟进，可继续补充资料或反馈恢复情况。`
   return '如需补充症状、检查图片或恢复情况，可在这里留言，医生接诊后会继续查看。'
 })
 const availableFeedbackDoctors = computed(() => {
@@ -1749,11 +1752,37 @@ function recordMessagePreview(record) {
   return getMessageSummary(record).latestMessagePreview || '暂未产生沟通消息'
 }
 
+function claimedDoctorName(record) {
+  return `${record?.doctorAssignment?.doctorName || getSmartDispatch(record).claimedDoctorName || ''}`.trim()
+}
+
+function currentDoctorName(record) {
+  const name = `${record?.doctorHandle?.doctorName || claimedDoctorName(record) || ''}`.trim()
+  if (name) return name
+  const summary = getMessageSummary(record)
+  return summary.latestSenderType === 'doctor' ? `${summary.latestSenderName || ''}`.trim() : ''
+}
+
+function hasDoctorClaimed(record) {
+  if (`${record?.doctorAssignment?.status || ''}`.trim().toLowerCase() === 'claimed') return true
+  return `${getSmartDispatch(record).status || ''}`.includes('claimed')
+}
+
+function hasDoctorTakenOver(record) {
+  const summary = getMessageSummary(record)
+  return !!(
+    record?.doctorHandle?.doctorName
+    || record?.status === 'processing'
+    || hasDoctorClaimed(record)
+    || summary.latestSenderType === 'doctor'
+  )
+}
+
 function recordProgressStage(record) {
   if (!record) return 'waiting_doctor'
   if (recordHasUnreadDoctorReply(record)) return 'doctor_replied'
   if (record.status === 'completed' || record?.doctorHandle?.status === 'completed') return 'completed'
-  if (record?.doctorHandle?.doctorName || record.status === 'processing') return 'doctor_processing'
+  if (hasDoctorTakenOver(record)) return 'doctor_processing'
   return 'waiting_doctor'
 }
 
@@ -1778,7 +1807,7 @@ function recordProgressTagType(record) {
 function recordProgressHint(record) {
   const stage = recordProgressStage(record)
   if (stage === 'doctor_replied') return recordMessagePreview(record)
-  if (stage === 'doctor_processing') return record?.doctorHandle?.doctorName ? `当前由 ${record.doctorHandle.doctorName} 跟进处理` : '医生已接手，正在整理处理意见'
+  if (stage === 'doctor_processing') return currentDoctorName(record) ? `当前由 ${currentDoctorName(record)} 跟进处理` : '医生已接手，正在整理处理意见'
   if (stage === 'completed') return followUpLine(record)
   const dispatch = getSmartDispatch(record)
   return dispatch.hint || '已提交问诊，等待医生进一步处理'
@@ -2188,6 +2217,15 @@ function buildTimelineItems(record) {
       record.triageResult?.updateTime || record.updateTime,
       smartDispatchHintText(record.smartDispatch),
       record.smartDispatch.status.includes('claimed') ? 'success' : 'info'
+    ))
+  }
+  if (hasDoctorClaimed(record)) {
+    items.push(createTimelineItem(
+      'doctor_claim',
+      '医生已认领',
+      record.doctorAssignment?.claimTime || record.doctorAssignment?.updateTime || record.updateTime,
+      claimedDoctorName(record) ? `${claimedDoctorName(record)} 已接手当前问诊，后续会继续通过消息跟进。` : '当前问诊已被医生接手，可继续通过消息补充情况。',
+      'success'
     ))
   }
   if (record.doctorHandle?.receiveTime || record.doctorHandle?.doctorName) {

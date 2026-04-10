@@ -2,11 +2,18 @@ package cn.gugufish.controller.doctor;
 
 import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
+import cn.gugufish.entity.vo.request.DoctorConsultationAiDraftGenerateVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationFollowUpSubmitVO;
+import cn.gugufish.entity.vo.request.DoctorConsultationFormDraftApplyVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
+import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftApplyVO;
+import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftGenerateVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
+import cn.gugufish.entity.vo.response.DoctorConsultationFollowUpDraftVO;
+import cn.gugufish.entity.vo.response.DoctorConsultationHandleDraftVO;
+import cn.gugufish.entity.vo.response.DoctorConsultationMessageDraftVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
 import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
 import cn.gugufish.service.ConsultationMessageService;
@@ -70,6 +77,52 @@ public class DoctorWorkspaceController {
         return messages == null
                 ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
                 : RestBean.success(messages);
+    }
+
+    @PostMapping("/consultation/handle/ai-draft")
+    @Operation(summary = "生成医生处理表单 AI 草稿")
+    public RestBean<DoctorConsultationHandleDraftVO> generateConsultationHandleDraft(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                                                     @RequestBody @Valid DoctorConsultationAiDraftGenerateVO vo) {
+        DoctorConsultationHandleDraftVO draft = doctorWorkspaceService.generateConsultationHandleDraft(accountId, vo);
+        return draft == null
+                ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
+                : RestBean.success(draft);
+    }
+
+    @PostMapping("/consultation/follow-up/ai-draft")
+    @Operation(summary = "生成医生随访表单 AI 草稿")
+    public RestBean<DoctorConsultationFollowUpDraftVO> generateConsultationFollowUpDraft(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                                                         @RequestBody @Valid DoctorConsultationAiDraftGenerateVO vo) {
+        DoctorConsultationFollowUpDraftVO draft = doctorWorkspaceService.generateConsultationFollowUpDraft(accountId, vo);
+        return draft == null
+                ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
+                : RestBean.success(draft);
+    }
+
+    @PostMapping("/consultation/form/ai-draft/apply")
+    @Operation(summary = "记录医生处理/随访 AI 草稿带入行为")
+    public RestBean<Void> trackConsultationFormDraftApply(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                          @RequestBody @Valid DoctorConsultationFormDraftApplyVO vo) {
+        String message = doctorWorkspaceService.trackConsultationFormDraftApply(accountId, vo);
+        return message == null ? RestBean.success() : RestBean.failure(400, message);
+    }
+
+    @PostMapping("/consultation/message/ai-draft")
+    @Operation(summary = "生成医生沟通消息 AI 草稿")
+    public RestBean<DoctorConsultationMessageDraftVO> generateConsultationMessageDraft(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                                                       @RequestBody @Valid DoctorConsultationMessageDraftGenerateVO vo) {
+        DoctorConsultationMessageDraftVO draft = doctorWorkspaceService.generateConsultationMessageDraft(accountId, vo);
+        return draft == null
+                ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
+                : RestBean.success(draft);
+    }
+
+    @PostMapping("/consultation/message/ai-draft/apply")
+    @Operation(summary = "记录医生沟通消息 AI 草稿带入行为")
+    public RestBean<Void> trackConsultationMessageDraftApply(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                             @RequestBody @Valid DoctorConsultationMessageDraftApplyVO vo) {
+        String message = doctorWorkspaceService.trackConsultationMessageDraftApply(accountId, vo);
+        return message == null ? RestBean.success() : RestBean.failure(400, message);
     }
 
     @PostMapping("/consultation/message/send")

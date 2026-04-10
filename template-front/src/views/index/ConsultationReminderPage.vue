@@ -337,11 +337,37 @@ function recordMessagePreview(record) {
   return getMessageSummary(record).latestMessagePreview || '暂未产生沟通消息'
 }
 
+function claimedDoctorName(record) {
+  return `${record?.doctorAssignment?.doctorName || record?.smartDispatch?.claimedDoctorName || ''}`.trim()
+}
+
+function currentDoctorName(record) {
+  const name = `${record?.doctorHandle?.doctorName || claimedDoctorName(record) || ''}`.trim()
+  if (name) return name
+  const summary = getMessageSummary(record)
+  return summary.latestSenderType === 'doctor' ? `${summary.latestSenderName || ''}`.trim() : ''
+}
+
+function hasDoctorClaimed(record) {
+  if (`${record?.doctorAssignment?.status || ''}`.trim().toLowerCase() === 'claimed') return true
+  return `${record?.smartDispatch?.status || ''}`.includes('claimed')
+}
+
+function hasDoctorTakenOver(record) {
+  const summary = getMessageSummary(record)
+  return !!(
+    record?.doctorHandle?.doctorName
+    || record?.status === 'processing'
+    || hasDoctorClaimed(record)
+    || summary.latestSenderType === 'doctor'
+  )
+}
+
 function recordProgressStage(record) {
   if (!record) return 'waiting_doctor'
   if (recordHasUnreadDoctorReply(record)) return 'doctor_replied'
   if (record.status === 'completed' || record?.doctorHandle?.status === 'completed') return 'completed'
-  if (record?.doctorHandle?.doctorName || record.status === 'processing') return 'doctor_processing'
+  if (hasDoctorTakenOver(record)) return 'doctor_processing'
   return 'waiting_doctor'
 }
 
@@ -358,8 +384,8 @@ function recordProgressHint(record) {
   const stage = recordProgressStage(record)
   if (stage === 'doctor_replied') return recordMessagePreview(record)
   if (stage === 'doctor_processing') {
-    return record?.doctorHandle?.doctorName
-      ? `当前由 ${record.doctorHandle.doctorName} 跟进处理`
+    return currentDoctorName(record)
+      ? `当前由 ${currentDoctorName(record)} 跟进处理`
       : '医生已接手，正在整理处理意见'
   }
   if (stage === 'completed') return followUpLine(record)

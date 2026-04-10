@@ -19,4 +19,7 @@ public class ConsultationMessageSendVO {
 
     @Size(max = 6)
     List<String> attachments;
+
+    @Positive
+    Integer aiLogId;
 }

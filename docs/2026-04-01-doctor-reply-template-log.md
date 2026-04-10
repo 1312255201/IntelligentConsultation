@@ -57,6 +57,10 @@
 - `medical_advice`
 - `follow_up_plan`
 - `patient_instruction`
+- `message_opening`
+- `message_clarify`
+- `message_check_result`
+- `message_follow_up`
 - `followup_summary`
 - `followup_advice`
 - `followup_next_step`
@@ -144,6 +148,10 @@
 - 处理建议
 - 随访计划
 - 患者指导要点
+- 接诊开场消息
+- 补充追问消息
+- 结果解读消息
+- 复诊随访消息
 - 随访摘要
 - 随访建议
 - 随访下一步安排
@@ -203,3 +211,20 @@
 4. 问诊聊天消息流 / 医患沟通界面
 
 如果继续沿着医生侧推进，我更建议优先做“医患问诊消息流”，这样后面 AI 问诊和医生接管之间会更顺。
+
+## 9. 2026-04-08 模板扩展补充
+
+围绕后续新增的“医生端 AI 沟通草稿”，本轮又把模板系统继续扩展到了消息沟通场景：
+
+- 模板管理页新增 4 个沟通模板场景：
+  - `message_opening`
+  - `message_clarify`
+  - `message_check_result`
+  - `message_follow_up`
+- 医生问诊页的“AI 沟通建议”区现在会根据当前场景自动切换到对应模板
+- 支持：
+  - 直接把模板覆盖或追加到消息输入框
+  - 将 `AI 草稿 + 沟通模板` 一键合成后带入
+- 演示 SQL 同步补充了消息沟通模板样例，导入后可直接体验
+
+这样模板系统就不再只服务于“处理表单”和“随访表单”，也开始进入实际的医患消息沟通链路，为后续沉淀高采纳话术和医生 AI 助理工作流打下基础。

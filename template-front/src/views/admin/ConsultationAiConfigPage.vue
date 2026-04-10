@@ -26,7 +26,7 @@
             {{ overview.runtimeAvailable ? 'Ready' : 'Fallback' }}
           </strong>
           <p>{{ runtimeModeSummary }}</p>
-        </article>
+          </article>
         <article class="hero-metric hero-metric-accent">
           <span>最近 AI 输出</span>
           <strong>{{ formatDate(overview.latestAiMessageTime, true) }}</strong>
@@ -133,6 +133,352 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           </article>
         </div>
       </article>
+    </section>
+
+    <section class="panel-card usage-panel" v-loading="doctorMessageUsageLoading">
+      <div class="panel-head">
+        <div>
+          <h3>医生端 AI 沟通草稿使用</h3>
+          <p>跟踪医生侧 AI 沟通草稿从生成、带入到发送的完整链路，方便后续评估场景效果和模板拼装采纳情况。</p>
+        </div>
+        <div class="hero-actions">
+          <el-button plain @click="loadDoctorMessageUsage">刷新使用概览</el-button>
+        </div>
+      </div>
+
+      <div class="metric-grid">
+        <article class="metric-card metric-card-accent">
+          <span>累计生成</span>
+          <strong>{{ doctorMessageUsage.generatedCount || 0 }}</strong>
+          <p>医生端 AI 沟通草稿总生成次数</p>
+        </article>
+        <article class="metric-card">
+          <span>已带入</span>
+          <strong>{{ doctorMessageUsage.appliedCount || 0 }}</strong>
+          <p>带入率 {{ rateText(doctorMessageUsage.applyRate) }}</p>
+        </article>
+        <article class="metric-card">
+          <span>已发送</span>
+          <strong>{{ doctorMessageUsage.sentCount || 0 }}</strong>
+          <p>发送采纳率 {{ rateText(doctorMessageUsage.sendAdoptionRate) }}</p>
+        </article>
+        <article class="metric-card">
+          <span>模板拼装</span>
+          <strong>{{ doctorMessageUsage.templateUsedCount || 0 }}</strong>
+          <p>已出现 AI + 模板联合带入</p>
+        </article>
+        <article class="metric-card">
+          <span>DeepSeek 生成</span>
+          <strong>{{ doctorMessageUsage.deepseekCount || 0 }}</strong>
+          <p>真实模型生成的沟通草稿</p>
+        </article>
+        <article class="metric-card">
+          <span>规则兜底</span>
+          <strong>{{ doctorMessageUsage.fallbackCount || 0 }}</strong>
+          <p>模型不可用时的沟通草稿兜底</p>
+        </article>
+      </div>
+
+      <div class="audit-summary-bar">
+        <span>场景覆盖 {{ doctorMessageUsage.sceneBreakdown?.length || 0 }} 类</span>
+        <span v-if="doctorMessageUsage.templateUsedCount">模板拼装 {{ doctorMessageUsage.templateUsedCount }} 次</span>
+        <span v-if="doctorMessageUsage.sentCount">已形成发送采纳 {{ doctorMessageUsage.sentCount }} 条</span>
+      </div>
+
+      <div v-if="doctorMessageUsage.sceneBreakdown?.length" class="audit-tag-row">
+        <span v-for="item in doctorMessageUsage.sceneBreakdown" :key="`doctor-scene-${item.sceneType}`">
+          {{ item.sceneLabel }} {{ item.generatedCount }}/{{ item.appliedCount }}/{{ item.sentCount }}
+        </span>
+      </div>
+
+      <div v-if="doctorMessageUsage.recentItems?.length" class="usage-list">
+        <article v-for="item in doctorMessageUsage.recentItems" :key="`doctor-ai-${item.logId}`" class="audit-item queue-item">
+          <div class="chip-row audit-head-chips">
+            <span>{{ doctorMessageSceneLabel(item.sceneType) }}</span>
+            <span>{{ item.doctorName || '未命名医生' }}</span>
+            <span>{{ item.patientName || '未命名患者' }}</span>
+            <span>{{ formatDate(item.generatedTime, true) }}</span>
+            <span :class="item.sentStatus === 1 ? 'chip-success' : 'chip-warning'">{{ doctorMessageUsageStatusLabel(item) }}</span>
+          </div>
+
+          <p class="copy"><strong>草稿摘要：</strong>{{ item.draftSummary || item.draftContent || '当前草稿未生成摘要。' }}</p>
+          <p v-if="item.sentContentPreview" class="copy"><strong>最终发送：</strong>{{ item.sentContentPreview }}</p>
+          <p v-else class="copy"><strong>发送状态：</strong>当前还没有记录到医生实际发送消息。</p>
+
+          <div class="audit-tag-row">
+            <span>{{ doctorMessageSourceLabel(item) }}</span>
+            <span>带入 {{ item.applyCount || 0 }} 次</span>
+            <span v-if="item.lastApplyMode">{{ doctorMessageApplyModeLabel(item.lastApplyMode) }}</span>
+            <span v-if="item.templateUsed === 1">{{ item.templateTitle ? `模板：${item.templateTitle}` : '已拼装模板' }}</span>
+          </div>
+
+          <div class="audit-actions">
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              :disabled="!item.consultationId"
+              @click="goToConsultationDetail(item)"
+            >
+              查看问诊详情
+            </el-button>
+            <el-button size="small" @click="goToConsultationCenter(item)">导诊记录中心</el-button>
+          </div>
+        </article>
+      </div>
+      <el-empty v-else :description="doctorMessageUsageLoading ? '正在加载医生端 AI 沟通草稿使用概况。' : '当前还没有医生端 AI 沟通草稿使用记录。'" />
+    </section>
+
+    <section class="panel-card usage-panel" v-loading="doctorFormUsageLoading">
+      <div class="panel-head">
+        <div>
+          <h3>医生端 AI 处理/随访草稿使用</h3>
+          <p>跟踪医生处理表单和随访表单中的 AI 草稿从生成、带入到最终保存的闭环，便于继续优化医生 AI 助理效果。</p>
+        </div>
+        <div class="hero-actions">
+          <el-button plain @click="loadDoctorFormUsage">刷新使用概览</el-button>
+        </div>
+      </div>
+
+      <div class="metric-grid">
+        <article class="metric-card metric-card-accent">
+          <span>累计生成</span>
+          <strong>{{ doctorFormUsage.generatedCount || 0 }}</strong>
+          <p>医生处理/随访 AI 草稿总生成次数</p>
+        </article>
+        <article class="metric-card">
+          <span>整份生成</span>
+          <strong>{{ doctorFormUsage.fullGeneratedCount || 0 }}</strong>
+          <p>完整草稿首轮生成或刷新</p>
+        </article>
+        <article class="metric-card">
+          <span>字段重写</span>
+          <strong>{{ doctorFormUsage.fieldRegenerateCount || 0 }}</strong>
+          <p>按字段聚焦重写的次数</p>
+        </article>
+        <article class="metric-card">
+          <span>上下文续写</span>
+          <strong>{{ doctorFormUsage.contextRewriteCount || 0 }}</strong>
+          <p>结合当前草稿继续改写</p>
+        </article>
+        <article class="metric-card">
+          <span>已带入</span>
+          <strong>{{ doctorFormUsage.appliedCount || 0 }}</strong>
+          <p>带入率 {{ rateText(doctorFormUsage.applyRate) }}</p>
+        </article>
+        <article class="metric-card">
+          <span>纯 AI 带入</span>
+          <strong>{{ doctorFormUsage.pureAiAppliedCount || 0 }}</strong>
+          <p>未与模板拼装的直接采纳</p>
+        </article>
+        <article class="metric-card">
+          <span>AI+模板拼装</span>
+          <strong>{{ doctorFormUsage.templateUsedCount || 0 }}</strong>
+          <p>处理/随访字段拼装带入</p>
+        </article>
+        <article class="metric-card">
+          <span>已保存</span>
+          <strong>{{ doctorFormUsage.savedCount || 0 }}</strong>
+          <p>保存采纳率 {{ rateText(doctorFormUsage.saveAdoptionRate) }}</p>
+        </article>
+        <article class="metric-card">
+          <span>续写已保存</span>
+          <strong>{{ doctorFormUsage.contextRewriteSavedCount || 0 }}</strong>
+          <p>续写保存率 {{ rateText(doctorFormUsage.contextRewriteSaveRate) }}</p>
+        </article>
+        <article class="metric-card">
+          <span>DeepSeek 生成</span>
+          <strong>{{ doctorFormUsage.deepseekCount || 0 }}</strong>
+          <p>真实模型生成的表单草稿</p>
+        </article>
+        <article class="metric-card">
+          <span>规则兜底</span>
+          <strong>{{ doctorFormUsage.fallbackCount || 0 }}</strong>
+          <p>模型不可用时的表单草稿兜底</p>
+        </article>
+      </div>
+
+      <div class="audit-summary-bar">
+        <span>场景覆盖 {{ doctorFormUsage.sceneBreakdown?.length || 0 }} 类</span>
+        <span v-if="doctorFormUsage.fullGeneratedCount">整份生成 {{ doctorFormUsage.fullGeneratedCount }} 条</span>
+        <span v-if="doctorFormUsage.fieldRegenerateCount">字段重写 {{ doctorFormUsage.fieldRegenerateCount }} 条</span>
+        <span v-if="doctorFormUsage.contextRewriteCount">上下文续写 {{ doctorFormUsage.contextRewriteCount }} 条</span>
+        <span v-if="doctorFormUsage.pureAiAppliedCount">纯 AI 带入 {{ doctorFormUsage.pureAiAppliedCount }} 条</span>
+        <span v-if="doctorFormUsage.templateUsedCount">AI+模板拼装 {{ doctorFormUsage.templateUsedCount }} 条</span>
+        <span v-if="doctorFormUsage.savedCount">已形成表单保存采纳 {{ doctorFormUsage.savedCount }} 条</span>
+      </div>
+
+      <div v-if="doctorFormUsage.sceneBreakdown?.length" class="audit-tag-row">
+        <span v-for="item in doctorFormUsage.sceneBreakdown" :key="`doctor-form-scene-${item.sceneType}`">
+          {{ item.sceneLabel }} 生成{{ item.generatedCount }} / 整份{{ item.fullGeneratedCount || 0 }} / 重写{{ item.fieldRegenerateCount || 0 }} / 纯AI{{ item.pureAiAppliedCount || 0 }} / 拼装{{ item.templateUsedCount || 0 }} / 保存{{ item.savedCount }}
+        </span>
+      </div>
+
+      <div v-if="doctorFormUsage.promptBreakdown?.length" class="field-breakdown-panel">
+        <div class="field-breakdown-head">
+          <div>
+            <h4>Prompt 版本与续写效果</h4>
+            <p>观察不同 Prompt 版本在整份生成、字段重写和基于当前草稿续写场景中的真实保存效果。</p>
+          </div>
+          <div class="audit-toolbar field-breakdown-toolbar">
+            <el-select v-model="doctorFormPromptSortKey" size="small" style="width: 180px">
+              <el-option
+                v-for="option in doctorFormPromptSortOptions"
+                :key="`doctor-form-prompt-sort-${option.value}`"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </div>
+        </div>
+
+        <div v-if="displayDoctorFormPromptBreakdown.length" class="metric-grid">
+          <article v-for="item in displayDoctorFormPromptBreakdown" :key="`doctor-form-prompt-${item.promptVersion}`" class="metric-card">
+            <span>{{ doctorFormPromptVersionLabel(item.promptVersion) }}</span>
+            <strong>{{ doctorFormPromptPrimaryText(item) }}</strong>
+            <p>{{ doctorFormPromptSortLabel(doctorFormPromptSortKey) }} | 生成 {{ item.generatedCount || 0 }}</p>
+            <div class="audit-tag-row">
+              <span>整份 {{ item.fullGeneratedCount || 0 }}</span>
+              <span>重写 {{ item.fieldRegenerateCount || 0 }}</span>
+              <span>续写 {{ item.contextRewriteCount || 0 }}</span>
+              <span>带入 {{ item.appliedCount || 0 }} / {{ rateText(item.applyRate) }}</span>
+              <span>保存 {{ item.savedCount || 0 }} / {{ rateText(item.saveRate) }}</span>
+            </div>
+          </article>
+        </div>
+        <el-empty v-else description="当前还没有 Prompt 版本治理记录。" />
+      </div>
+
+      <div v-if="doctorFormUsage.fieldBreakdown?.length" class="field-breakdown-panel">
+        <div class="field-breakdown-head">
+          <div>
+            <h4>字段治理排行</h4>
+            <p>按字段重写、模板拼装、带入和保存链路观察 AI 草稿的真实落地情况。</p>
+          </div>
+          <div class="audit-toolbar field-breakdown-toolbar">
+            <el-select v-model="doctorFormFieldSceneFilter" size="small" style="width: 140px">
+              <el-option
+                v-for="option in doctorFormFieldSceneOptions"
+                :key="`doctor-form-field-scene-${option.value}`"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+            <el-select v-model="doctorFormFieldSortKey" size="small" style="width: 180px">
+              <el-option
+                v-for="option in doctorFormFieldSortOptions"
+                :key="`doctor-form-field-sort-${option.value}`"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </div>
+        </div>
+
+        <div v-if="displayDoctorFormFieldBreakdown.length" class="metric-grid">
+          <article v-for="item in displayDoctorFormFieldBreakdown" :key="`doctor-form-field-${item.fieldKey}`" class="metric-card">
+            <span>{{ item.fieldLabel }}</span>
+            <strong>{{ doctorFormFieldPrimaryText(item) }}</strong>
+            <p>{{ doctorFormFieldSortLabel(doctorFormFieldSortKey) }} | {{ item.sceneLabel }} | 相关 {{ item.relatedCount || 0 }}</p>
+            <div class="audit-tag-row">
+              <span>重写 {{ item.regenerateCount || 0 }}</span>
+              <span>拼装 {{ item.templateComposeCount || 0 }}</span>
+              <span>续写 {{ item.contextRewriteCount || 0 }} / {{ rateText(item.contextRewriteSaveRate) }}</span>
+              <span>带入 {{ item.appliedCount || 0 }} / {{ rateText(item.applyRate) }}</span>
+              <span>保存 {{ item.savedCount || 0 }} / {{ rateText(item.saveRate) }}</span>
+            </div>
+          </article>
+        </div>
+        <el-empty v-else description="当前筛选条件下暂无字段治理记录。" />
+      </div>
+
+      <div v-if="doctorFormUsage.templateBreakdown?.length" class="field-breakdown-panel">
+        <div class="field-breakdown-head">
+          <div>
+            <h4>字段模板拼装排行</h4>
+            <p>下钻到字段与模板标题的组合，识别哪条模板最常参与医生表单拼装。</p>
+          </div>
+          <div class="audit-toolbar field-breakdown-toolbar">
+            <el-select v-model="doctorFormTemplateFieldFilter" size="small" style="width: 150px">
+              <el-option
+                v-for="option in doctorFormTemplateFieldOptions"
+                :key="`doctor-form-template-field-${option.value}`"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+            <el-select v-model="doctorFormTemplateSortKey" size="small" style="width: 180px">
+              <el-option
+                v-for="option in doctorFormTemplateSortOptions"
+                :key="`doctor-form-template-sort-${option.value}`"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </div>
+        </div>
+
+        <div v-if="displayDoctorFormTemplateBreakdown.length" class="usage-list template-breakdown-list">
+          <article v-for="item in displayDoctorFormTemplateBreakdown" :key="`doctor-form-template-${item.fieldKey}-${item.templateId || item.templateLabel}`" class="audit-item queue-item">
+            <div class="chip-row audit-head-chips">
+              <span>{{ item.fieldLabel }}</span>
+              <span>{{ item.sceneLabel }}</span>
+              <span>{{ item.templateLabel }}</span>
+            </div>
+            <p class="copy"><strong>{{ doctorFormTemplateSortLabel(doctorFormTemplateSortKey) }}：</strong>{{ doctorFormTemplatePrimaryText(item) }}</p>
+            <div class="audit-tag-row">
+              <span>拼装 {{ item.composeCount || 0 }}</span>
+              <span>续写 {{ item.contextRewriteCount || 0 }} / {{ rateText(item.contextRewriteSaveRate) }}</span>
+              <span>带入 {{ item.appliedCount || 0 }} / {{ rateText(item.applyRate) }}</span>
+              <span>保存 {{ item.savedCount || 0 }} / {{ rateText(item.saveRate) }}</span>
+              <span v-if="item.templateId">模板ID {{ item.templateId }}</span>
+            </div>
+          </article>
+        </div>
+        <el-empty v-else description="当前筛选条件下暂无字段模板拼装记录。" />
+      </div>
+
+      <div v-if="doctorFormUsage.recentItems?.length" class="usage-list">
+        <article v-for="item in doctorFormUsage.recentItems" :key="`doctor-form-ai-${item.logId}`" class="audit-item queue-item">
+          <div class="chip-row audit-head-chips">
+            <span>{{ doctorFormSceneLabel(item.sceneType) }}</span>
+            <span>{{ item.doctorName || '未命名医生' }}</span>
+            <span>{{ item.patientName || '未命名患者' }}</span>
+            <span>{{ formatDate(item.generatedTime, true) }}</span>
+            <span :class="item.savedStatus === 1 ? 'chip-success' : 'chip-warning'">{{ doctorFormUsageStatusLabel(item) }}</span>
+          </div>
+
+          <p class="copy"><strong>草稿摘要：</strong>{{ item.draftSummary || item.draftPreview || '当前草稿未生成摘要。' }}</p>
+          <p v-if="item.rewriteRequirement" class="copy"><strong>改写要求：</strong>{{ abbreviateText(item.rewriteRequirement, 160) }}</p>
+          <p v-if="item.savedPreview" class="copy"><strong>最终保存：</strong>{{ item.savedPreview }}</p>
+          <p v-else class="copy"><strong>保存状态：</strong>当前还没有记录到医生实际保存处理或随访表单。</p>
+
+          <div class="audit-tag-row">
+            <span>{{ doctorFormGenerationLabel(item) }}</span>
+            <span>{{ doctorFormSourceLabel(item) }}</span>
+            <span v-if="item.promptVersion">Prompt {{ doctorFormPromptVersionLabel(item.promptVersion) }}</span>
+            <span v-if="item.draftContextUsed === 1">基于当前草稿续写</span>
+            <span>带入 {{ item.applyCount || 0 }} 次</span>
+            <span v-if="item.lastApplyMode">{{ doctorFormApplyModeLabel(item.lastApplyMode) }}</span>
+            <span v-if="item.lastApplyTarget">{{ doctorFormApplyTargetLabel(item.lastApplyTarget) }}</span>
+            <span v-if="item.templateUsed === 1">{{ item.templateTitle ? `模板：${item.templateTitle}` : '已拼装模板' }}</span>
+          </div>
+
+          <div class="audit-actions">
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              :disabled="!item.consultationId"
+              @click="goToConsultationDetail(item)"
+            >
+              查看问诊详情
+            </el-button>
+            <el-button size="small" @click="goToConsultationCenter(item)">导诊记录中心</el-button>
+          </div>
+        </article>
+      </div>
+      <el-empty v-else :description="doctorFormUsageLoading ? '正在加载医生端 AI 处理/随访草稿使用概况。' : '当前还没有医生端 AI 处理/随访草稿使用记录。'" />
     </section>
 
     <section class="panel-card queue-panel" v-loading="queueLoading">
@@ -366,7 +712,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { download, get } from '@/net'
@@ -377,9 +723,18 @@ const router = useRouter()
 const loading = ref(false)
 const queueLoading = ref(false)
 const auditLoading = ref(false)
+const doctorMessageUsageLoading = ref(false)
+const doctorFormUsageLoading = ref(false)
 const queueExporting = ref(false)
 const auditExporting = ref(false)
 const overview = ref(createEmptyOverview())
+const doctorMessageUsage = ref(createEmptyDoctorMessageUsageOverview())
+const doctorFormUsage = ref(createEmptyDoctorFormUsageOverview())
+const doctorFormFieldSceneFilter = ref('all')
+const doctorFormPromptSortKey = ref('generatedCount')
+const doctorFormFieldSortKey = ref('relatedCount')
+const doctorFormTemplateFieldFilter = ref('all')
+const doctorFormTemplateSortKey = ref('composeCount')
 const auditMessageType = ref('all')
 const auditKeyword = ref('')
 const highRiskOnly = ref(false)
@@ -396,6 +751,35 @@ const auditMessageOptions = [
   { label: 'AI 对话回复', value: 'ai_chat_reply' }
 ]
 
+const doctorFormFieldSortOptions = [
+  { label: '按相关日志数', value: 'relatedCount' },
+  { label: '按字段重写数', value: 'regenerateCount' },
+  { label: '按模板拼装数', value: 'templateComposeCount' },
+  { label: '按上下文续写数', value: 'contextRewriteCount' },
+  { label: '按带入次数', value: 'appliedCount' },
+  { label: '按保存次数', value: 'savedCount' },
+  { label: '按带入率', value: 'applyRate' },
+  { label: '按保存率', value: 'saveRate' },
+  { label: '按续写保存率', value: 'contextRewriteSaveRate' }
+]
+const doctorFormPromptSortOptions = [
+  { label: '按生成次数', value: 'generatedCount' },
+  { label: '按上下文续写数', value: 'contextRewriteCount' },
+  { label: '按字段重写数', value: 'fieldRegenerateCount' },
+  { label: '按带入次数', value: 'appliedCount' },
+  { label: '按保存次数', value: 'savedCount' },
+  { label: '按带入率', value: 'applyRate' },
+  { label: '按保存率', value: 'saveRate' }
+]
+const doctorFormTemplateSortOptions = [
+  { label: '按拼装次数', value: 'composeCount' },
+  { label: '按上下文续写数', value: 'contextRewriteCount' },
+  { label: '按保存次数', value: 'savedCount' },
+  { label: '按保存率', value: 'saveRate' },
+  { label: '按带入次数', value: 'appliedCount' },
+  { label: '按续写保存率', value: 'contextRewriteSaveRate' }
+]
+
 const totalAiMessages = computed(() => Number(overview.value.aiSummaryMessageCount || 0)
   + Number(overview.value.aiFollowupQuestionCount || 0)
   + Number(overview.value.aiChatReplyCount || 0))
@@ -406,6 +790,77 @@ const reviewMismatchCount = computed(() => auditItems.value.filter(item => item.
 const queuePendingTakeoverCount = computed(() => reviewQueueItems.value.filter(item => !item.doctorHandle && !item.doctorConclusion).length)
 const queuePendingConclusionCount = computed(() => reviewQueueItems.value.filter(item => !!item.doctorHandle && !item.doctorConclusion).length)
 const queueMismatchCount = computed(() => reviewQueueItems.value.filter(item => item.doctorReview?.isMismatch).length)
+const doctorFormFieldSceneOptions = computed(() => {
+  const scenes = Array.from(new Set((doctorFormUsage.value.fieldBreakdown || [])
+    .map(item => `${item?.sceneType || ''}`.trim().toLowerCase())
+    .filter(Boolean)))
+  return [
+    { label: '全部场景', value: 'all' },
+    ...scenes.map(sceneType => ({
+      label: doctorFormSceneLabel(sceneType),
+      value: sceneType
+    }))
+  ]
+})
+const displayDoctorFormPromptBreakdown = computed(() => {
+  const metricKey = `${doctorFormPromptSortKey.value || 'generatedCount'}`.trim()
+  return (doctorFormUsage.value.promptBreakdown || [])
+    .slice()
+    .sort((left, right) => {
+      const compare = Number(doctorFormPromptMetricValue(right, metricKey) || 0) - Number(doctorFormPromptMetricValue(left, metricKey) || 0)
+      if (compare !== 0) return compare
+      const generatedCompare = Number(right?.generatedCount || 0) - Number(left?.generatedCount || 0)
+      if (generatedCompare !== 0) return generatedCompare
+      return `${left?.promptVersion || ''}`.localeCompare(`${right?.promptVersion || ''}`, 'zh-CN')
+    })
+})
+const displayDoctorFormFieldBreakdown = computed(() => {
+  const selectedScene = `${doctorFormFieldSceneFilter.value || 'all'}`.trim().toLowerCase()
+  const metricKey = `${doctorFormFieldSortKey.value || 'relatedCount'}`.trim()
+  return (doctorFormUsage.value.fieldBreakdown || [])
+    .filter(item => selectedScene === 'all' || `${item?.sceneType || ''}`.trim().toLowerCase() === selectedScene)
+    .slice()
+    .sort((left, right) => {
+      const compare = Number(doctorFormFieldMetricValue(right, metricKey) || 0) - Number(doctorFormFieldMetricValue(left, metricKey) || 0)
+      if (compare !== 0) return compare
+      const relatedCompare = Number(right?.relatedCount || 0) - Number(left?.relatedCount || 0)
+      if (relatedCompare !== 0) return relatedCompare
+      return `${left?.fieldLabel || ''}`.localeCompare(`${right?.fieldLabel || ''}`, 'zh-CN')
+    })
+})
+const doctorFormTemplateFieldOptions = computed(() => {
+  const selectedScene = `${doctorFormFieldSceneFilter.value || 'all'}`.trim().toLowerCase()
+  const fieldMap = new Map()
+  ;(doctorFormUsage.value.templateBreakdown || []).forEach(item => {
+    const sceneType = `${item?.sceneType || ''}`.trim().toLowerCase()
+    if (selectedScene !== 'all' && sceneType !== selectedScene) return
+    const fieldKey = `${item?.fieldKey || ''}`.trim().toLowerCase()
+    if (!fieldKey || fieldMap.has(fieldKey)) return
+    fieldMap.set(fieldKey, item?.fieldLabel || doctorFormRegenerateFieldLabel(fieldKey) || fieldKey)
+  })
+  return [
+    { label: '全部字段', value: 'all' },
+    ...Array.from(fieldMap.entries()).map(([value, label]) => ({ label, value }))
+  ]
+})
+const displayDoctorFormTemplateBreakdown = computed(() => {
+  const selectedScene = `${doctorFormFieldSceneFilter.value || 'all'}`.trim().toLowerCase()
+  const selectedField = `${doctorFormTemplateFieldFilter.value || 'all'}`.trim().toLowerCase()
+  const metricKey = `${doctorFormTemplateSortKey.value || 'composeCount'}`.trim()
+  return (doctorFormUsage.value.templateBreakdown || [])
+    .filter(item => selectedScene === 'all' || `${item?.sceneType || ''}`.trim().toLowerCase() === selectedScene)
+    .filter(item => selectedField === 'all' || `${item?.fieldKey || ''}`.trim().toLowerCase() === selectedField)
+    .slice()
+    .sort((left, right) => {
+      const compare = Number(doctorFormTemplateMetricValue(right, metricKey) || 0) - Number(doctorFormTemplateMetricValue(left, metricKey) || 0)
+      if (compare !== 0) return compare
+      const savedCompare = Number(right?.savedCount || 0) - Number(left?.savedCount || 0)
+      if (savedCompare !== 0) return savedCompare
+      const composeCompare = Number(right?.composeCount || 0) - Number(left?.composeCount || 0)
+      if (composeCompare !== 0) return composeCompare
+      return `${left?.templateLabel || ''}`.localeCompare(`${right?.templateLabel || ''}`, 'zh-CN')
+    })
+})
 const auditEmptyDescription = computed(() => {
   if (auditLoading.value) return '正在加载最近 AI 导诊输出。'
   if (auditKeyword.value.trim()) return '当前关键词和筛选条件下还没有最近 AI 导诊输出。'
@@ -426,6 +881,10 @@ const runtimeModeSummary = computed(() => {
     return '当前总开关已关闭，系统会继续使用规则分诊和现有问诊链路。'
   }
   return '当前环境仍处于规则兜底模式，建议优先排查告警项。'
+})
+
+watch(doctorFormFieldSceneFilter, () => {
+  doctorFormTemplateFieldFilter.value = 'all'
 })
 
 function createEmptyOverview() {
@@ -456,6 +915,45 @@ function createEmptyOverview() {
   }
 }
 
+function createEmptyDoctorMessageUsageOverview() {
+  return {
+    generatedCount: 0,
+    appliedCount: 0,
+    sentCount: 0,
+    templateUsedCount: 0,
+    deepseekCount: 0,
+    fallbackCount: 0,
+    applyRate: 0,
+    sendAdoptionRate: 0,
+    sceneBreakdown: [],
+    recentItems: []
+  }
+}
+
+function createEmptyDoctorFormUsageOverview() {
+  return {
+    generatedCount: 0,
+    fullGeneratedCount: 0,
+    fieldRegenerateCount: 0,
+    contextRewriteCount: 0,
+    contextRewriteSavedCount: 0,
+    appliedCount: 0,
+    pureAiAppliedCount: 0,
+    templateUsedCount: 0,
+    savedCount: 0,
+    deepseekCount: 0,
+    fallbackCount: 0,
+    applyRate: 0,
+    saveAdoptionRate: 0,
+    contextRewriteSaveRate: 0,
+    sceneBreakdown: [],
+    promptBreakdown: [],
+    fieldBreakdown: [],
+    templateBreakdown: [],
+    recentItems: []
+  }
+}
+
 function loadOverview() {
   loading.value = true
   get('/api/admin/consultation-ai/overview', data => {
@@ -467,6 +965,34 @@ function loadOverview() {
   }, message => {
     loading.value = false
     ElMessage.warning(message || 'AI 导诊运行概览加载失败')
+  })
+}
+
+function loadDoctorMessageUsage() {
+  doctorMessageUsageLoading.value = true
+  get('/api/admin/consultation-ai/doctor-message-usage', data => {
+    doctorMessageUsage.value = {
+      ...createEmptyDoctorMessageUsageOverview(),
+      ...(data || {})
+    }
+    doctorMessageUsageLoading.value = false
+  }, message => {
+    doctorMessageUsageLoading.value = false
+    ElMessage.warning(message || '医生端 AI 沟通草稿使用概况加载失败')
+  })
+}
+
+function loadDoctorFormUsage() {
+  doctorFormUsageLoading.value = true
+  get('/api/admin/consultation-ai/doctor-form-usage', data => {
+    doctorFormUsage.value = {
+      ...createEmptyDoctorFormUsageOverview(),
+      ...(data || {})
+    }
+    doctorFormUsageLoading.value = false
+  }, message => {
+    doctorFormUsageLoading.value = false
+    ElMessage.warning(message || '医生端 AI 处理/随访草稿使用概况加载失败')
   })
 }
 
@@ -612,8 +1138,176 @@ function triageActionLabel(value) {
 
 function sourceLabel(value) {
   return ({
-    deepseek: 'DeepSeek'
+    deepseek: 'DeepSeek',
+    fallback: '规则兜底'
   })[`${value || ''}`.toLowerCase()] || (value || '')
+}
+
+function rateText(value) {
+  const number = Number(value)
+  return Number.isFinite(number) && number > 0 ? `${number.toFixed(2)}%` : '0.00%'
+}
+
+function doctorMessageSceneLabel(value) {
+  return ({
+    opening: '首次接诊',
+    clarify: '补充追问',
+    check_result: '结果解读',
+    follow_up: '复诊随访'
+  })[`${value || ''}`.toLowerCase()] || value || '沟通草稿'
+}
+
+function doctorMessageSourceLabel(item) {
+  if (item?.fallback === 1) return '规则兜底'
+  return sourceLabel(item?.source || 'deepseek') || 'AI 草稿'
+}
+
+function doctorMessageApplyModeLabel(value) {
+  return ({
+    replace: '覆盖带入',
+    append: '追加带入',
+    compose: 'AI+模板合成'
+  })[`${value || ''}`.toLowerCase()] || '已带入'
+}
+
+function doctorMessageUsageStatusLabel(item) {
+  if (item?.sentStatus === 1) return '已发送'
+  if (Number(item?.applyCount || 0) > 0) return '已带入待发送'
+  return '仅生成未带入'
+}
+
+function doctorFormSceneLabel(value) {
+  return ({
+    handle: '医生处理',
+    follow_up: '随访记录'
+  })[`${value || ''}`.toLowerCase()] || value || '表单草稿'
+}
+
+function doctorFormRegenerateFieldLabel(value) {
+  return ({
+    doctor_summary: '判断摘要',
+    medical_advice: '处理建议',
+    follow_up_plan: '随访安排',
+    patient_instruction: '患者指导',
+    followup_summary: '随访摘要',
+    followup_advice: '随访建议',
+    followup_next_step: '下一步安排'
+  })[`${value || ''}`.toLowerCase()] || ''
+}
+
+function doctorFormGenerationLabel(item) {
+  const fieldLabel = doctorFormRegenerateFieldLabel(item?.regenerateField)
+  return fieldLabel ? `字段重写：${fieldLabel}` : '整份草稿'
+}
+
+function doctorFormSourceLabel(item) {
+  if (item?.fallback === 1) return '规则兜底'
+  return sourceLabel(item?.source || 'deepseek') || 'AI 草稿'
+}
+
+function doctorFormApplyTargetLabel(value) {
+  return ({
+    handle_form: '带入处理表单',
+    conclusion_form: '带入结构化结论',
+    follow_up_form: '带入随访表单'
+  })[`${value || ''}`.toLowerCase()] || '已带入'
+}
+
+function doctorFormApplyModeLabel(value) {
+  return ({
+    replace: '直接带入',
+    append: '追加带入',
+    compose: 'AI+模板合成'
+  })[`${value || ''}`.toLowerCase()] || '已带入'
+}
+
+function doctorFormUsageStatusLabel(item) {
+  if (item?.savedStatus === 1) return '已保存'
+  if (Number(item?.applyCount || 0) > 0) return '已带入待保存'
+  return '仅生成未带入'
+}
+
+function doctorFormPromptVersionLabel(value) {
+  const text = `${value || ''}`.trim()
+  if (!text) return '未标记版本'
+  const shortText = text.split('/').filter(Boolean).slice(-1)[0] || text
+  return shortText || text
+}
+
+function doctorFormPromptSortLabel(value) {
+  return ({
+    generatedCount: '生成次数',
+    contextRewriteCount: '上下文续写数',
+    fieldRegenerateCount: '字段重写数',
+    appliedCount: '带入次数',
+    savedCount: '保存次数',
+    applyRate: '带入率',
+    saveRate: '保存率'
+  })[`${value || ''}`] || '生成次数'
+}
+
+function doctorFormPromptMetricValue(item, metricKey = doctorFormPromptSortKey.value) {
+  const value = item?.[metricKey]
+  return Number.isFinite(Number(value)) ? Number(value) : 0
+}
+
+function doctorFormPromptPrimaryText(item) {
+  const metricKey = `${doctorFormPromptSortKey.value || 'generatedCount'}`
+  if (metricKey === 'applyRate' || metricKey === 'saveRate') {
+    return rateText(doctorFormPromptMetricValue(item, metricKey))
+  }
+  return `${doctorFormPromptMetricValue(item, metricKey)}`
+}
+
+function doctorFormFieldSortLabel(value) {
+  return ({
+    relatedCount: '相关日志数',
+    regenerateCount: '字段重写数',
+    templateComposeCount: '模板拼装数',
+    contextRewriteCount: '上下文续写数',
+    appliedCount: '带入次数',
+    savedCount: '保存次数',
+    applyRate: '带入率',
+    saveRate: '保存率',
+    contextRewriteSaveRate: '续写保存率'
+  })[`${value || ''}`] || '相关日志数'
+}
+
+function doctorFormFieldMetricValue(item, metricKey = doctorFormFieldSortKey.value) {
+  const value = item?.[metricKey]
+  return Number.isFinite(Number(value)) ? Number(value) : 0
+}
+
+function doctorFormFieldPrimaryText(item) {
+  const metricKey = `${doctorFormFieldSortKey.value || 'relatedCount'}`
+  if (metricKey === 'applyRate' || metricKey === 'saveRate' || metricKey === 'contextRewriteSaveRate') {
+    return rateText(doctorFormFieldMetricValue(item, metricKey))
+  }
+  return `${doctorFormFieldMetricValue(item, metricKey)}`
+}
+
+function doctorFormTemplateSortLabel(value) {
+  return ({
+    composeCount: '拼装次数',
+    contextRewriteCount: '上下文续写数',
+    savedCount: '保存次数',
+    saveRate: '保存率',
+    appliedCount: '带入次数',
+    contextRewriteSaveRate: '续写保存率'
+  })[`${value || ''}`] || '拼装次数'
+}
+
+function doctorFormTemplateMetricValue(item, metricKey = doctorFormTemplateSortKey.value) {
+  const value = item?.[metricKey]
+  return Number.isFinite(Number(value)) ? Number(value) : 0
+}
+
+function doctorFormTemplatePrimaryText(item) {
+  const metricKey = `${doctorFormTemplateSortKey.value || 'composeCount'}`
+  if (metricKey === 'saveRate' || metricKey === 'contextRewriteSaveRate') {
+    return rateText(doctorFormTemplateMetricValue(item, metricKey))
+  }
+  return `${doctorFormTemplateMetricValue(item, metricKey)}`
 }
 
 function parseJsonArray(value) {
@@ -899,6 +1593,8 @@ function formatDate(value, withTime = false) {
 
 onMounted(() => {
   loadOverview()
+  loadDoctorMessageUsage()
+  loadDoctorFormUsage()
   loadReviewQueue()
   loadAuditList()
 })
@@ -1021,10 +1717,44 @@ onMounted(() => {
   gap: 10px;
   flex-wrap: wrap;
 }
+.field-breakdown-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+.field-breakdown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.field-breakdown-head h4 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  color: #31474d;
+}
+.field-breakdown-head p {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.8;
+}
+.field-breakdown-toolbar {
+  justify-content: flex-end;
+}
+.template-breakdown-list {
+  margin-top: 0;
+}
 .queue-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+.usage-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
 }
 .audit-review-head,
 .audit-review-chips {
@@ -1114,17 +1844,27 @@ onMounted(() => {
   background: rgba(214, 95, 80, 0.12) !important;
   color: #9f4336 !important;
 }
+.chip-success {
+  background: rgba(77, 168, 132, 0.16) !important;
+  color: #1f6f4f !important;
+}
+.chip-warning {
+  background: rgba(210, 155, 47, 0.14) !important;
+  color: #8f6514 !important;
+}
 .audit-actions {
   justify-content: flex-end;
 }
 @media (max-width: 1100px) {
   .hero-card,
   .content-grid { grid-template-columns: 1fr; }
-  .queue-list { grid-template-columns: 1fr; }
+  .queue-list,
+  .usage-list { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
   .hero-side { grid-template-columns: 1fr; }
   .panel-head { flex-direction: column; align-items: flex-start; }
+  .field-breakdown-head { flex-direction: column; }
   .audit-toolbar,
   .audit-actions { width: 100%; }
   .audit-review-head { flex-direction: column; }

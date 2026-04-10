@@ -34,6 +34,33 @@ export function recordHasUnreadDoctorReply(record) {
   return getMessageSummary(record).unreadCount > 0
 }
 
+export function claimedDoctorName(record) {
+  const doctorName = `${record?.doctorAssignment?.doctorName || record?.smartDispatch?.claimedDoctorName || ''}`.trim()
+  return doctorName || ''
+}
+
+export function currentDoctorName(record) {
+  const directDoctorName = `${record?.doctorHandle?.doctorName || claimedDoctorName(record) || ''}`.trim()
+  if (directDoctorName) return directDoctorName
+  const summary = getMessageSummary(record)
+  return summary.latestSenderType === 'doctor' ? `${summary.latestSenderName || ''}`.trim() : ''
+}
+
+export function hasDoctorClaimed(record) {
+  if (`${record?.doctorAssignment?.status || ''}`.trim().toLowerCase() === 'claimed') return true
+  return `${record?.smartDispatch?.status || ''}`.includes('claimed')
+}
+
+export function hasDoctorTakenOver(record) {
+  const summary = getMessageSummary(record)
+  return !!(
+    record?.doctorHandle?.doctorName
+    || record?.status === 'processing'
+    || hasDoctorClaimed(record)
+    || summary.latestSenderType === 'doctor'
+  )
+}
+
 export function recordMessagePreview(record) {
   return getMessageSummary(record).latestMessagePreview || '暂无新的医患沟通消息'
 }
@@ -42,7 +69,7 @@ export function recordProgressStage(record) {
   if (!record) return 'waiting_doctor'
   if (recordHasUnreadDoctorReply(record)) return 'doctor_replied'
   if (record.status === 'completed' || record?.doctorHandle?.status === 'completed') return 'completed'
-  if (record?.doctorHandle?.doctorName || record.status === 'processing') return 'doctor_processing'
+  if (hasDoctorTakenOver(record)) return 'doctor_processing'
   return 'waiting_doctor'
 }
 

@@ -11,7 +11,7 @@ spring:
   ai:
     deepseek:
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
-      api-key: ${DEEPSEEK_API_KEY:}
+      api-key: 'sk-e11e3978692c46a6b67fccac1f449d3b'
       chat:
         enabled: ${DEEPSEEK_ENABLED:false}
         options:
@@ -53,7 +53,6 @@ spring:
     endpoint: 'http://localhost:9000'
     username: 'minioadmin'
     password: 'minioadmin'
-
 consultation:
   ai:
     triage:

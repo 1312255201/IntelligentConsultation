@@ -283,6 +283,9 @@ public class ConsultationServiceImpl implements ConsultationService {
                     ConsultationDoctorHandle handle = handleMap.get(item.getId());
                     ConsultationDoctorConclusion conclusion = conclusionMap.get(item.getId());
                     ConsultationDoctorFollowUp latestFollowUp = latestFollowUpMap.get(item.getId());
+                    if (assignment != null) {
+                        vo.setDoctorAssignment(assignment.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorAssignmentVO.class));
+                    }
                     if (handle != null) {
                         vo.setDoctorHandle(handle.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO.class));
                     }
@@ -336,6 +339,9 @@ public class ConsultationServiceImpl implements ConsultationService {
         return record.asViewObject(ConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
             vo.setRecommendedDoctors(buildRecommendedDoctors(record));
+            if (assignment != null) {
+                vo.setDoctorAssignment(assignment.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorAssignmentVO.class));
+            }
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
             vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(

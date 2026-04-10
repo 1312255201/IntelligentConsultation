@@ -62,4 +62,7 @@ public class DoctorConsultationHandleSubmitVO {
 
     @Length(max = 500)
     String patientInstruction;
+
+    @Positive
+    Integer aiLogId;
 }

@@ -363,11 +363,26 @@ function recordMessagePreview(record) {
   return getMessageSummary(record).latestMessagePreview || '暂未产生沟通消息'
 }
 
+function hasDoctorClaimed(record) {
+  if (`${record?.doctorAssignment?.status || ''}`.trim().toLowerCase() === 'claimed') return true
+  return `${record?.smartDispatch?.status || ''}`.includes('claimed')
+}
+
+function hasDoctorTakenOver(record) {
+  const summary = getMessageSummary(record)
+  return !!(
+    record?.doctorHandle?.doctorName
+    || record?.status === 'processing'
+    || hasDoctorClaimed(record)
+    || summary.latestSenderType === 'doctor'
+  )
+}
+
 function recordProgressStage(record) {
   if (!record) return 'waiting_doctor'
   if (recordHasUnreadDoctorReply(record)) return 'doctor_replied'
   if (record.status === 'completed' || record?.doctorHandle?.status === 'completed') return 'completed'
-  if (record?.doctorHandle?.doctorName || record.status === 'processing') return 'doctor_processing'
+  if (hasDoctorTakenOver(record)) return 'doctor_processing'
   return 'waiting_doctor'
 }
 

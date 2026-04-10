@@ -267,15 +267,18 @@ function primaryActionLabel(record) {
   return '查看详情'
 }
 function replyActionQuery(record) {
-  return hasUnreadMessages(record) ? { messageFilter: 'unread' } : { messageFilter: 'waiting_reply' }
+  return hasUnreadMessages(record)
+    ? { messageFilter: 'unread', action: 'reply' }
+    : { messageFilter: 'waiting_reply', action: 'reply' }
 }
 function followUpActionQuery(record) {
   return followUpState(record) === 'overdue'
-    ? { followUpFilter: 'overdue', sortMode: 'follow_up_due' }
-    : { followUpFilter: 'pending', sortMode: 'follow_up_due' }
+    ? { followUpFilter: 'overdue', sortMode: 'follow_up_due', action: 'followup' }
+    : { followUpFilter: 'pending', sortMode: 'follow_up_due', action: 'followup' }
 }
 function primaryActionQuery(record) {
   const mode = primaryActionMode(record)
+  if (mode === 'claim' && (hasUnreadMessages(record) || waitingDoctorReply(record))) return replyActionQuery(record)
   if (mode === 'reply') return replyActionQuery(record)
   if (mode === 'followup') return followUpActionQuery(record)
   return reminderQuery(record)

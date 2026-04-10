@@ -39,4 +39,7 @@ public class DoctorConsultationFollowUpSubmitVO {
 
     @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}")
     String nextFollowUpDate;
+
+    @Positive
+    Integer aiLogId;
 }

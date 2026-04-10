@@ -150,8 +150,8 @@
           </section>
 
           <section class="card panel">
-            <div class="head">
-              <div>
+              <div class="head">
+                <div>
                 <h3>认领信息</h3>
                 <p>{{ assignmentHint }}</p>
               </div>
@@ -265,7 +265,89 @@
               <el-empty v-else description="当前暂无沟通消息" />
             </div>
             <div class="message-composer">
+              <div class="template-banner ai-message-banner">
+                <div>
+                  <strong>AI 沟通建议</strong>
+                  <p>{{ messageAiSceneHint }}</p>
+                </div>
+                <div class="template-tools">
+                  <el-select v-model="messageAiScene" style="width: 150px" :disabled="messageAiDraftLoading || !canSendMessage">
+                    <el-option
+                      v-for="item in messageAiSceneOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                  <el-button plain :loading="messageAiDraftLoading" :disabled="!canSendMessage" @click="generateMessageAiDraft">AI 生成建议</el-button>
+                  <el-button v-if="hasMessageAiDraft" type="primary" plain :disabled="!canSendMessage" @click="applyMessageAiDraft('replace')">覆盖带入</el-button>
+                  <el-button v-if="hasMessageAiDraft" plain :disabled="!canSendMessage" @click="applyMessageAiDraft('append')">追加带入</el-button>
+                </div>
+              </div>
+              <div v-if="hasMessageAiDraft" class="subcard ai-message-draft-card">
+                <p v-if="messageAiDraft.content" class="copy"><strong>建议回复：</strong>{{ messageAiDraft.content }}</p>
+                <p v-if="messageAiDraft.summary" class="copy"><strong>生成依据：</strong>{{ messageAiDraft.summary }}</p>
+                <div class="chips">
+                  <span>{{ messageAiSceneLabel(messageAiDraft.sceneType || messageAiScene) }}</span>
+                  <span>{{ messageAiDraft.fallback === 1 ? '规则兜底草稿' : messageAiDraftSourceLabel }}</span>
+                  <span v-if="messageAiDraft.promptVersion">Prompt {{ messageAiDraft.promptVersion }}</span>
+                </div>
+                <div v-if="messageAiDraft.riskFlags.length" class="ai-draft-tags danger">
+                  <span v-for="item in messageAiDraft.riskFlags" :key="`message-draft-${item}`">{{ item }}</span>
+                </div>
+              </div>
+              <div v-if="templateLoading" class="template-banner ai-message-banner ai-message-template-banner">
+                <span>正在加载当前场景的沟通模板...</span>
+              </div>
+              <div v-else class="template-banner ai-message-banner ai-message-template-banner">
+                <div>
+                  <strong>沟通模板拼装</strong>
+                  <p>{{ currentMessageTemplateMeta.hint }}</p>
+                </div>
+                <div v-if="currentMessageTemplates.length" class="template-tools">
+                  <el-select
+                    v-model="currentMessageTemplateId"
+                    clearable
+                    filterable
+                    :disabled="!canSendMessage"
+                    :placeholder="currentMessageTemplateMeta.placeholder"
+                    style="width: 240px"
+                  >
+                    <el-option
+                      v-for="item in currentMessageTemplates"
+                      :key="item.id"
+                      :label="item.title"
+                      :value="item.id"
+                    />
+                  </el-select>
+                  <el-button text :disabled="!canSendMessage || !selectedMessageTemplate" @click="applyMessageTemplate('replace')">模板覆盖带入</el-button>
+                  <el-button text :disabled="!canSendMessage || !selectedMessageTemplate" @click="applyMessageTemplate('append')">模板追加带入</el-button>
+                  <el-button
+                    type="primary"
+                    plain
+                    :disabled="!canSendMessage || !hasMessageAiDraft || !selectedMessageTemplate"
+                    @click="composeMessageAiWithTemplate"
+                  >
+                    AI+模板合成带入
+                  </el-button>
+                  <el-button link type="primary" @click="openReplyTemplateManager">管理沟通模板</el-button>
+                </div>
+                <div v-else class="template-tools">
+                  <span>{{ currentMessageTemplateMeta.emptyText }}</span>
+                  <el-button link type="primary" @click="openReplyTemplateManager">去维护模板</el-button>
+                </div>
+              </div>
+              <div v-if="selectedMessageTemplate" class="subcard ai-message-draft-card ai-message-template-card">
+                <p class="copy"><strong>{{ selectedMessageTemplate.title }}</strong></p>
+                <p class="copy">{{ selectedMessageTemplate.content }}</p>
+                <div class="chips">
+                  <span>{{ currentMessageTemplateMeta.label }}</span>
+                  <span>快捷沟通模板</span>
+                </div>
+              </div>
               <el-input
+                ref="messageInputRef"
+                :class="{ 'focus-action-input': focusedDetailSection === 'reply' }"
                 v-model="messageDraft.content"
                 type="textarea"
                 :rows="3"
@@ -353,6 +435,48 @@
               <span>当前还没有个人常用回复模板，可以先维护常见摘要、处理建议和随访话术，后续处理问诊时可直接快捷填入。</span>
               <el-button link type="primary" @click="openReplyTemplateManager">去维护模板</el-button>
             </div>
+            <div class="template-banner ai-message-banner">
+              <div>
+                <strong>AI 处理草稿</strong>
+                <p>结合导诊结果、沟通记录和已保存处理内容，为本次医生处理生成一份可编辑草稿。</p>
+              </div>
+              <div class="template-tools">
+                <el-button plain :loading="handleAiDraftLoading" :disabled="!canEdit || !!handleAiRegeneratingField" @click="generateHandleAiDraft">生成 AI 草稿</el-button>
+                <el-button v-if="hasHandleAiDraft" type="primary" plain :disabled="!canEdit || handleAiBusy" @click="applyGeneratedHandleDraft">带入处理草稿</el-button>
+                <el-button v-if="hasHandleAiDraft" plain :disabled="!canEdit || handleAiBusy" @click="applyGeneratedHandleConclusion">带入结构化结论</el-button>
+              </div>
+              <div class="ai-rewrite-box">
+                <span>继续改写要求（可选）</span>
+                <el-input
+                  v-model="handleAiRewriteRequirement"
+                  type="textarea"
+                  :rows="2"
+                  maxlength="200"
+                  show-word-limit
+                  :disabled="!canEdit"
+                  placeholder="例如：保留当前判断口径，只把处理建议写得更具体，并突出线下复诊提醒"
+                />
+              </div>
+            </div>
+            <div v-if="hasHandleAiDraft" class="subcard ai-message-draft-card">
+              <p v-if="handleAiDraft.doctorSummary" class="copy"><strong>判断摘要：</strong>{{ handleAiDraft.doctorSummary }}</p>
+              <p v-if="handleAiDraft.medicalAdvice" class="copy"><strong>处理建议：</strong>{{ handleAiDraft.medicalAdvice }}</p>
+              <p v-if="handleAiDraft.followUpPlan" class="copy"><strong>随访安排：</strong>{{ handleAiDraft.followUpPlan }}</p>
+              <p v-if="handleAiDraft.patientInstruction" class="copy"><strong>患者提示：</strong>{{ handleAiDraft.patientInstruction }}</p>
+              <p v-if="handleAiDraft.generationSummary" class="copy"><strong>生成依据：</strong>{{ handleAiDraft.generationSummary }}</p>
+              <div class="chips">
+                <span v-if="handleAiDraft.conditionLevel">{{ conditionLevelLabel(handleAiDraft.conditionLevel) }}</span>
+                <span v-if="handleAiDraft.disposition">{{ dispositionLabel(handleAiDraft.disposition) }}</span>
+                <span>{{ handleAiDraft.fallback === 1 ? '规则兜底草稿' : handleAiDraftSourceLabel }}</span>
+                <span v-if="handleAiDraft.promptVersion">Prompt {{ handleAiDraft.promptVersion }}</span>
+              </div>
+              <div v-if="handleAiDraft.conclusionTags.length" class="ai-draft-tags">
+                <span v-for="item in handleAiDraft.conclusionTags" :key="`handle-draft-tag-${item}`">{{ item }}</span>
+              </div>
+              <div v-if="handleAiDraft.riskFlags.length" class="ai-draft-tags danger">
+                <span v-for="item in handleAiDraft.riskFlags" :key="`handle-draft-risk-${item}`">{{ item }}</span>
+              </div>
+            </div>
             <el-form label-position="top" :disabled="!canEdit">
               <el-form-item label="医生判断摘要">
                 <div v-if="sceneTemplates('handle_summary').length" class="template-tools">
@@ -361,6 +485,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'append')">追加填入</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'doctorSummary'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'doctorSummary')" @click="generateHandleAiDraft('doctorSummary')">AI重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('handle_summary') || !trimText(handleAiDraft.doctorSummary)" @click="composeAiFieldWithTemplate('handle_summary', 'summary', handleAiDraft.doctorSummary, { label: '处理摘要', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：当前暂无紧急风险，建议继续线上处理并观察变化。" />
               </el-form-item>
@@ -371,6 +497,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'append')">追加填入</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'medicalAdvice'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'medicalAdvice')" @click="generateHandleAiDraft('medicalAdvice')">AI重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('medical_advice') || !trimText(handleAiDraft.medicalAdvice)" @click="composeAiFieldWithTemplate('medical_advice', 'medicalAdvice', handleAiDraft.medicalAdvice, { label: '处理建议', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.medicalAdvice" type="textarea" :rows="4" maxlength="4000" show-word-limit placeholder="填写生活建议、用药建议、复诊建议等。" />
               </el-form-item>
@@ -381,6 +509,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'append')">追加填入</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'followUpPlan'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'followUpPlan')" @click="generateHandleAiDraft('followUpPlan')">AI重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('follow_up_plan') || !trimText(handleAiDraft.followUpPlan)" @click="composeAiFieldWithTemplate('follow_up_plan', 'followUpPlan', handleAiDraft.followUpPlan, { label: '随访计划', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.followUpPlan" maxlength="500" show-word-limit placeholder="例如：建议 3 天后复诊，如加重请线下就医。" />
               </el-form-item>
@@ -497,6 +627,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('patient_instruction', 'patientInstruction', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('patient_instruction', 'patientInstruction', 'append')">追加填入</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'patientInstruction'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'patientInstruction')" @click="generateHandleAiDraft('patientInstruction')">AI重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('patient_instruction') || !trimText(handleAiDraft.patientInstruction)" @click="composeAiFieldWithTemplate('patient_instruction', 'patientInstruction', handleAiDraft.patientInstruction, { label: '患者指导', applyTarget: 'conclusion_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="conclusionForm.patientInstruction" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：如出现持续高热或呼吸困难，请立即线下就医。" />
               </el-form-item>
@@ -552,6 +684,45 @@
               class="notice"
             />
             <el-alert v-if="!canSubmitFollowUp" :title="followUpHint" type="info" :closable="false" class="notice" />
+            <div class="template-banner ai-message-banner">
+              <div>
+                <strong>AI 随访草稿</strong>
+                <p>结合前次处理、既往随访和最近患者反馈，为当前回访生成一份可编辑草稿。</p>
+              </div>
+              <div class="template-tools">
+                <el-button plain :loading="followUpAiDraftLoading" :disabled="!canSubmitFollowUp || !!followUpAiRegeneratingField" @click="generateFollowUpAiDraft">生成 AI 草稿</el-button>
+                <el-button v-if="hasFollowUpAiDraft" type="primary" plain :disabled="!canSubmitFollowUp || followUpAiBusy" @click="applyGeneratedFollowUpDraft">带入随访草稿</el-button>
+              </div>
+              <div class="ai-rewrite-box">
+                <span>继续改写要求（可选）</span>
+                <el-input
+                  v-model="followUpAiRewriteRequirement"
+                  type="textarea"
+                  :rows="2"
+                  maxlength="200"
+                  show-word-limit
+                  :disabled="!canSubmitFollowUp"
+                  placeholder="例如：保留当前随访判断，只补充患者需要继续观察的点和下次联系节点"
+                />
+              </div>
+            </div>
+            <div v-if="hasFollowUpAiDraft" class="subcard ai-message-draft-card">
+              <p v-if="followUpAiDraft.summary" class="copy"><strong>随访摘要：</strong>{{ followUpAiDraft.summary }}</p>
+              <p v-if="followUpAiDraft.advice" class="copy"><strong>随访建议：</strong>{{ followUpAiDraft.advice }}</p>
+              <p v-if="followUpAiDraft.nextStep" class="copy"><strong>下一步安排：</strong>{{ followUpAiDraft.nextStep }}</p>
+              <p v-if="followUpAiDraft.generationSummary" class="copy"><strong>生成依据：</strong>{{ followUpAiDraft.generationSummary }}</p>
+              <div class="chips">
+                <span>{{ followUpTypeLabel(followUpAiDraft.followUpType) }}</span>
+                <span>{{ patientStatusLabel(followUpAiDraft.patientStatus) }}</span>
+                <span v-if="followUpAiDraft.needRevisit === 1">需再次随访</span>
+                <span v-if="followUpAiDraft.nextFollowUpDate">下次 {{ followUpAiDraft.nextFollowUpDate }}</span>
+                <span>{{ followUpAiDraft.fallback === 1 ? '规则兜底草稿' : followUpAiDraftSourceLabel }}</span>
+                <span v-if="followUpAiDraft.promptVersion">Prompt {{ followUpAiDraft.promptVersion }}</span>
+              </div>
+              <div v-if="followUpAiDraft.riskFlags.length" class="ai-draft-tags danger">
+                <span v-for="item in followUpAiDraft.riskFlags" :key="`follow-up-draft-risk-${item}`">{{ item }}</span>
+              </div>
+            </div>
 
             <el-form label-position="top" :disabled="!canSubmitFollowUp">
               <div class="grid">
@@ -579,6 +750,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('followup_summary', 'summary', 'replace', 'followUp')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('followup_summary', 'summary', 'append', 'followUp')">追加填入</el-button>
+                  <el-button text :loading="followUpAiRegeneratingField === 'summary'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'summary')" @click="generateFollowUpAiDraft('summary')">AI重写</el-button>
+                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_summary') || !trimText(followUpAiDraft.summary)" @click="composeAiFieldWithTemplate('followup_summary', 'summary', followUpAiDraft.summary, { formType: 'followUp', label: '随访摘要', applyTarget: 'follow_up_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="followUpForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：患者发热较前缓解，夜间咳嗽仍存在但频次下降。" />
               </el-form-item>
@@ -589,6 +762,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('followup_advice', 'advice', 'replace', 'followUp')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('followup_advice', 'advice', 'append', 'followUp')">追加填入</el-button>
+                  <el-button text :loading="followUpAiRegeneratingField === 'advice'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'advice')" @click="generateFollowUpAiDraft('advice')">AI重写</el-button>
+                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_advice') || !trimText(followUpAiDraft.advice)" @click="composeAiFieldWithTemplate('followup_advice', 'advice', followUpAiDraft.advice, { formType: 'followUp', label: '随访建议', applyTarget: 'follow_up_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="followUpForm.advice" type="textarea" :rows="3" maxlength="1000" show-word-limit placeholder="例如：继续按既定方案观察，如 48 小时后仍反复发热建议线下复诊。" />
               </el-form-item>
@@ -599,11 +774,13 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('followup_next_step', 'nextStep', 'replace', 'followUp')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('followup_next_step', 'nextStep', 'append', 'followUp')">追加填入</el-button>
+                  <el-button text :loading="followUpAiRegeneratingField === 'nextStep'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'nextStep')" @click="generateFollowUpAiDraft('nextStep')">AI重写</el-button>
+                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_next_step') || !trimText(followUpAiDraft.nextStep)" @click="composeAiFieldWithTemplate('followup_next_step', 'nextStep', followUpAiDraft.nextStep, { formType: 'followUp', label: '下一步安排', applyTarget: 'follow_up_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="followUpForm.nextStep" maxlength="500" show-word-limit placeholder="例如：3 天后再次平台随访，必要时安排线下检查。" />
               </el-form-item>
             </el-form>
-            <div class="actions">
+            <div ref="followUpActionButtonRef" :class="['actions', { 'focus-action-button': focusedDetailSection === 'followup' }]">
               <el-button type="primary" :disabled="!canSubmitFollowUp" :loading="followUpSubmitting" @click="submitFollowUp">追加随访记录</el-button>
             </div>
           </section>
@@ -732,7 +909,7 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
 import {
@@ -766,6 +943,42 @@ const dispositionOptions = [{ label: '继续观察', value: 'observe' }, { label
 const conclusionTagOptions = ['适合居家观察', '建议线下检查', '建议药物评估', '需要复诊随访', '过敏风险', '发热监测', '皮肤护理', '慢病管理']
 const followUpTypeOptions = [{ label: '平台随访', value: 'platform' }, { label: '电话随访', value: 'phone' }, { label: '线下随访', value: 'offline' }, { label: '其他方式', value: 'other' }]
 const patientStatusOptions = [{ label: '明显好转', value: 'improved' }, { label: '基本稳定', value: 'stable' }, { label: '出现加重', value: 'worsened' }, { label: '其他情况', value: 'other' }]
+const messageAiSceneOptions = [
+  { label: '首次接诊', value: 'opening' },
+  { label: '补充追问', value: 'clarify' },
+  { label: '结果解读', value: 'check_result' },
+  { label: '复诊随访', value: 'follow_up' }
+]
+const messageTemplateSceneMetaMap = {
+  opening: {
+    sceneType: 'message_opening',
+    label: '接诊开场模板',
+    placeholder: '选择接诊开场模板',
+    hint: '适合固定“已接手 + 需要患者补充什么”的第一条沟通话术。',
+    emptyText: '当前还没有接诊开场模板，可先去模板中心沉淀常用首条接诊话术。'
+  },
+  clarify: {
+    sceneType: 'message_clarify',
+    label: '补充追问模板',
+    placeholder: '选择补充追问模板',
+    hint: '适合沉淀高频追问语句，减少医生反复手写症状补充问题。',
+    emptyText: '当前还没有补充追问模板，可先配置常用的症状追问话术。'
+  },
+  check_result: {
+    sceneType: 'message_check_result',
+    label: '结果解读模板',
+    placeholder: '选择结果解读模板',
+    hint: '适合围绕检验、影像和复查结果补充固定解释结构与后续提醒。',
+    emptyText: '当前还没有结果解读模板，可先整理常见检查结果说明话术。'
+  },
+  follow_up: {
+    sceneType: 'message_follow_up',
+    label: '复诊随访模板',
+    placeholder: '选择复诊随访模板',
+    hint: '适合固定处理完成后的恢复询问、复诊节点和再次联系条件。',
+    emptyText: '当前还没有复诊随访模板，可先沉淀随访问候和风险提醒话术。'
+  }
+}
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
@@ -789,6 +1002,13 @@ const consultationMessages = ref([])
 const replyTemplates = ref([])
 const messageLoading = ref(false)
 const messageSending = ref(false)
+const messageAiDraftLoading = ref(false)
+const handleAiDraftLoading = ref(false)
+const followUpAiDraftLoading = ref(false)
+const handleAiRegeneratingField = ref('')
+const followUpAiRegeneratingField = ref('')
+const handleAiRewriteRequirement = ref('')
+const followUpAiRewriteRequirement = ref('')
 const doctor = reactive({ bound: 1, bindingMessage: '', doctorId: null, doctorName: '' })
 const handleForm = reactive({ summary: '', medicalAdvice: '', followUpPlan: '', internalRemark: '' })
 const conclusionForm = reactive({
@@ -805,15 +1025,41 @@ const conclusionForm = reactive({
 })
 const followUpForm = reactive({ followUpType: 'platform', patientStatus: 'stable', summary: '', advice: '', nextStep: '', needRevisit: 0, nextFollowUpDate: '' })
 const messageDraft = reactive({ content: '', attachments: [] })
+const messageAiDraft = reactive(createEmptyMessageAiDraft())
+const handleAiDraft = reactive(createEmptyHandleAiDraft())
+const followUpAiDraft = reactive(createEmptyFollowUpAiDraft())
+const handleAiUsage = reactive(createEmptyFormAiUsage())
+const followUpAiUsage = reactive(createEmptyFormAiUsage())
+const messageAiScene = ref('opening')
+const messageAiUsage = reactive(createEmptyMessageAiUsage())
+const messageInputRef = ref(null)
+const followUpActionButtonRef = ref(null)
+const focusedDetailSection = ref('')
+let detailSectionFocusTimer = null
 const templateSelection = reactive({
   handle_summary: null,
   medical_advice: null,
   follow_up_plan: null,
   patient_instruction: null,
+  message_opening: null,
+  message_clarify: null,
+  message_check_result: null,
+  message_follow_up: null,
   followup_summary: null,
   followup_advice: null,
   followup_next_step: null
 })
+const handleAiFieldMetaMap = {
+  doctorSummary: { requestField: 'doctor_summary', label: '判断摘要' },
+  medicalAdvice: { requestField: 'medical_advice', label: '处理建议' },
+  followUpPlan: { requestField: 'follow_up_plan', label: '随访安排' },
+  patientInstruction: { requestField: 'patient_instruction', label: '患者提示' }
+}
+const followUpAiFieldMetaMap = {
+  summary: { requestField: 'followup_summary', label: '随访摘要' },
+  advice: { requestField: 'followup_advice', label: '随访建议' },
+  nextStep: { requestField: 'followup_next_step', label: '下一步安排' }
+}
 
 const filteredRecords = computed(() => records.value
   .filter(item => {
@@ -843,6 +1089,53 @@ const canClaimCurrent = computed(() => canClaim(detail.value))
 const canReleaseCurrent = computed(() => canRelease(detail.value))
 const canEdit = computed(() => doctor.bound === 1 && !claimedByOther(detail.value?.doctorAssignment))
 const canSendMessage = computed(() => doctor.bound === 1 && !!detail.value && !claimedByOther(detail.value?.doctorAssignment))
+const hasMessageAiDraft = computed(() => !!(trimText(messageAiDraft.content) || trimText(messageAiDraft.summary) || messageAiDraft.riskFlags.length))
+const hasHandleAiDraft = computed(() => !!(
+  trimText(handleAiDraft.doctorSummary)
+  || trimText(handleAiDraft.medicalAdvice)
+  || trimText(handleAiDraft.followUpPlan)
+  || trimText(handleAiDraft.patientInstruction)
+  || trimText(handleAiDraft.conditionLevel)
+  || trimText(handleAiDraft.disposition)
+  || handleAiDraft.conclusionTags.length
+  || handleAiDraft.riskFlags.length
+))
+const hasFollowUpAiDraft = computed(() => !!(
+  trimText(followUpAiDraft.summary)
+  || trimText(followUpAiDraft.advice)
+  || trimText(followUpAiDraft.nextStep)
+  || followUpAiDraft.riskFlags.length
+))
+const messageAiDraftSourceLabel = computed(() => ({
+  deepseek: 'DeepSeek 草稿',
+  fallback: '规则草稿'
+})[`${messageAiDraft.source || ''}`.toLowerCase()] || 'AI 草稿')
+const handleAiDraftSourceLabel = computed(() => ({
+  deepseek: 'DeepSeek 草稿',
+  fallback: '规则草稿'
+})[`${handleAiDraft.source || ''}`.toLowerCase()] || 'AI 草稿')
+const followUpAiDraftSourceLabel = computed(() => ({
+  deepseek: 'DeepSeek 草稿',
+  fallback: '规则草稿'
+})[`${followUpAiDraft.source || ''}`.toLowerCase()] || 'AI 草稿')
+const handleAiBusy = computed(() => handleAiDraftLoading.value || !!handleAiRegeneratingField.value)
+const followUpAiBusy = computed(() => followUpAiDraftLoading.value || !!followUpAiRegeneratingField.value)
+const currentMessageTemplateMeta = computed(() => messageTemplateSceneMetaMap[normalizeMessageAiScene(messageAiScene.value)] || messageTemplateSceneMetaMap.opening)
+const currentMessageTemplates = computed(() => sceneTemplates(currentMessageTemplateMeta.value.sceneType))
+const currentMessageTemplateId = computed({
+  get: () => templateSelection[currentMessageTemplateMeta.value.sceneType],
+  set: value => { templateSelection[currentMessageTemplateMeta.value.sceneType] = value }
+})
+const selectedMessageTemplate = computed(() => {
+  const templateId = currentMessageTemplateId.value
+  return currentMessageTemplates.value.find(item => item.id === templateId) || null
+})
+const messageAiSceneHint = computed(() => ({
+  opening: '适合发送第一条接诊消息，先说明已接手，再提示患者下一步补充或处理建议。',
+  clarify: '适合回应患者刚补充的内容，继续追问关键症状变化和缺失信息。',
+  check_result: '适合围绕化验、影像或检查结果做说明，并告诉患者下一步怎么做。',
+  follow_up: '适合在处理完成后继续跟进恢复情况、复诊安排和风险提醒。'
+})[messageAiScene.value] || '结合导诊结果和最近沟通，为医生生成一段可编辑回复。')
 const triageDoctorCandidates = computed(() => parseDoctorCandidates(detail.value?.triageResult?.doctorCandidatesJson))
 const triageSessionMessages = computed(() => (detail.value?.triageSession?.messages || []).map(message => ({
   ...message,
@@ -983,11 +1276,51 @@ const messageSendHint = computed(() => {
   if (doctor.bound !== 1) return doctor.bindingMessage || '当前账号尚未绑定有效医生档案。'
   const assignment = detail.value?.doctorAssignment
   if (claimedByOther(assignment)) return `当前问诊单已由医生 ${assignment?.doctorName || '-'} 认领，你现在只能查看沟通记录。`
-  if (!assignment || assignment.status !== 'claimed') return '发送首条消息时会自动认领当前问诊单，适合先和患者确认补充信息。'
+  if (!assignment || assignment.status !== 'claimed') return '发送首条消息时会自动认领当前问诊单，并同步进入处理中，适合先和患者确认补充信息。'
   return '可继续与患者沟通病情变化、检查资料和随访安排。'
 })
 const messageUploadAction = computed(() => `${backendBaseUrl()}/api/image/cache`)
 const messageUploadHeaders = computed(() => authHeader())
+
+function resolveConsultationAction(value) {
+  const action = trimText(value)
+  return ['reply', 'followup'].includes(action) ? action : ''
+}
+function clearFocusedDetailSection() {
+  focusedDetailSection.value = ''
+  if (detailSectionFocusTimer) {
+    clearTimeout(detailSectionFocusTimer)
+    detailSectionFocusTimer = null
+  }
+}
+function focusDetailActionSection(action, detailId = null) {
+  const targetAction = resolveConsultationAction(action)
+  if (!targetAction) return
+  nextTick(() => {
+    const target = targetAction === 'reply'
+      ? (messageInputRef.value?.$el || messageInputRef.value?.textarea || messageInputRef.value)
+      : (followUpActionButtonRef.value?.$el || followUpActionButtonRef.value)
+    if (!target?.scrollIntoView) return
+    clearFocusedDetailSection()
+    focusedDetailSection.value = targetAction
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (targetAction === 'reply' && canSendMessage.value) setTimeout(() => messageInputRef.value?.focus?.(), 180)
+    if (targetAction === 'followup' && canSubmitFollowUp.value) {
+      setTimeout(() => {
+        const button = followUpActionButtonRef.value?.querySelector?.('button')
+          || followUpActionButtonRef.value?.$el?.querySelector?.('button')
+          || followUpActionButtonRef.value?.$el
+          || followUpActionButtonRef.value
+        button?.focus?.()
+      }, 180)
+    }
+    detailSectionFocusTimer = setTimeout(() => {
+      if (focusedDetailSection.value === targetAction) focusedDetailSection.value = ''
+      detailSectionFocusTimer = null
+    }, 2400)
+    syncListQuery(detailId || detail.value?.id || Number(route.query.id || 0) || null, '')
+  })
+}
 
 function refreshAll() { loadDoctor(); loadRecords() }
 function refreshDoctorWorkspaceContext(showLoading = false) {
@@ -1004,17 +1337,19 @@ function currentListQuery() {
   if (sortMode.value !== 'recent') query.sortMode = sortMode.value
   return query
 }
-function consultationRouteQuery(detailId = null) {
+function consultationRouteQuery(detailId = null, action = '') {
   const query = currentListQuery()
+  const routeAction = resolveConsultationAction(action)
   if (detailId) query.id = detailId
+  if (routeAction) query.action = routeAction
   return query
 }
 function isSameConsultationRouteQuery(nextQuery = {}) {
-  return ['id', 'ownerFilter', 'status', 'messageFilter', 'dispatchFilter', 'followUpFilter', 'riskFilter', 'sortMode']
+  return ['id', 'action', 'ownerFilter', 'status', 'messageFilter', 'dispatchFilter', 'followUpFilter', 'riskFilter', 'sortMode']
     .every(key => trimText(route.query[key]) === trimText(nextQuery[key]))
 }
-function syncListQuery(detailId = null) {
-  const nextQuery = consultationRouteQuery(detailId)
+function syncListQuery(detailId = null, action = '') {
+  const nextQuery = consultationRouteQuery(detailId, action)
   if (isSameConsultationRouteQuery(nextQuery)) return
   router.replace({ path: '/doctor/consultation', query: nextQuery })
 }
@@ -1070,28 +1405,37 @@ function loadRecords(callback) {
 }
 function autoOpen() {
   const id = Number(route.query.id || 0)
-  if (id && records.value.some(item => item.id === id) && (!detail.value || detail.value.id !== id)) openDetail(id)
+  if (id && records.value.some(item => item.id === id) && (!detail.value || detail.value.id !== id)) openDetail(id, route.query.action)
 }
-function openDetail(id) {
+function openDetail(id, routeAction = '') {
+  const detailAction = resolveConsultationAction(routeAction)
   detailVisible.value = true
   detailLoading.value = true
+  clearFocusedDetailSection()
   consultationMessages.value = []
   messageLoading.value = false
   messageSending.value = false
   resetMessageDraft()
+  resetMessageAiDraft()
+  resetHandleAiDraft()
+  resetFollowUpAiDraft()
   get(`/api/doctor/consultation/detail?id=${id}`, data => {
     detail.value = data ? {
       ...data,
       smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
       messageSummary: normalizeMessageSummary(data?.messageSummary)
     } : null
+    messageAiScene.value = recommendMessageAiScene(detail.value, [])
     syncForms()
     loadConsultationMessages(id)
     detailLoading.value = false
-    syncListQuery(id)
+    syncListQuery(id, detailAction)
+    if (detailAction) focusDetailActionSection(detailAction, id)
+    else clearFocusedDetailSection()
   }, message => {
     detailLoading.value = false
     detailVisible.value = false
+    clearFocusedDetailSection()
     ElMessage.warning(message || '问诊详情加载失败')
   })
 }
@@ -1132,6 +1476,9 @@ function loadConsultationMessages(recordId = detail.value?.id) {
   messageLoading.value = true
   get(`/api/doctor/consultation/message/list?recordId=${recordId}`, data => {
     consultationMessages.value = data || []
+    if (!hasMessageAiDraft.value) {
+      messageAiScene.value = recommendMessageAiScene(detail.value, consultationMessages.value)
+    }
     syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
     messageLoading.value = false
   }, message => {
@@ -1265,6 +1612,154 @@ function syncRecordMessageSummary(recordId, summary) {
 function resetMessageDraft() {
   messageDraft.content = ''
   messageDraft.attachments = []
+  resetMessageAiUsage()
+}
+function createEmptyFormAiUsage() {
+  return {
+    logId: null,
+    recordId: null,
+    applied: 0,
+    applyMode: '',
+    applyTarget: '',
+    templateSceneType: '',
+    templateId: null,
+    templateTitle: '',
+    templateUsed: 0
+  }
+}
+function resetHandleAiUsage() {
+  Object.assign(handleAiUsage, createEmptyFormAiUsage())
+}
+function resetFollowUpAiUsage() {
+  Object.assign(followUpAiUsage, createEmptyFormAiUsage())
+}
+function createEmptyHandleAiDraft() {
+  return {
+    logId: null,
+    doctorSummary: '',
+    medicalAdvice: '',
+    followUpPlan: '',
+    conditionLevel: '',
+    disposition: '',
+    diagnosisDirection: '',
+    conclusionTags: [],
+    needFollowUp: 0,
+    followUpWithinDays: null,
+    patientInstruction: '',
+    generationSummary: '',
+    riskFlags: [],
+    promptVersion: '',
+    source: '',
+    fallback: 0
+  }
+}
+function resetHandleAiDraft() {
+  Object.assign(handleAiDraft, createEmptyHandleAiDraft())
+  handleAiRegeneratingField.value = ''
+  handleAiRewriteRequirement.value = ''
+  resetHandleAiUsage()
+}
+function normalizeHandleAiDraft(data) {
+  return {
+    ...createEmptyHandleAiDraft(),
+    ...(data || {}),
+    logId: Number(data?.logId || 0) || null,
+    conclusionTags: Array.isArray(data?.conclusionTags) ? data.conclusionTags.filter(Boolean) : [],
+    riskFlags: Array.isArray(data?.riskFlags) ? data.riskFlags.filter(Boolean) : [],
+    needFollowUp: Number(data?.needFollowUp || 0) === 1 ? 1 : 0,
+    followUpWithinDays: Number(data?.followUpWithinDays || 0) || null
+  }
+}
+function createEmptyFollowUpAiDraft() {
+  return {
+    logId: null,
+    followUpType: 'platform',
+    patientStatus: 'stable',
+    summary: '',
+    advice: '',
+    nextStep: '',
+    needRevisit: 0,
+    nextFollowUpDate: '',
+    generationSummary: '',
+    riskFlags: [],
+    promptVersion: '',
+    source: '',
+    fallback: 0
+  }
+}
+function resetFollowUpAiDraft() {
+  Object.assign(followUpAiDraft, createEmptyFollowUpAiDraft())
+  followUpAiRegeneratingField.value = ''
+  followUpAiRewriteRequirement.value = ''
+  resetFollowUpAiUsage()
+}
+function normalizeFollowUpAiDraft(data) {
+  return {
+    ...createEmptyFollowUpAiDraft(),
+    ...(data || {}),
+    logId: Number(data?.logId || 0) || null,
+    followUpType: ['platform', 'phone', 'offline', 'other'].includes(`${data?.followUpType || ''}`) ? `${data.followUpType}` : 'platform',
+    patientStatus: ['improved', 'stable', 'worsened', 'other'].includes(`${data?.patientStatus || ''}`) ? `${data.patientStatus}` : 'stable',
+    riskFlags: Array.isArray(data?.riskFlags) ? data.riskFlags.filter(Boolean) : [],
+    needRevisit: Number(data?.needRevisit || 0) === 1 ? 1 : 0,
+    nextFollowUpDate: trimText(data?.nextFollowUpDate)
+  }
+}
+function createEmptyMessageAiDraft() {
+  return {
+    logId: null,
+    content: '',
+    summary: '',
+    riskFlags: [],
+    sceneType: '',
+    promptVersion: '',
+    source: '',
+    fallback: 0
+  }
+}
+function createEmptyMessageAiUsage() {
+  return {
+    logId: null,
+    recordId: null,
+    applied: 0,
+    applyMode: '',
+    templateSceneType: '',
+    templateId: null,
+    templateTitle: '',
+    templateUsed: 0
+  }
+}
+function resetMessageAiUsage() {
+  Object.assign(messageAiUsage, createEmptyMessageAiUsage())
+}
+function resetMessageAiDraft() {
+  Object.assign(messageAiDraft, createEmptyMessageAiDraft())
+  messageAiScene.value = 'opening'
+}
+function normalizeMessageAiDraft(data) {
+  return {
+    ...createEmptyMessageAiDraft(),
+    ...(data || {}),
+    logId: Number(data?.logId || 0) || null,
+    sceneType: normalizeMessageAiScene(data?.sceneType || messageAiScene.value),
+    riskFlags: Array.isArray(data?.riskFlags) ? data.riskFlags.filter(Boolean) : []
+  }
+}
+function normalizeMessageAiScene(value) {
+  return ['opening', 'clarify', 'check_result', 'follow_up'].includes(`${value || ''}`) ? `${value}` : 'opening'
+}
+function messageAiSceneLabel(value) {
+  return ({
+    opening: '首次接诊',
+    clarify: '补充追问',
+    check_result: '结果解读',
+    follow_up: '复诊随访'
+  })[normalizeMessageAiScene(value)] || '首次接诊'
+}
+function recommendMessageAiScene(record = detail.value, messages = consultationMessages.value) {
+  if (record?.status === 'completed') return 'follow_up'
+  const hasConversation = (messages || []).some(item => item?.senderType === 'user' || item?.senderType === 'doctor')
+  return hasConversation ? 'clarify' : 'opening'
 }
 function messageAttachments(message) {
   return Array.isArray(message?.attachments) && message.attachments.length
@@ -1314,6 +1809,362 @@ function handleMessageUploadSuccess(response) {
 function removeMessageAttachment(index) {
   messageDraft.attachments.splice(index, 1)
 }
+function generateMessageAiDraft() {
+  const recordId = detail.value?.id
+  if (!recordId) return
+  if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂无发送权限')
+  messageAiDraftLoading.value = true
+  post('/api/doctor/consultation/message/ai-draft', { recordId, sceneType: messageAiScene.value }, data => {
+    Object.assign(messageAiDraft, normalizeMessageAiDraft(data))
+    messageAiScene.value = normalizeMessageAiScene(data?.sceneType || messageAiScene.value)
+    messageAiDraftLoading.value = false
+    if (!trimText(messageAiDraft.content)) {
+      ElMessage.warning('当前没有生成可用的回复建议')
+      return
+    }
+    ElMessage.success(messageAiDraft.fallback === 1 ? '已生成规则兜底草稿' : 'AI 回复建议已生成')
+  }, message => {
+    messageAiDraftLoading.value = false
+    ElMessage.warning(message || 'AI 回复建议生成失败')
+  })
+}
+function applyMessageAiDraft(mode = 'replace') {
+  if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂无发送权限')
+  const content = trimText(messageAiDraft.content)
+  if (!content) return ElMessage.warning('当前还没有可带入的回复建议')
+  const current = trimText(messageDraft.content)
+  messageDraft.content = mode === 'append' && current ? `${current}\n${content}` : content
+  applyMessageAiUsage(messageAiDraft.logId, mode)
+  ElMessage.success(mode === 'append' ? '已将 AI 建议追加到消息输入框' : '已将 AI 建议带入消息输入框')
+}
+function currentMessageTemplateTrackingMeta() {
+  if (!selectedMessageTemplate.value) return null
+  return {
+    id: selectedMessageTemplate.value.id,
+    title: selectedMessageTemplate.value.title,
+    sceneType: currentMessageTemplateMeta.value.sceneType
+  }
+}
+function currentFormTemplateTrackingMeta(sceneType) {
+  const template = selectedReplyTemplate(sceneType)
+  if (!template) return null
+  return {
+    id: template.id,
+    title: template.title,
+    sceneType: template.sceneType || sceneType
+  }
+}
+function applyMessageAiUsage(logId, mode = 'replace', template = null) {
+  if (!logId || !detail.value?.id) return
+  Object.assign(messageAiUsage, {
+    ...createEmptyMessageAiUsage(),
+    logId,
+    recordId: detail.value.id,
+    applied: 1,
+    applyMode: mode,
+    templateSceneType: template?.sceneType || '',
+    templateId: template?.id || null,
+    templateTitle: template?.title || '',
+    templateUsed: template ? 1 : 0
+  })
+  post('/api/doctor/consultation/message/ai-draft/apply', {
+    recordId: detail.value.id,
+    logId,
+    applyMode: mode,
+    templateSceneType: template?.sceneType || null,
+    templateId: template?.id || null,
+    templateTitle: template?.title || null
+  }, () => {}, () => {})
+}
+function applyFormAiUsage(targetUsage, logId, applyTarget, options = {}) {
+  if (!logId || !detail.value?.id) return
+  const {
+    applyMode = 'replace',
+    template = null
+  } = options
+  Object.assign(targetUsage, {
+    ...createEmptyFormAiUsage(),
+    logId,
+    recordId: detail.value.id,
+    applied: 1,
+    applyMode,
+    applyTarget,
+    templateSceneType: template?.sceneType || '',
+    templateId: template?.id || null,
+    templateTitle: template?.title || '',
+    templateUsed: template ? 1 : 0
+  })
+  post('/api/doctor/consultation/form/ai-draft/apply', {
+    recordId: detail.value.id,
+    logId,
+    applyMode,
+    applyTarget,
+    templateSceneType: template?.sceneType || null,
+    templateId: template?.id || null,
+    templateTitle: template?.title || null
+  }, () => {}, () => {})
+}
+function ensureTemplateSelection(sceneType) {
+  if (!sceneType) return
+  const templates = sceneTemplates(sceneType)
+  const currentId = templateSelection[sceneType]
+  if (currentId && templates.some(item => item.id === currentId)) return
+  templateSelection[sceneType] = templates.length ? templates[0].id : null
+}
+function ensureFormTemplateSelections() {
+  ['handle_summary', 'medical_advice', 'follow_up_plan', 'patient_instruction', 'followup_summary', 'followup_advice', 'followup_next_step']
+    .forEach(sceneType => ensureTemplateSelection(sceneType))
+}
+function applyMessageTemplate(mode = 'replace') {
+  if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂无发送权限')
+  const content = trimText(selectedMessageTemplate.value?.content)
+  if (!content) return ElMessage.warning('请先选择沟通模板')
+  const current = trimText(messageDraft.content)
+  messageDraft.content = mode === 'append' && current ? `${current}\n${content}` : content
+  const templateMeta = currentMessageTemplateTrackingMeta()
+  if (mode === 'replace') {
+    resetMessageAiUsage()
+  } else if (messageAiUsage.logId) {
+    applyMessageAiUsage(messageAiUsage.logId, 'compose', templateMeta)
+  }
+  ElMessage.success(mode === 'append' ? '已将沟通模板追加到消息输入框' : '已将沟通模板带入消息输入框')
+}
+function composeMessageAiWithTemplate() {
+  if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂无发送权限')
+  const aiContent = trimText(messageAiDraft.content)
+  if (!aiContent) return ElMessage.warning('请先生成 AI 沟通建议')
+  const templateContent = trimText(selectedMessageTemplate.value?.content)
+  if (!templateContent) return ElMessage.warning('请先选择沟通模板')
+  messageDraft.content = joinUniqueSegments([aiContent, templateContent])
+  applyMessageAiUsage(messageAiDraft.logId, 'compose', currentMessageTemplateTrackingMeta())
+  ElMessage.success('已将 AI 建议与沟通模板拼装后带入消息输入框')
+}
+function appendDraftSnapshotText(target, key, value) {
+  const text = trimText(value)
+  if (text) target[key] = text
+}
+function hasDraftSnapshotContent(target) {
+  return !!(target && Object.keys(target).length)
+}
+function buildHandleAiCurrentDraftJson(fieldKey = '') {
+  const payload = {}
+  const editingDraft = {}
+  const conclusionDraft = {}
+  const currentAiDraft = {}
+
+  appendDraftSnapshotText(editingDraft, 'summary', handleForm.summary)
+  appendDraftSnapshotText(editingDraft, 'medicalAdvice', handleForm.medicalAdvice)
+  appendDraftSnapshotText(editingDraft, 'followUpPlan', handleForm.followUpPlan)
+  if (hasDraftSnapshotContent(editingDraft)) payload.editingDraft = editingDraft
+
+  if (conclusionForm.conditionLevel) conclusionDraft.conditionLevel = conclusionForm.conditionLevel
+  if (conclusionForm.disposition) conclusionDraft.disposition = conclusionForm.disposition
+  appendDraftSnapshotText(conclusionDraft, 'diagnosisDirection', conclusionForm.diagnosisDirection)
+  if (conclusionForm.conclusionTags.length) conclusionDraft.conclusionTags = [...conclusionForm.conclusionTags]
+  if (hasDraftSnapshotContent(conclusionDraft) || conclusionForm.needFollowUp === 1 || trimText(conclusionForm.patientInstruction)) {
+    conclusionDraft.needFollowUp = conclusionForm.needFollowUp === 1 ? 1 : 0
+    if (conclusionForm.needFollowUp === 1) {
+      conclusionDraft.followUpWithinDays = Number(conclusionForm.followUpWithinDays || 0) || null
+    }
+    appendDraftSnapshotText(conclusionDraft, 'patientInstruction', conclusionForm.patientInstruction)
+    payload.conclusionDraft = conclusionDraft
+  }
+
+  if (hasHandleAiDraft.value) {
+    appendDraftSnapshotText(currentAiDraft, 'doctorSummary', handleAiDraft.doctorSummary)
+    appendDraftSnapshotText(currentAiDraft, 'medicalAdvice', handleAiDraft.medicalAdvice)
+    appendDraftSnapshotText(currentAiDraft, 'followUpPlan', handleAiDraft.followUpPlan)
+    if (handleAiDraft.conditionLevel) currentAiDraft.conditionLevel = handleAiDraft.conditionLevel
+    if (handleAiDraft.disposition) currentAiDraft.disposition = handleAiDraft.disposition
+    appendDraftSnapshotText(currentAiDraft, 'diagnosisDirection', handleAiDraft.diagnosisDirection)
+    if (handleAiDraft.conclusionTags.length) currentAiDraft.conclusionTags = [...handleAiDraft.conclusionTags]
+    if (hasDraftSnapshotContent(currentAiDraft) || handleAiDraft.needFollowUp === 1 || trimText(handleAiDraft.patientInstruction) || handleAiDraft.riskFlags.length) {
+      currentAiDraft.needFollowUp = handleAiDraft.needFollowUp === 1 ? 1 : 0
+      if (handleAiDraft.needFollowUp === 1) {
+        currentAiDraft.followUpWithinDays = Number(handleAiDraft.followUpWithinDays || 0) || null
+      }
+      appendDraftSnapshotText(currentAiDraft, 'patientInstruction', handleAiDraft.patientInstruction)
+      if (handleAiDraft.riskFlags.length) currentAiDraft.riskFlags = [...handleAiDraft.riskFlags]
+      payload.currentAiDraft = currentAiDraft
+    }
+  }
+
+  if (!payload.editingDraft && !payload.conclusionDraft && !payload.currentAiDraft) return ''
+  if (handleAiFieldMetaMap[fieldKey]?.requestField) payload.regenerateField = handleAiFieldMetaMap[fieldKey].requestField
+  payload.rewriteMode = fieldKey ? 'field_regenerate' : 'full_regenerate'
+  return JSON.stringify(payload)
+}
+function buildFollowUpAiCurrentDraftJson(fieldKey = '') {
+  const payload = {}
+  const followUpDraft = {}
+  const currentAiDraft = {}
+
+  const hasFollowUpFormContent = !!(
+    trimText(followUpForm.summary)
+    || trimText(followUpForm.advice)
+    || trimText(followUpForm.nextStep)
+    || followUpForm.needRevisit === 1
+    || trimText(followUpForm.nextFollowUpDate)
+    || followUpForm.followUpType !== 'platform'
+    || followUpForm.patientStatus !== 'stable'
+  )
+  if (hasFollowUpFormContent) {
+    followUpDraft.followUpType = followUpForm.followUpType
+    followUpDraft.patientStatus = followUpForm.patientStatus
+    appendDraftSnapshotText(followUpDraft, 'summary', followUpForm.summary)
+    appendDraftSnapshotText(followUpDraft, 'advice', followUpForm.advice)
+    appendDraftSnapshotText(followUpDraft, 'nextStep', followUpForm.nextStep)
+    followUpDraft.needRevisit = followUpForm.needRevisit === 1 ? 1 : 0
+    appendDraftSnapshotText(followUpDraft, 'nextFollowUpDate', followUpForm.nextFollowUpDate)
+    payload.followUpDraft = followUpDraft
+  }
+
+  if (hasFollowUpAiDraft.value) {
+    currentAiDraft.followUpType = followUpAiDraft.followUpType
+    currentAiDraft.patientStatus = followUpAiDraft.patientStatus
+    appendDraftSnapshotText(currentAiDraft, 'summary', followUpAiDraft.summary)
+    appendDraftSnapshotText(currentAiDraft, 'advice', followUpAiDraft.advice)
+    appendDraftSnapshotText(currentAiDraft, 'nextStep', followUpAiDraft.nextStep)
+    currentAiDraft.needRevisit = followUpAiDraft.needRevisit === 1 ? 1 : 0
+    appendDraftSnapshotText(currentAiDraft, 'nextFollowUpDate', followUpAiDraft.nextFollowUpDate)
+    if (followUpAiDraft.riskFlags.length) currentAiDraft.riskFlags = [...followUpAiDraft.riskFlags]
+    payload.currentAiDraft = currentAiDraft
+  }
+
+  if (!payload.followUpDraft && !payload.currentAiDraft) return ''
+  if (followUpAiFieldMetaMap[fieldKey]?.requestField) payload.regenerateField = followUpAiFieldMetaMap[fieldKey].requestField
+  payload.rewriteMode = fieldKey ? 'field_regenerate' : 'full_regenerate'
+  return JSON.stringify(payload)
+}
+function generateHandleAiDraft(fieldKey = '') {
+  const recordId = detail.value?.id
+  if (!recordId) return
+  if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
+  const fieldMeta = fieldKey ? handleAiFieldMetaMap[fieldKey] : null
+  if (fieldKey && !fieldMeta) return ElMessage.warning('当前字段暂不支持单独重写')
+  const rewriteRequirement = trimText(handleAiRewriteRequirement.value)
+  const currentDraftJson = buildHandleAiCurrentDraftJson(fieldKey)
+  const hasRewriteContext = !!(rewriteRequirement || currentDraftJson)
+  if (fieldMeta) {
+    handleAiRegeneratingField.value = fieldKey
+  } else {
+    handleAiDraftLoading.value = true
+  }
+  post('/api/doctor/consultation/handle/ai-draft', {
+    recordId,
+    regenerateField: fieldMeta?.requestField || null,
+    rewriteRequirement: rewriteRequirement || null,
+    currentDraftJson: currentDraftJson || null
+  }, data => {
+    Object.assign(handleAiDraft, normalizeHandleAiDraft(data))
+    handleAiDraftLoading.value = false
+    handleAiRegeneratingField.value = ''
+    if (!hasHandleAiDraft.value) {
+      ElMessage.warning('当前没有生成可用的处理草稿')
+      return
+    }
+    if (fieldMeta) {
+      ElMessage.success(hasRewriteContext
+        ? `${fieldMeta.label}已按当前草稿继续改写，其余字段仅做必要同步`
+        : `${fieldMeta.label}已重新生成，当前处理草稿其余字段也已同步刷新`)
+      return
+    }
+    ElMessage.success(handleAiDraft.fallback === 1
+      ? (hasRewriteContext ? '已结合当前草稿生成规则兜底处理草稿' : '已生成规则兜底处理草稿')
+      : (hasRewriteContext ? '已基于当前草稿继续生成 AI 处理草稿' : 'AI 处理草稿已生成'))
+  }, message => {
+    handleAiDraftLoading.value = false
+    handleAiRegeneratingField.value = ''
+    ElMessage.warning(message || 'AI 处理草稿生成失败')
+  })
+}
+function applyGeneratedHandleDraft() {
+  if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
+  if (!hasHandleAiDraft.value) return ElMessage.warning('请先生成 AI 处理草稿')
+  let changed = 0
+  changed += mergeTextField(handleForm, 'summary', handleAiDraft.doctorSummary)
+  changed += mergeTextField(handleForm, 'medicalAdvice', handleAiDraft.medicalAdvice)
+  changed += mergeTextField(handleForm, 'followUpPlan', handleAiDraft.followUpPlan)
+  changed += mergeTextField(conclusionForm, 'patientInstruction', handleAiDraft.patientInstruction)
+  if (!changed) return ElMessage.info('当前处理表单已有相同内容，可继续人工调整')
+  applyFormAiUsage(handleAiUsage, handleAiDraft.logId, 'handle_form')
+  ElMessage.success('已将 AI 处理草稿带入表单')
+}
+function applyGeneratedHandleConclusion() {
+  if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
+  if (!hasHandleAiDraft.value) return ElMessage.warning('请先生成 AI 处理草稿')
+  let changed = 0
+  changed += assignField(conclusionForm, 'conditionLevel', handleAiDraft.conditionLevel || conclusionForm.conditionLevel)
+  changed += assignField(conclusionForm, 'disposition', handleAiDraft.disposition || conclusionForm.disposition)
+  changed += fillTextField(conclusionForm, 'diagnosisDirection', handleAiDraft.diagnosisDirection)
+  changed += mergeArrayField(conclusionForm, 'conclusionTags', handleAiDraft.conclusionTags)
+  changed += assignField(conclusionForm, 'needFollowUp', handleAiDraft.needFollowUp)
+  changed += assignField(conclusionForm, 'followUpWithinDays', handleAiDraft.needFollowUp === 1 ? handleAiDraft.followUpWithinDays : null)
+  changed += mergeTextField(conclusionForm, 'patientInstruction', handleAiDraft.patientInstruction)
+  if (handleAiDraft.conditionLevel || handleAiDraft.disposition || handleAiDraft.conclusionTags.length) {
+    changed += assignField(conclusionForm, 'isConsistentWithAi', 1)
+  }
+  if (!changed) return ElMessage.info('当前结构化结论已有相同内容，可继续人工调整')
+  applyFormAiUsage(handleAiUsage, handleAiDraft.logId, 'conclusion_form')
+  ElMessage.success('已将 AI 结构化结论带入表单')
+}
+function generateFollowUpAiDraft(fieldKey = '') {
+  const recordId = detail.value?.id
+  if (!recordId) return
+  if (!canSubmitFollowUp.value) return ElMessage.warning(followUpHint.value)
+  const fieldMeta = fieldKey ? followUpAiFieldMetaMap[fieldKey] : null
+  if (fieldKey && !fieldMeta) return ElMessage.warning('当前字段暂不支持单独重写')
+  const rewriteRequirement = trimText(followUpAiRewriteRequirement.value)
+  const currentDraftJson = buildFollowUpAiCurrentDraftJson(fieldKey)
+  const hasRewriteContext = !!(rewriteRequirement || currentDraftJson)
+  if (fieldMeta) {
+    followUpAiRegeneratingField.value = fieldKey
+  } else {
+    followUpAiDraftLoading.value = true
+  }
+  post('/api/doctor/consultation/follow-up/ai-draft', {
+    recordId,
+    regenerateField: fieldMeta?.requestField || null,
+    rewriteRequirement: rewriteRequirement || null,
+    currentDraftJson: currentDraftJson || null
+  }, data => {
+    Object.assign(followUpAiDraft, normalizeFollowUpAiDraft(data))
+    followUpAiDraftLoading.value = false
+    followUpAiRegeneratingField.value = ''
+    if (!hasFollowUpAiDraft.value) {
+      ElMessage.warning('当前没有生成可用的随访草稿')
+      return
+    }
+    if (fieldMeta) {
+      ElMessage.success(hasRewriteContext
+        ? `${fieldMeta.label}已按当前草稿继续改写，其余字段仅做必要同步`
+        : `${fieldMeta.label}已重新生成，当前随访草稿其余字段也已同步刷新`)
+      return
+    }
+    ElMessage.success(followUpAiDraft.fallback === 1
+      ? (hasRewriteContext ? '已结合当前草稿生成规则兜底随访草稿' : '已生成规则兜底随访草稿')
+      : (hasRewriteContext ? '已基于当前草稿继续生成 AI 随访草稿' : 'AI 随访草稿已生成'))
+  }, message => {
+    followUpAiDraftLoading.value = false
+    followUpAiRegeneratingField.value = ''
+    ElMessage.warning(message || 'AI 随访草稿生成失败')
+  })
+}
+function applyGeneratedFollowUpDraft() {
+  if (!canSubmitFollowUp.value) return ElMessage.warning(followUpHint.value)
+  if (!hasFollowUpAiDraft.value) return ElMessage.warning('请先生成 AI 随访草稿')
+  let changed = 0
+  changed += assignField(followUpForm, 'followUpType', followUpAiDraft.followUpType)
+  changed += assignField(followUpForm, 'patientStatus', followUpAiDraft.patientStatus)
+  changed += mergeTextField(followUpForm, 'summary', followUpAiDraft.summary)
+  changed += mergeTextField(followUpForm, 'advice', followUpAiDraft.advice)
+  changed += mergeTextField(followUpForm, 'nextStep', followUpAiDraft.nextStep)
+  changed += assignField(followUpForm, 'needRevisit', followUpAiDraft.needRevisit)
+  changed += assignField(followUpForm, 'nextFollowUpDate', followUpAiDraft.needRevisit === 1 ? followUpAiDraft.nextFollowUpDate : '')
+  if (!changed) return ElMessage.info('当前随访表单已有相同内容，可继续人工调整')
+  applyFormAiUsage(followUpAiUsage, followUpAiDraft.logId, 'follow_up_form')
+  ElMessage.success('已将 AI 随访草稿带入表单')
+}
 function sendConsultationMessage() {
   const recordId = detail.value?.id
   if (!recordId) return
@@ -1321,15 +2172,27 @@ function sendConsultationMessage() {
   const content = `${messageDraft.content || ''}`.trim()
   if (!content && !messageDraft.attachments.length) return ElMessage.warning('请先输入消息内容或上传图片')
   const shouldAutoClaim = detail.value?.doctorAssignment?.status !== 'claimed'
+  const willEnterProcessing = !['processing', 'completed'].includes(`${detail.value?.status || ''}`)
+    && !['processing', 'completed'].includes(`${detail.value?.doctorHandle?.status || ''}`)
   messageSending.value = true
   post('/api/doctor/consultation/message/send', {
     recordId,
     content,
-    attachments: messageDraft.attachments
+    attachments: messageDraft.attachments,
+    aiLogId: messageAiUsage.applied === 1 && messageAiUsage.recordId === recordId ? messageAiUsage.logId : null
   }, () => {
     messageSending.value = false
     resetMessageDraft()
-    ElMessage.success(shouldAutoClaim ? '消息已发送，当前问诊单已自动认领' : '消息已发送')
+    resetMessageAiDraft()
+    ElMessage.success(
+      shouldAutoClaim && willEnterProcessing
+        ? '消息已发送，当前问诊单已自动认领并进入处理中'
+        : shouldAutoClaim
+          ? '消息已发送，当前问诊单已自动认领'
+          : willEnterProcessing
+            ? '消息已发送，当前问诊单已进入处理中'
+            : '消息已发送'
+    )
     refreshDoctorWorkspaceContext()
     loadRecords(() => openDetail(recordId))
   }, message => {
@@ -1340,16 +2203,42 @@ function sendConsultationMessage() {
 function sceneTemplates(sceneType) {
   return replyTemplates.value.filter(item => item.status === 1 && item.sceneType === sceneType)
 }
+function selectedReplyTemplate(sceneType) {
+  const templateId = templateSelection[sceneType]
+  return replyTemplates.value.find(item => item.id === templateId && item.sceneType === sceneType) || null
+}
 function openReplyTemplateManager() {
   router.push('/doctor/reply-template')
 }
 function applyTemplateToField(sceneType, fieldKey, mode = 'append', formType = 'handle') {
-  const templateId = templateSelection[sceneType]
-  const template = replyTemplates.value.find(item => item.id === templateId)
+  const template = selectedReplyTemplate(sceneType)
   if (!template) return ElMessage.warning('请先选择模板')
   const form = formType === 'followUp' ? followUpForm : fieldKey in handleForm ? handleForm : conclusionForm
   const current = `${form[fieldKey] || ''}`.trim()
   form[fieldKey] = mode === 'replace' || !current ? template.content : `${current}\n${template.content}`
+}
+function composeAiFieldWithTemplate(sceneType, fieldKey, aiValue, options = {}) {
+  const {
+    formType = 'handle',
+    label = '当前字段',
+    applyTarget = formType === 'followUp' ? 'follow_up_form' : 'handle_form'
+  } = options
+  const aiContent = trimText(aiValue)
+  if (!aiContent) return ElMessage.warning(`当前还没有可用于${label}的 AI 草稿`)
+  const template = selectedReplyTemplate(sceneType)
+  if (!template?.content) return ElMessage.warning('请先选择模板')
+  const form = formType === 'followUp' ? followUpForm : fieldKey in handleForm ? handleForm : conclusionForm
+  const composed = joinUniqueSegments([aiContent, template.content])
+  if (!composed) return ElMessage.warning('当前没有可拼装的内容')
+  if (trimText(form[fieldKey]) === composed) return ElMessage.info(`当前${label}已是相同内容，可继续人工调整`)
+  form[fieldKey] = composed
+  const usage = formType === 'followUp' ? followUpAiUsage : handleAiUsage
+  const logId = formType === 'followUp' ? followUpAiDraft.logId : handleAiDraft.logId
+  applyFormAiUsage(usage, logId, applyTarget, {
+    applyMode: 'compose',
+    template: currentFormTemplateTrackingMeta(sceneType)
+  })
+  ElMessage.success(`已将 AI 草稿与模板拼装后带入${label}`)
 }
 function applyAiDraftToHandle() {
   if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
@@ -1442,6 +2331,22 @@ function mergeTextField(form, fieldKey, value) {
   }
   return 0
 }
+function fillTextField(form, fieldKey, value) {
+  const next = trimText(value)
+  if (!next) return 0
+  if (trimText(form[fieldKey])) return 0
+  form[fieldKey] = next
+  return 1
+}
+function mergeArrayField(form, fieldKey, values) {
+  const next = Array.isArray(values) ? values.map(item => trimText(item)).filter(Boolean) : []
+  if (!next.length) return 0
+  const current = Array.isArray(form[fieldKey]) ? form[fieldKey] : []
+  const merged = [...new Set([...current, ...next])]
+  if (merged.length === current.length) return 0
+  form[fieldKey] = merged
+  return 1
+}
 function assignField(form, fieldKey, value) {
   if (value === undefined) return 0
   if (form[fieldKey] === value) return 0
@@ -1475,7 +2380,7 @@ function submitHandle(status) {
   if (status === 'completed' && conclusionForm.isConsistentWithAi === null) return ElMessage.warning('完成处理时请填写是否与 AI 一致')
   if (status === 'completed' && conclusionForm.needFollowUp === 1 && !conclusionForm.followUpWithinDays) return ElMessage.warning('需要随访时请填写建议随访时效')
   if (status === 'completed' && conclusionForm.isConsistentWithAi === 0 && !conclusionForm.aiMismatchReasons.length && !`${conclusionForm.aiMismatchRemark || ''}`.trim()) {
-    return ElMessage.warning('涓?AI 涓嶄竴鑷存椂璇疯嚦灏戦€夋嫨涓€涓樊寮傚師鍥犳垨濉啓琛ュ厖璇存槑')
+    return ElMessage.warning('与 AI 不一致时请至少选择一个差异原因或填写补充说明')
   }
   submitLoading.value = true
   submitStatus.value = status
@@ -1495,7 +2400,8 @@ function submitHandle(status) {
     isConsistentWithAi: conclusionForm.isConsistentWithAi,
     aiMismatchReasons: conclusionForm.isConsistentWithAi === 0 ? (conclusionForm.aiMismatchReasons || []) : [],
     aiMismatchRemark: conclusionForm.isConsistentWithAi === 0 ? `${conclusionForm.aiMismatchRemark || ''}`.trim() : '',
-    patientInstruction: `${conclusionForm.patientInstruction || ''}`.trim()
+    patientInstruction: `${conclusionForm.patientInstruction || ''}`.trim(),
+    aiLogId: handleAiUsage.applied === 1 && handleAiUsage.recordId === detail.value.id ? handleAiUsage.logId : null
   }, () => {
     submitLoading.value = false
     submitStatus.value = ''
@@ -1522,7 +2428,8 @@ function submitFollowUp() {
     advice: `${followUpForm.advice || ''}`.trim(),
     nextStep: `${followUpForm.nextStep || ''}`.trim(),
     needRevisit: followUpForm.needRevisit,
-    nextFollowUpDate: followUpForm.needRevisit === 1 ? followUpForm.nextFollowUpDate : null
+    nextFollowUpDate: followUpForm.needRevisit === 1 ? followUpForm.nextFollowUpDate : null,
+    aiLogId: followUpAiUsage.applied === 1 && followUpAiUsage.recordId === detail.value.id ? followUpAiUsage.logId : null
   }, () => {
     followUpSubmitting.value = false
     ElMessage.success('随访记录已保存')
@@ -1622,21 +2529,27 @@ watch(detailVisible, value => {
     consultationMessages.value = []
     messageLoading.value = false
     messageSending.value = false
+    clearFocusedDetailSection()
     resetMessageDraft()
+    resetMessageAiDraft()
+    resetHandleAiDraft()
+    resetFollowUpAiDraft()
     syncForms()
-    if (route.query.id) syncListQuery()
+    if (route.query.id || route.query.action) syncListQuery(null, '')
   }
 })
 watch(
   [ownerFilter, statusFilter, messageFilter, dispatchFilter, followUpFilter, riskFilter, sortMode],
   () => {
     const detailId = detailVisible.value ? (detail.value?.id || Number(route.query.id || 0) || null) : null
-    syncListQuery(detailId)
+    const detailAction = detailVisible.value ? resolveConsultationAction(route.query.action) : ''
+    syncListQuery(detailId, detailAction)
   }
 )
 watch(
   () => [
     route.query.id,
+    route.query.action,
     route.query.ownerFilter,
     route.query.status,
     route.query.messageFilter,
@@ -1653,7 +2566,7 @@ watch(
       return
     }
     if (!detailLoading.value && records.value.some(item => item.id === routeId) && (!detailVisible.value || detail.value?.id !== routeId)) {
-      openDetail(routeId)
+      openDetail(routeId, route.query.action)
     }
   },
   { immediate: true }
@@ -1661,6 +2574,13 @@ watch(
 watch(() => conclusionForm.isConsistentWithAi, value => { if (value !== 0) clearAiMismatchReview() })
 watch(() => conclusionForm.needFollowUp, value => { if (value !== 1) conclusionForm.followUpWithinDays = null })
 watch(() => followUpForm.needRevisit, value => { if (value !== 1) followUpForm.nextFollowUpDate = '' })
+watch([messageAiScene, replyTemplates], () => {
+  ensureTemplateSelection(currentMessageTemplateMeta.value.sceneType)
+}, { immediate: true })
+watch(replyTemplates, () => {
+  ensureFormTemplateSelections()
+}, { immediate: true })
+onBeforeUnmount(() => { clearFocusedDetailSection() })
 onMounted(() => { refreshAll(); loadReplyTemplates() })
 </script>
 
@@ -1703,6 +2623,15 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 .block,
 .panel {
   padding: 22px;
+}
+
+.panel {
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.focus-action-button {
+  border-radius: 18px;
+  box-shadow: 0 0 0 3px rgba(15, 102, 101, 0.12);
 }
 
 .head {
@@ -1770,6 +2699,39 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 }
 
 .ai-draft-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-message-banner {
+  margin-bottom: 0;
+}
+
+.ai-message-banner strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.ai-message-banner p {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.7;
+}
+
+.ai-rewrite-box {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-rewrite-box span {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.ai-message-draft-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2125,6 +3087,11 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   border-radius: 18px;
   background: rgba(19, 73, 80, 0.05);
   color: #36555c;
+}
+
+:deep(.focus-action-input .el-textarea__inner) {
+  border-color: rgba(15, 102, 101, 0.28);
+  box-shadow: 0 0 0 3px rgba(15, 102, 101, 0.12);
 }
 
 .template-tools {
