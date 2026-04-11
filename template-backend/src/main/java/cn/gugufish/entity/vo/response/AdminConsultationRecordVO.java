@@ -44,4 +44,5 @@ public class AdminConsultationRecordVO {
     TriageSessionVO triageSession;
     TriageResultVO triageResult;
     TriageFeedbackVO triageFeedback;
+    ConsultationServiceFeedbackVO serviceFeedback;
 }

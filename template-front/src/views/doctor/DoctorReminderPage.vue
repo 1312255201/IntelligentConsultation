@@ -17,6 +17,7 @@
             <span v-if="recommendedCount">系统推荐 {{ recommendedCount }}</span>
             <span v-if="unreadCount">患者新消息 {{ unreadCount }}</span>
             <span v-if="waitingReplyCount">待回复 {{ waitingReplyCount }}</span>
+            <span v-if="attentionServiceFeedbackCount">待关注评价 {{ attentionServiceFeedbackCount }}</span>
             <span v-if="pendingFollowUpCount">待随访 {{ pendingFollowUpCount }}</span>
             <span v-if="overdueFollowUpCount" class="chip-danger">逾期 {{ overdueFollowUpCount }}</span>
           </div>
@@ -32,6 +33,7 @@
           <article class="stat-card"><span>系统推荐</span><strong>{{ recommendedCount }}</strong></article>
           <article class="stat-card stat-card-danger"><span>患者新消息</span><strong>{{ unreadCount }}</strong></article>
           <article class="stat-card stat-card-warning"><span>待医生回复</span><strong>{{ waitingReplyCount }}</strong></article>
+          <article class="stat-card stat-card-warning"><span>待关注评价</span><strong>{{ attentionServiceFeedbackCount }}</strong></article>
           <article class="stat-card"><span>待随访</span><strong>{{ pendingFollowUpCount }}</strong></article>
           <article class="stat-card stat-card-warning"><span>今日到期</span><strong>{{ dueTodayFollowUpCount }}</strong></article>
           <article class="stat-card stat-card-danger"><span>逾期随访</span><strong>{{ overdueFollowUpCount }}</strong></article>
@@ -54,6 +56,11 @@
           <span>{{ unreadCount }}</span>
           <small>集中处理患者刚补充的病情变化和检查结果。</small>
         </button>
+        <button type="button" class="focus-card" @click="openConsultationList({ status: 'completed', feedbackFilter: 'attention' })">
+          <strong>待关注服务评价</strong>
+          <span>{{ attentionServiceFeedbackCount }}</span>
+          <small>优先回看低分或未解决的服务评价，补足问诊服务反馈闭环。</small>
+        </button>
         <button type="button" class="focus-card" @click="openConsultationList({ followUpFilter: 'pending', sortMode: 'follow_up_due' })">
           <strong>待随访</strong>
           <span>{{ pendingFollowUpCount }}</span>
@@ -75,6 +82,7 @@
             <el-radio-button label="reply">待回复</el-radio-button>
             <el-radio-button label="followup">待随访</el-radio-button>
             <el-radio-button label="overdue">逾期</el-radio-button>
+            <el-radio-button label="feedback">待关注评价</el-radio-button>
           </el-radio-group>
         </div>
 
@@ -92,6 +100,7 @@
               <span>{{ item.categoryName || '未分类' }}</span>
               <span>{{ messageProgressLabel(item) }}</span>
               <span>{{ ownerLabel(item) }}</span>
+              <span v-if="isAttentionServiceFeedbackRecord(item, doctorId)">{{ serviceFeedbackLabel(item, doctorId) }}</span>
               <span v-if="isPendingFollowUpRecord(item)">{{ followUpTagLabel(item) }}</span>
             </div>
             <div class="feed-actions">
@@ -134,8 +143,10 @@ import { get, post } from '@/net'
 import {
   compareDateAsc, compareDateDesc, compareRecentDoctorRecord, followUpDueDate, followUpLine,
   followUpReminderText, followUpState, followUpTagLabel, formatDoctorReminderDate,
-  getDoctorMessageSummary, hasUnreadMessages, isPendingFollowUpRecord, isRecommendedConsultation,
-  isRiskConsultation, messageProgressLabel, normalizeDoctorReminderRecords, ownerType, waitingDoctorReply
+  getDoctorMessageSummary, hasUnreadMessages, isAttentionServiceFeedbackRecord, isPendingFollowUpRecord,
+  isRecommendedConsultation, isRiskConsultation, messageProgressLabel, normalizeDoctorReminderRecords,
+  ownerType, serviceFeedbackLabel, serviceFeedbackReminderText, serviceFeedbackState, serviceFeedbackTime,
+  waitingDoctorReply
 } from '@/doctor/reminder'
 
 const router = useRouter()
@@ -158,6 +169,10 @@ const recommendedRecords = computed(() => records.value.filter(item => isRecomme
 const unreadRecords = computed(() => records.value.filter(hasUnreadMessages).slice().sort(compareMessageRecords))
 const waitingReplyRecords = computed(() => records.value.filter(waitingDoctorReply).slice().sort(compareMessageRecords))
 const pendingFollowUpRecords = computed(() => records.value.filter(isPendingFollowUpRecord).slice().sort(compareFollowUpRecords))
+const attentionServiceFeedbackRecords = computed(() => records.value
+  .filter(item => isAttentionServiceFeedbackRecord(item, doctorId.value))
+  .slice()
+  .sort(compareServiceFeedbackRecords))
 const actionableRecords = computed(() => records.value.filter(isActionableRecord).slice().sort(compareFeedRecords))
 
 const unclaimedCount = computed(() => unclaimedRecords.value.length)
@@ -165,6 +180,7 @@ const recommendedCount = computed(() => recommendedRecords.value.length)
 const unreadCount = computed(() => unreadRecords.value.length)
 const waitingReplyCount = computed(() => waitingReplyRecords.value.length)
 const pendingFollowUpCount = computed(() => pendingFollowUpRecords.value.length)
+const attentionServiceFeedbackCount = computed(() => attentionServiceFeedbackRecords.value.length)
 const dueTodayFollowUpCount = computed(() => pendingFollowUpRecords.value.filter(item => followUpState(item) === 'due_today').length)
 const overdueFollowUpCount = computed(() => pendingFollowUpRecords.value.filter(item => followUpState(item) === 'overdue').length)
 const actionableRecordCount = computed(() => actionableRecords.value.length)
@@ -174,6 +190,7 @@ const filteredFeedRecords = computed(() => actionableRecords.value.filter(item =
   if (feedFilter.value === 'recommended') return isRecommendedConsultation(item, doctorId.value)
   if (feedFilter.value === 'unread') return hasUnreadMessages(item)
   if (feedFilter.value === 'reply') return waitingDoctorReply(item)
+  if (feedFilter.value === 'feedback') return isAttentionServiceFeedbackRecord(item, doctorId.value)
   if (feedFilter.value === 'followup') return isPendingFollowUpRecord(item)
   if (feedFilter.value === 'overdue') return followUpState(item) === 'overdue'
   return true
@@ -182,6 +199,7 @@ const filteredFeedRecords = computed(() => actionableRecords.value.filter(item =
 const heroSummary = computed(() => {
   if (!records.value.length) return '当前科室还没有可处理的问诊待办，新的认领、消息和随访事项会统一汇总到这里。'
   if (overdueFollowUpCount.value > 0) return `当前有 ${overdueFollowUpCount.value} 条问诊已经逾期随访，建议优先完成本轮回访。`
+  if (attentionServiceFeedbackCount.value > 0) return `当前有 ${attentionServiceFeedbackCount.value} 条服务评价需要重点关注，建议优先回看低分或未解决反馈。`
   if (unclaimedCount.value > 0) return `当前仍有 ${unclaimedCount.value} 条问诊待认领，可优先接手后继续处理。`
   if (unreadCount.value > 0) return `患者刚补充了 ${unreadCount.value} 条新消息，建议尽快回看病情变化。`
   if (waitingReplyCount.value > 0) return `仍有 ${waitingReplyCount.value} 条问诊在等待医生继续回复，可在这里集中推进。`
@@ -257,10 +275,12 @@ function primaryActionMode(record) {
   if (canQuickFollowUp(record) && ['overdue', 'due_today'].includes(followUpState(record))) return 'followup'
   if (canQuickReply(record)) return 'reply'
   if (canQuickFollowUp(record)) return 'followup'
+  if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return 'feedback'
   return 'detail'
 }
 function primaryActionLabel(record) {
   const mode = primaryActionMode(record)
+  if (mode === 'feedback') return '查看评价'
   if (mode === 'claim') return '认领并处理'
   if (mode === 'reply') return '去回复'
   if (mode === 'followup') return '去随访'
@@ -276,11 +296,15 @@ function followUpActionQuery(record) {
     ? { followUpFilter: 'overdue', sortMode: 'follow_up_due', action: 'followup' }
     : { followUpFilter: 'pending', sortMode: 'follow_up_due', action: 'followup' }
 }
+function feedbackActionQuery() {
+  return { status: 'completed', feedbackFilter: 'attention', action: 'feedback' }
+}
 function primaryActionQuery(record) {
   const mode = primaryActionMode(record)
   if (mode === 'claim' && (hasUnreadMessages(record) || waitingDoctorReply(record))) return replyActionQuery(record)
   if (mode === 'reply') return replyActionQuery(record)
   if (mode === 'followup') return followUpActionQuery(record)
+  if (mode === 'feedback') return feedbackActionQuery()
   return reminderQuery(record)
 }
 function handlePrimaryAction(record) {
@@ -291,7 +315,7 @@ function handlePrimaryAction(record) {
   openConsultationRecord(record, primaryActionQuery(record))
 }
 
-function resolveFeedFilter(value) { return ['all', 'unclaimed', 'recommended', 'unread', 'reply', 'followup', 'overdue'].includes(value) ? value : 'all' }
+function resolveFeedFilter(value) { return ['all', 'unclaimed', 'recommended', 'unread', 'reply', 'feedback', 'followup', 'overdue'].includes(value) ? value : 'all' }
 function buildReminderCenterQuery(nextFeed) {
   const query = { ...route.query }
   if (nextFeed && nextFeed !== 'all') query.feed = nextFeed
@@ -303,6 +327,7 @@ function isActionableRecord(record) {
     || isRecommendedConsultation(record, doctorId.value)
     || hasUnreadMessages(record)
     || waitingDoctorReply(record)
+    || isAttentionServiceFeedbackRecord(record, doctorId.value)
     || isPendingFollowUpRecord(record)
 }
 function feedListQuery(feed) {
@@ -310,6 +335,7 @@ function feedListQuery(feed) {
   if (feed === 'recommended') return { dispatchFilter: 'recommended_to_me' }
   if (feed === 'unread') return { messageFilter: 'unread' }
   if (feed === 'reply') return { messageFilter: 'waiting_reply' }
+  if (feed === 'feedback') return { status: 'completed', feedbackFilter: 'attention' }
   if (feed === 'followup') return { followUpFilter: 'pending', sortMode: 'follow_up_due' }
   if (feed === 'overdue') return { followUpFilter: 'overdue', sortMode: 'follow_up_due' }
   return {}
@@ -319,6 +345,7 @@ function reminderQuery(record) {
   if (isPendingFollowUpRecord(record)) return { followUpFilter: 'pending', sortMode: 'follow_up_due' }
   if (hasUnreadMessages(record)) return { messageFilter: 'unread' }
   if (waitingDoctorReply(record)) return { messageFilter: 'waiting_reply' }
+  if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return { status: 'completed', feedbackFilter: 'attention' }
   if (isRecommendedConsultation(record, doctorId.value)) return { dispatchFilter: 'recommended_to_me' }
   if (ownerType(record, doctorId.value) === 'unclaimed') return { ownerFilter: 'unclaimed' }
   return {}
@@ -330,6 +357,7 @@ function ownerLabel(record) {
   return '待认领'
 }
 function primaryTaskLabel(record) {
+  if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return serviceFeedbackLabel(record, doctorId.value)
   if (followUpState(record) === 'overdue') return '逾期随访'
   if (followUpState(record) === 'due_today') return '今日到期随访'
   if (hasUnreadMessages(record)) return '患者新消息'
@@ -341,6 +369,7 @@ function primaryTaskLabel(record) {
 }
 function feedItemSummary(record) {
   const summary = getDoctorMessageSummary(record)
+  if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return serviceFeedbackReminderText(record, doctorId.value)
   if (hasUnreadMessages(record) || waitingDoctorReply(record)) return summary.latestMessagePreview || record.chiefComplaint || '暂无更多沟通内容'
   if (isPendingFollowUpRecord(record)) return followUpReminderText(record)
   if (isRecommendedConsultation(record, doctorId.value)) return record.smartDispatch?.hint || record.chiefComplaint || '系统建议由你优先接手当前问诊。'
@@ -348,12 +377,15 @@ function feedItemSummary(record) {
   return record.chiefComplaint || '当前暂无更多待办摘要'
 }
 function feedItemTimeText(record) {
+  if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return formatDate(serviceFeedbackTime(record) || record.updateTime || record.createTime)
   if (hasUnreadMessages(record) || waitingDoctorReply(record)) return formatDate(getDoctorMessageSummary(record).latestTime || record.updateTime || record.createTime)
   if (isPendingFollowUpRecord(record)) return followUpLine(record)
   return formatDate(record.createTime)
 }
 function feedItemClass(record) {
   const followUp = followUpState(record)
+  if (serviceFeedbackState(record, doctorId.value) === 'critical') return 'is-urgent'
+  if (['pending', 'low_score'].includes(serviceFeedbackState(record, doctorId.value))) return 'is-warning'
   if (followUp === 'overdue') return 'is-overdue'
   if (followUp === 'due_today') return 'is-due-today'
   if (hasUnreadMessages(record) || (ownerType(record, doctorId.value) === 'unclaimed' && isRiskConsultation(record))) return 'is-urgent'
@@ -395,19 +427,30 @@ function compareFollowUpRecords(left, right) {
   if (dueDiff !== 0) return dueDiff
   return compareRecentDoctorRecord(left, right)
 }
+function compareServiceFeedbackRecords(left, right) {
+  const priorityMap = { critical: 0, pending: 1, low_score: 2, resolved: 3, none: 4 }
+  const stateDiff = compareNumber(priorityMap[serviceFeedbackState(left, doctorId.value)] ?? 9, priorityMap[serviceFeedbackState(right, doctorId.value)] ?? 9)
+  if (stateDiff !== 0) return stateDiff
+  const timeDiff = compareDateDesc(serviceFeedbackTime(left), serviceFeedbackTime(right))
+  if (timeDiff !== 0) return timeDiff
+  return compareRecentDoctorRecord(left, right)
+}
 function feedPriority(record) {
   const followUp = followUpState(record)
   if (followUp === 'overdue') return 0
   if (followUp === 'due_today') return 1
   if (hasUnreadMessages(record)) return 2
   if (waitingDoctorReply(record)) return 3
-  if (ownerType(record, doctorId.value) === 'unclaimed' && isRiskConsultation(record)) return 4
-  if (isRecommendedConsultation(record, doctorId.value)) return 5
-  if (ownerType(record, doctorId.value) === 'unclaimed') return 6
-  if (isPendingFollowUpRecord(record)) return 7
+  if (serviceFeedbackState(record, doctorId.value) === 'critical') return 4
+  if (['pending', 'low_score'].includes(serviceFeedbackState(record, doctorId.value))) return 5
+  if (ownerType(record, doctorId.value) === 'unclaimed' && isRiskConsultation(record)) return 6
+  if (isRecommendedConsultation(record, doctorId.value)) return 7
+  if (ownerType(record, doctorId.value) === 'unclaimed') return 8
+  if (isPendingFollowUpRecord(record)) return 9
   return 9
 }
 function feedSortTime(record) {
+  if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return serviceFeedbackTime(record) || record.updateTime || record.createTime
   if (hasUnreadMessages(record) || waitingDoctorReply(record)) return getDoctorMessageSummary(record).latestTime || record.updateTime || record.createTime
   if (isPendingFollowUpRecord(record)) return followUpDueDate(record) || record.updateTime || record.createTime
   return record.createTime || record.updateTime
@@ -471,6 +514,7 @@ onMounted(() => {
 .feed-item-head span { color: var(--app-muted); font-size: 13px; line-height: 1.5; }
 .feed-actions { margin-top: 14px; }
 .feed-item.is-urgent, .focus-card:hover { border-color: rgba(214, 95, 80, 0.2); box-shadow: 0 10px 22px rgba(19, 73, 80, 0.08); }
+.feed-item.is-warning { border-color: rgba(210, 155, 47, 0.24); background: linear-gradient(180deg, rgba(210, 155, 47, 0.08), rgba(255, 255, 255, 0.98)); }
 .feed-item.is-overdue { border-color: rgba(214, 95, 80, 0.24); background: linear-gradient(180deg, rgba(214, 95, 80, 0.08), rgba(255, 255, 255, 0.98)); }
 .feed-item.is-due-today { border-color: rgba(210, 155, 47, 0.24); background: linear-gradient(180deg, rgba(210, 155, 47, 0.08), rgba(255, 255, 255, 0.98)); }
 .feed-item.is-accent { border-color: rgba(15, 102, 101, 0.22); background: linear-gradient(180deg, rgba(15, 102, 101, 0.07), rgba(255, 255, 255, 0.98)); }

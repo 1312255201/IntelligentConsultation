@@ -42,6 +42,7 @@ import cn.gugufish.service.ConsultationRecordAdminService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
+import cn.gugufish.service.ConsultationServiceFeedbackQueryService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
@@ -114,6 +115,9 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
     ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
 
     @Resource
+    ConsultationServiceFeedbackQueryService consultationServiceFeedbackQueryService;
+
+    @Resource
     ConsultationDispatchConfigService consultationDispatchConfigService;
 
     @Override
@@ -126,6 +130,8 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
         Map<Integer, ConsultationDoctorAssignment> assignmentMap = loadLatestAssignmentMap(consultationIds);
         Map<Integer, TriageResult> triageResultMap = loadLatestTriageResultEntityMap(consultationIds);
+        Map<Integer, cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO> serviceFeedbackMap =
+                consultationServiceFeedbackQueryService.mapByConsultationIds(consultationIds);
 
         return records.stream()
                 .map(item -> item.asViewObject(AdminConsultationRecordVO.class, vo -> {
@@ -143,6 +149,7 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
                             triageResult == null ? null : triageResult.getDoctorCandidatesJson(),
                             triageResult == null ? null : triageResult.getReasonText()
                     ));
+                    vo.setServiceFeedback(serviceFeedbackMap.get(item.getId()));
                 }))
                 .toList();
     }
@@ -368,6 +375,7 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         var triageSession = triageSessionQueryService.detailByConsultationId(id);
         var triageResult = triageResultQueryService.detailByConsultationId(id);
         var triageFeedback = triageFeedbackQueryService.detailByConsultationId(id);
+        var serviceFeedback = consultationServiceFeedbackQueryService.detailByConsultationId(id);
 
         return record.asViewObject(AdminConsultationRecordVO.class, vo -> {
             vo.setAnswers(answers);
@@ -389,6 +397,7 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
             vo.setTriageSession(triageSession);
             vo.setTriageResult(triageResult);
             vo.setTriageFeedback(triageFeedback);
+            vo.setServiceFeedback(serviceFeedback);
         });
     }
 

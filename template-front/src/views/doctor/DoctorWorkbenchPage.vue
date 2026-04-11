@@ -280,6 +280,78 @@
         </div>
       </section>
 
+      <section class="panel-card">
+        <div class="panel-head">
+          <div>
+            <h3>服务评价概览</h3>
+            <p>患者在问诊完成后提交的服务反馈会集中展示在这里，方便医生快速识别低分与“未解决”的问题。</p>
+          </div>
+          <el-button text @click="openConsultationList({ status: 'completed', feedbackFilter: 'attention' })">查看待关注评价</el-button>
+        </div>
+
+        <div class="feedback-stat-grid">
+          <article class="stat-card feedback-stat-card">
+            <span>累计评价</span>
+            <strong>{{ summary.serviceFeedbackCount || 0 }}</strong>
+            <p>已回流到医生工作台的服务反馈。</p>
+          </article>
+          <article class="stat-card feedback-stat-card stat-card-accent">
+            <span>平均评分</span>
+            <strong>{{ averageServiceScoreText }}</strong>
+            <p>按已提交服务评价的问诊记录计算。</p>
+          </article>
+          <article class="stat-card feedback-stat-card stat-card-warning">
+            <span>未解决评价</span>
+            <strong>{{ summary.unresolvedServiceFeedbackCount || 0 }}</strong>
+            <p>患者认为当前问题仍需继续处理。</p>
+          </article>
+          <article class="stat-card feedback-stat-card stat-card-danger">
+            <span>低分评价</span>
+            <strong>{{ summary.lowScoreServiceFeedbackCount || 0 }}</strong>
+            <p>2 星及以下的服务评价，建议优先关注。</p>
+          </article>
+          <article class="stat-card feedback-stat-card">
+            <span>问题解决率</span>
+            <strong>{{ serviceFeedbackResolvedRateText }}</strong>
+            <p>服务评价中被患者标记为“已解决”的占比。</p>
+          </article>
+        </div>
+
+        <div v-if="summary.recentServiceFeedbacks?.length" class="feedback-list">
+          <article
+            v-for="item in summary.recentServiceFeedbacks"
+            :key="`service-feedback-${item.id}`"
+            :class="['feedback-item', serviceFeedbackItemClass(item)]"
+          >
+            <div class="feedback-item-head">
+              <div>
+                <strong>{{ item.patientName || '未命名患者' }}</strong>
+                <p>问诊 #{{ item.consultationId || '-' }}</p>
+              </div>
+              <div class="feedback-item-tags">
+                <el-tag :type="serviceFeedbackScoreTagType(item.serviceScore)" effect="light">
+                  评分 {{ item.serviceScore ?? '-' }}/5
+                </el-tag>
+                <el-tag :type="serviceFeedbackResolvedTagType(item.isResolved)" effect="light">
+                  {{ serviceFeedbackResolvedLabel(item.isResolved) }}
+                </el-tag>
+                <el-tag :type="serviceFeedbackHandleTagType(item.doctorHandleStatus)" effect="light">
+                  {{ serviceFeedbackHandleLabel(item.doctorHandleStatus) }}
+                </el-tag>
+              </div>
+            </div>
+            <p class="feedback-copy">{{ item.feedbackText || '患者未填写额外的评价说明。' }}</p>
+            <p v-if="item.doctorHandleRemark" class="feedback-copy">处理备注：{{ item.doctorHandleRemark }}</p>
+            <div class="feedback-item-meta">
+              <span>评价时间 {{ formatDate(item.updateTime || item.createTime) }}</span>
+              <span v-if="item.doctorHandleTime">最近处理 {{ formatDate(item.doctorHandleTime) }}</span>
+              <el-button link type="primary" @click="goToConsultation(item.consultationId, feedbackRecordQuery(item))">查看问诊</el-button>
+            </div>
+          </article>
+        </div>
+        <el-empty v-else description="当前还没有患者提交服务评价" />
+      </section>
+
       <section class="content-grid">
         <article class="panel-card">
           <div class="panel-head">
@@ -381,6 +453,14 @@ const router = useRouter()
 const accountContext = inject('account-context', null)
 
 const summary = reactive(createEmptySummary())
+const averageServiceScoreText = computed(() => {
+  if (summary.averageServiceScore == null) return '\u6682\u65e0\u8bc4\u5206'
+  return `${Number(summary.averageServiceScore).toFixed(1)} / 5`
+})
+const serviceFeedbackResolvedRateText = computed(() => {
+  if (summary.resolvedServiceFeedbackRate == null) return '--'
+  return `${formatMetricNumber(summary.resolvedServiceFeedbackRate)}%`
+})
 
 const profileTitle = computed(() => [summary.doctorTitle, summary.expertise].filter(Boolean).join(' / ') || '暂未完善医生职称与专长')
 
@@ -421,7 +501,15 @@ function createEmptySummary() {
     recommendedConsultationCount: 0,
     upcomingScheduleCount: 0,
     serviceTagCount: 0,
+    serviceFeedbackCount: 0,
+    resolvedServiceFeedbackCount: 0,
+    unresolvedServiceFeedbackCount: 0,
+    lowScoreServiceFeedbackCount: 0,
+    attentionServiceFeedbackCount: 0,
+    averageServiceScore: null,
+    resolvedServiceFeedbackRate: null,
     serviceTags: [],
+    recentServiceFeedbacks: [],
     recentConsultations: [],
     unclaimedConsultations: [],
     recommendedConsultations: [],
@@ -542,6 +630,55 @@ function followUpTodoItemClass(item) {
   if (state === 'overdue') return 'is-overdue'
   if (state === 'due_today') return 'is-due-today'
   return ''
+}
+
+function serviceFeedbackResolvedLabel(value) {
+  return value === 1 ? '\u672c\u6b21\u95ee\u9898\u5df2\u89e3\u51b3' : '\u4ecd\u9700\u7ee7\u7eed\u5904\u7406'
+}
+
+function serviceFeedbackResolvedTagType(value) {
+  return value === 1 ? 'success' : 'warning'
+}
+
+function serviceFeedbackHandleLabel(value) {
+  return value === 1 ? '医生已处理' : '待医生跟进'
+}
+
+function serviceFeedbackHandleTagType(value) {
+  return value === 1 ? 'success' : 'info'
+}
+
+function serviceFeedbackScoreTagType(value) {
+  const score = Number(value)
+  if (!Number.isFinite(score)) return 'info'
+  if (score <= 2) return 'danger'
+  if (score === 3) return 'warning'
+  return 'success'
+}
+
+function serviceFeedbackItemClass(item) {
+  if (item?.doctorHandleStatus === 1) return 'is-handled'
+  const score = Number(item?.serviceScore || 0)
+  if (item?.isResolved !== 1 && score <= 2) return 'is-alert'
+  if (item?.isResolved !== 1) return 'is-pending'
+  if (score <= 2) return 'is-alert'
+  return ''
+}
+
+function feedbackRecordQuery(item) {
+  const score = Number(item?.serviceScore || 0)
+  const isAttention = item?.doctorHandleStatus !== 1 && (item?.isResolved !== 1 || (score > 0 && score <= 2))
+  return {
+    status: 'completed',
+    feedbackFilter: isAttention ? 'attention' : 'has_feedback',
+    action: 'feedback'
+  }
+}
+
+function formatMetricNumber(value, digits = 1) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '-'
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(digits)
 }
 
 function remainingCapacity(item) {
@@ -838,6 +975,86 @@ onMounted(() => loadSummary())
   flex-wrap: wrap;
 }
 
+.feedback-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.feedback-stat-card p {
+  margin: 10px 0 0;
+  color: var(--app-muted);
+  line-height: 1.6;
+}
+
+.feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feedback-item {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(19, 73, 80, 0.04);
+  border: 1px solid rgba(19, 73, 80, 0.08);
+}
+
+.feedback-item.is-handled {
+  border-color: rgba(31, 143, 89, 0.22);
+  background: linear-gradient(180deg, rgba(31, 143, 89, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.feedback-item.is-pending {
+  border-color: rgba(210, 155, 47, 0.24);
+  background: linear-gradient(180deg, rgba(210, 155, 47, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.feedback-item.is-alert {
+  border-color: rgba(214, 95, 80, 0.24);
+  background: linear-gradient(180deg, rgba(214, 95, 80, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.feedback-item-head,
+.feedback-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.feedback-item-head strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #31474d;
+}
+
+.feedback-item-head p,
+.feedback-item-meta span {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.6;
+}
+
+.feedback-item-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.feedback-copy {
+  margin: 12px 0 0;
+  color: #41575d;
+  line-height: 1.7;
+}
+
+.feedback-item-meta {
+  margin-top: 14px;
+  align-items: center;
+}
+
 .content-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -890,9 +1107,15 @@ onMounted(() => loadSummary())
   .todo-card-head,
   .todo-item-head,
   .todo-item-meta,
-  .todo-foot {
+  .todo-foot,
+  .feedback-item-head,
+  .feedback-item-meta {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .feedback-item-tags {
+    justify-content: flex-start;
   }
 
   .schedule-meta {

@@ -9,6 +9,7 @@ import cn.gugufish.entity.vo.request.DoctorConsultationFormDraftApplyVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftApplyVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftGenerateVO;
+import cn.gugufish.entity.vo.request.DoctorConsultationServiceFeedbackHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationFollowUpDraftVO;
@@ -162,6 +163,14 @@ public class DoctorWorkspaceController {
     public RestBean<Void> submitConsultationFollowUp(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
                                                      @RequestBody @Valid DoctorConsultationFollowUpSubmitVO vo) {
         String message = doctorWorkspaceService.submitConsultationFollowUp(accountId, vo);
+        return message == null ? RestBean.success() : RestBean.failure(400, message);
+    }
+
+    @PostMapping("/consultation/service-feedback/handle")
+    @Operation(summary = "提交服务评价处理结果")
+    public RestBean<Void> submitConsultationServiceFeedbackHandle(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                                  @RequestBody @Valid DoctorConsultationServiceFeedbackHandleSubmitVO vo) {
+        String message = doctorWorkspaceService.submitConsultationServiceFeedbackHandle(accountId, vo);
         return message == null ? RestBean.success() : RestBean.failure(400, message);
     }
 

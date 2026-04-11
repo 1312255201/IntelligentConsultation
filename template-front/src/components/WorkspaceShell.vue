@@ -177,6 +177,10 @@ function createEmptyDoctorWorkspaceSummary() {
     overdueFollowUpCount: 0,
     recommendedConsultationCount: 0,
     myClaimedConsultationCount: 0,
+    serviceFeedbackCount: 0,
+    unresolvedServiceFeedbackCount: 0,
+    lowScoreServiceFeedbackCount: 0,
+    attentionServiceFeedbackCount: 0,
     actionableConsultationCount: 0
   }
 }
@@ -194,7 +198,8 @@ function resolveDoctorActionableCount(summary = {}) {
     Number(summary.unclaimedConsultationCount || 0),
     Number(summary.unreadConsultationCount || 0),
     Number(summary.waitingReplyConsultationCount || 0),
-    Number(summary.overdueFollowUpCount || 0)
+    Number(summary.overdueFollowUpCount || 0),
+    Number(summary.attentionServiceFeedbackCount || 0)
   ]
   return counts.reduce((total, value) => total + (Number.isFinite(value) ? value : 0), 0)
 }

@@ -1,6 +1,7 @@
 package cn.gugufish.service.impl;
 
 import cn.gugufish.ai.AiTriageProperties;
+import cn.gugufish.entity.dto.ConsultationServiceFeedback;
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
 import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
 import cn.gugufish.entity.dto.ConsultationDoctorFollowUp;
@@ -22,6 +23,7 @@ import cn.gugufish.entity.vo.request.DoctorConsultationFormDraftApplyVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftApplyVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftGenerateVO;
+import cn.gugufish.entity.vo.request.DoctorConsultationServiceFeedbackHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO;
@@ -29,6 +31,7 @@ import cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
+import cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationFollowUpDraftVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationHandleDraftVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationMessageDraftVO;
@@ -41,6 +44,7 @@ import cn.gugufish.mapper.ConsultationDoctorFollowUpMapper;
 import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
 import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
+import cn.gugufish.mapper.ConsultationServiceFeedbackMapper;
 import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.DoctorFormAiLogMapper;
@@ -54,6 +58,7 @@ import cn.gugufish.service.ConsultationDoctorAssignmentQueryService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
+import cn.gugufish.service.ConsultationServiceFeedbackQueryService;
 import cn.gugufish.service.DoctorWorkspaceService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageResultQueryService;
@@ -129,6 +134,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
     ConsultationDoctorConclusionMapper consultationDoctorConclusionMapper;
 
     @Resource
+    ConsultationServiceFeedbackMapper consultationServiceFeedbackMapper;
+
+    @Resource
     ConsultationDoctorFollowUpMapper consultationDoctorFollowUpMapper;
 
     @Resource
@@ -157,6 +165,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
     @Resource
     ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
+
+    @Resource
+    ConsultationServiceFeedbackQueryService consultationServiceFeedbackQueryService;
 
     @Resource
     ConsultationMessageService consultationMessageService;
@@ -191,7 +202,15 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setRecommendedConsultationCount(0);
             vo.setUpcomingScheduleCount(0);
             vo.setServiceTagCount(0);
+            vo.setServiceFeedbackCount(0);
+            vo.setResolvedServiceFeedbackCount(0);
+            vo.setUnresolvedServiceFeedbackCount(0);
+            vo.setLowScoreServiceFeedbackCount(0);
+            vo.setAttentionServiceFeedbackCount(0);
+            vo.setAverageServiceScore(null);
+            vo.setResolvedServiceFeedbackRate(null);
             vo.setServiceTags(List.of());
+            vo.setRecentServiceFeedbacks(List.of());
             vo.setRecentConsultations(List.of());
             vo.setUnclaimedConsultations(List.of());
             vo.setRecommendedConsultations(List.of());
@@ -214,6 +233,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
         List<DoctorScheduleVO> schedules = scheduleList(accountId);
         List<AdminConsultationRecordVO> consultations = consultationList(accountId);
+        List<ConsultationServiceFeedbackVO> serviceFeedbacks = consultationServiceFeedbackQueryService.listByDoctorId(doctor.getId());
 
         LocalDate today = LocalDate.now();
         int todayCount = (int) consultations.stream()
@@ -239,6 +259,20 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         int overdueFollowUpCount = (int) pendingFollowUpConsultations.stream()
                 .filter(this::isOverdueFollowUp)
                 .count();
+        int resolvedServiceFeedbackCount = (int) serviceFeedbacks.stream()
+                .filter(item -> Objects.equals(item.getIsResolved(), 1))
+                .count();
+        int unresolvedServiceFeedbackCount = serviceFeedbacks.size() - resolvedServiceFeedbackCount;
+        int lowScoreServiceFeedbackCount = (int) serviceFeedbacks.stream()
+                .filter(item -> item.getServiceScore() != null && item.getServiceScore() <= 2)
+                .count();
+        int attentionServiceFeedbackCount = (int) serviceFeedbacks.stream()
+                .filter(this::isAttentionServiceFeedback)
+                .count();
+        Double averageServiceScore = averageServiceScore(serviceFeedbacks);
+        Double resolvedServiceFeedbackRate = serviceFeedbacks.isEmpty()
+                ? null
+                : roundToOneDecimal(resolvedServiceFeedbackCount * 100D / serviceFeedbacks.size());
 
         DoctorWorkbenchVO vo = new DoctorWorkbenchVO();
         vo.setBound(1);
@@ -269,7 +303,15 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         vo.setRecommendedConsultationCount(recommendedConsultations.size());
         vo.setUpcomingScheduleCount(schedules.size());
         vo.setServiceTagCount(serviceTags.size());
+        vo.setServiceFeedbackCount(serviceFeedbacks.size());
+        vo.setResolvedServiceFeedbackCount(resolvedServiceFeedbackCount);
+        vo.setUnresolvedServiceFeedbackCount(unresolvedServiceFeedbackCount);
+        vo.setLowScoreServiceFeedbackCount(lowScoreServiceFeedbackCount);
+        vo.setAttentionServiceFeedbackCount(attentionServiceFeedbackCount);
+        vo.setAverageServiceScore(averageServiceScore);
+        vo.setResolvedServiceFeedbackRate(resolvedServiceFeedbackRate);
         vo.setServiceTags(serviceTags);
+        vo.setRecentServiceFeedbacks(serviceFeedbacks.stream().limit(5).toList());
         vo.setRecentConsultations(consultations.stream().limit(6).toList());
         vo.setUnclaimedConsultations(unclaimedConsultations.stream().limit(5).toList());
         vo.setRecommendedConsultations(recommendedConsultations.stream().limit(5).toList());
@@ -323,6 +365,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                         .orderByDesc("id"))
                 .forEach(item -> latestFollowUpMap.putIfAbsent(item.getConsultationId(), item));
         Map<Integer, ConsultationMessageSummaryVO> messageSummaryMap = consultationMessageService.summarizeDoctorMessages(consultationIds);
+        Map<Integer, ConsultationServiceFeedbackVO> serviceFeedbackMap = consultationServiceFeedbackQueryService.mapByConsultationIds(consultationIds);
 
         return records.stream()
                 .map(item -> item.asViewObject(AdminConsultationRecordVO.class, vo -> {
@@ -344,6 +387,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                             ? List.of()
                             : List.of(latestFollowUp.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO.class)));
                     vo.setMessageSummary(messageSummaryMap.get(item.getId()));
+                    vo.setServiceFeedback(serviceFeedbackMap.get(item.getId()));
                     vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                             assignment == null ? null : assignment.getDoctorId(),
                             assignment == null ? null : assignment.getDoctorName(),
@@ -388,6 +432,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         var triageSession = triageSessionQueryService.detailByConsultationId(recordId);
         var triageResult = triageResultQueryService.detailByConsultationId(recordId);
         var triageFeedback = triageFeedbackQueryService.detailByConsultationId(recordId);
+        var serviceFeedback = consultationServiceFeedbackQueryService.detailByConsultationId(recordId);
         ConsultationMessageSummaryVO messageSummary = consultationMessageService.summarizeDoctorMessages(List.of(recordId)).get(recordId);
 
         return record.asViewObject(AdminConsultationRecordVO.class, vo -> {
@@ -411,6 +456,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setTriageSession(triageSession);
             vo.setTriageResult(triageResult);
             vo.setTriageFeedback(triageFeedback);
+            vo.setServiceFeedback(serviceFeedback);
         });
     }
 
@@ -813,6 +859,34 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         markDoctorFormAiLogSaved(vo.getAiLogId(), doctor, record, "follow_up",
                 buildSavedFollowUpPreview(followUp), buildSavedFollowUpPayload(followUp), now);
         return null;
+    }
+
+    @Override
+    @Transactional
+    public String submitConsultationServiceFeedbackHandle(int accountId, DoctorConsultationServiceFeedbackHandleSubmitVO vo) {
+        Doctor doctor = validDoctor(accountId);
+        if (doctor == null) return "当前 doctor 账号尚未绑定有效医生档案";
+
+        ConsultationRecord record = consultationRecordMapper.selectById(vo.getConsultationId());
+        if (record == null) return "问诊记录不存在";
+        if (!doctor.getDepartmentId().equals(record.getDepartmentId())) return "当前问诊记录不属于你所在科室";
+
+        ConsultationServiceFeedback feedback = findServiceFeedback(vo.getConsultationId());
+        if (feedback == null || feedback.getStatus() == null || feedback.getStatus() != 1) return "当前问诊暂无服务评价";
+        if (!doctor.getId().equals(feedback.getDoctorId())) return "仅处理该问诊单的医生可登记评价处理结果";
+
+        String handleRemark = trimToNull(vo.getHandleRemark());
+        Integer doctorHandleStatus = Objects.equals(vo.getDoctorHandleStatus(), 1) ? 1 : 0;
+        if (handleRemark == null) return "请填写评价处理备注";
+
+        Date now = new Date();
+        feedback.setDoctorHandleStatus(doctorHandleStatus);
+        feedback.setDoctorHandleRemark(handleRemark);
+        feedback.setDoctorHandleAccountId(accountId);
+        feedback.setDoctorHandleDoctorId(doctor.getId());
+        feedback.setDoctorHandleDoctorName(doctor.getName());
+        feedback.setDoctorHandleTime(now);
+        return consultationServiceFeedbackMapper.updateById(feedback) > 0 ? null : "服务评价处理结果保存失败";
     }
 
     @Override
@@ -2650,6 +2724,14 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 .last("limit 1"));
     }
 
+    private ConsultationServiceFeedback findServiceFeedback(int consultationId) {
+        return consultationServiceFeedbackMapper.selectOne(Wrappers.<ConsultationServiceFeedback>query()
+                .eq("consultation_id", consultationId)
+                .eq("status", 1)
+                .orderByDesc("id")
+                .last("limit 1"));
+    }
+
     private String resolveDepartmentName(Doctor doctor, ConsultationRecord record) {
         Department department = departmentMapper.selectById(doctor.getDepartmentId());
         return department == null ? record.getDepartmentName() : department.getName();
@@ -2902,6 +2984,27 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         if (value == null) return null;
         String text = value.trim();
         return text.isEmpty() ? null : text;
+    }
+
+    private Double averageServiceScore(List<ConsultationServiceFeedbackVO> serviceFeedbacks) {
+        double average = serviceFeedbacks.stream()
+                .map(ConsultationServiceFeedbackVO::getServiceScore)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .average()
+                .orElse(Double.NaN);
+        return Double.isNaN(average) ? null : roundToOneDecimal(average);
+    }
+
+    private boolean isAttentionServiceFeedback(ConsultationServiceFeedbackVO feedback) {
+        if (feedback == null) return false;
+        if (Objects.equals(feedback.getDoctorHandleStatus(), 1)) return false;
+        if (!Objects.equals(feedback.getIsResolved(), 1)) return true;
+        return feedback.getServiceScore() != null && feedback.getServiceScore() <= 2;
+    }
+
+    private Double roundToOneDecimal(double value) {
+        return Math.round(value * 10D) / 10D;
     }
 
     private int defaultInt(Integer value) {

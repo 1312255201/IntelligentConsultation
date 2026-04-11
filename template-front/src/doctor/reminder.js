@@ -14,11 +14,24 @@ export function normalizeDoctorMessageSummary(summary) {
   }
 }
 
+export function normalizeDoctorServiceFeedback(feedback) {
+  if (!feedback) return null
+  return {
+    ...feedback,
+    serviceScore: feedback?.serviceScore == null ? null : Number(feedback.serviceScore),
+    isResolved: feedback?.isResolved == null ? null : Number(feedback.isResolved),
+    doctorHandleStatus: feedback?.doctorHandleStatus == null ? null : Number(feedback.doctorHandleStatus),
+    doctorHandleAccountId: feedback?.doctorHandleAccountId == null ? null : Number(feedback.doctorHandleAccountId),
+    doctorHandleDoctorId: feedback?.doctorHandleDoctorId == null ? null : Number(feedback.doctorHandleDoctorId)
+  }
+}
+
 export function normalizeDoctorReminderRecord(record = {}) {
   return {
     ...record,
     smartDispatch: normalizeSmartDispatch(record?.smartDispatch),
-    messageSummary: normalizeDoctorMessageSummary(record?.messageSummary)
+    messageSummary: normalizeDoctorMessageSummary(record?.messageSummary),
+    serviceFeedback: normalizeDoctorServiceFeedback(record?.serviceFeedback)
   }
 }
 
@@ -71,6 +84,62 @@ export function latestFollowUp(record) {
   return Array.isArray(record?.doctorFollowUps) && record.doctorFollowUps.length
     ? record.doctorFollowUps[0]
     : null
+}
+
+export function hasServiceFeedback(record) {
+  return !!record?.serviceFeedback
+}
+
+export function isDoctorServiceFeedbackRecord(record, doctorId) {
+  if (record?.status !== 'completed' || !hasServiceFeedback(record)) return false
+  const feedbackDoctorId = Number(record?.serviceFeedback?.doctorId || 0)
+  return feedbackDoctorId > 0 && feedbackDoctorId === Number(doctorId || 0)
+}
+
+export function isAttentionServiceFeedbackRecord(record, doctorId) {
+  if (!isDoctorServiceFeedbackRecord(record, doctorId)) return false
+  if (record?.serviceFeedback?.doctorHandleStatus === 1) return false
+  if (record?.serviceFeedback?.isResolved !== 1) return true
+  return Number(record?.serviceFeedback?.serviceScore || 0) <= 2
+}
+
+export function serviceFeedbackState(record, doctorId) {
+  if (!isDoctorServiceFeedbackRecord(record, doctorId)) return 'none'
+  if (record?.serviceFeedback?.doctorHandleStatus === 1) return 'handled'
+  const score = Number(record?.serviceFeedback?.serviceScore || 0)
+  if (record?.serviceFeedback?.isResolved !== 1 && score > 0 && score <= 2) return 'critical'
+  if (record?.serviceFeedback?.isResolved !== 1) return 'pending'
+  if (score > 0 && score <= 2) return 'low_score'
+  return 'resolved'
+}
+
+export function serviceFeedbackTime(record) {
+  return record?.serviceFeedback?.updateTime || record?.serviceFeedback?.createTime || null
+}
+
+export function serviceFeedbackLabel(record, doctorId) {
+  const state = serviceFeedbackState(record, doctorId)
+  if (state === 'handled') return '已处理回看'
+  if (state === 'critical') return '低分且未解决'
+  if (state === 'pending') return '未解决评价'
+  if (state === 'low_score') return '低分评价'
+  if (state === 'resolved') return '已评价'
+  return '暂无评价'
+}
+
+export function serviceFeedbackReminderText(record, doctorId) {
+  const feedback = record?.serviceFeedback
+  if (!feedback || !isDoctorServiceFeedbackRecord(record, doctorId)) return '当前暂无服务评价提醒'
+  const scoreText = feedback.serviceScore ? `${feedback.serviceScore}/5` : '-'
+  const content = `${feedback.feedbackText || ''}`.trim()
+  const state = serviceFeedbackState(record, doctorId)
+  if (state === 'handled') {
+    return `${feedback.doctorHandleRemark || '医生已回看并记录本次服务评价处理结果。'}`
+  }
+  if (state === 'critical') return `患者给出 ${scoreText} 的低分评价，且反馈问题仍未解决，建议优先回看本次问诊。${content ? ` 评价内容：${content}` : ''}`
+  if (state === 'pending') return `患者反馈本次问题仍需继续处理，建议结合问诊结论与随访计划继续跟进。${content ? ` 评价内容：${content}` : ''}`
+  if (state === 'low_score') return `患者给出 ${scoreText} 的低分服务评价，建议回看本次接诊体验。${content ? ` 评价内容：${content}` : ''}`
+  return content || `患者已提交 ${scoreText} 的服务评价。`
 }
 
 export function followUpDueDate(record) {

@@ -29,6 +29,44 @@
         <span>待随访</span>
         <strong>{{ pendingFollowUpCount }}</strong>
       </article>
+      <article class="stat-card">
+        <span>待服务评价</span>
+        <strong>{{ pendingServiceFeedbackCount }}</strong>
+      </article>
+
+      <article class="reminder-card">
+        <div class="reminder-head">
+          <div>
+            <span class="panel-kicker">Feedback</span>
+            <h3>待服务评价</h3>
+            <p>医生完成处理后，可在这里快速补充服务评分、问题是否解决和本次问诊体验。</p>
+          </div>
+          <el-tag type="info" effect="light">{{ pendingServiceFeedbackCount }}</el-tag>
+        </div>
+        <div v-if="pendingServiceFeedbackRecords.length" class="reminder-list">
+          <button
+            v-for="item in pendingServiceFeedbackRecords"
+            :key="`feedback-${item.id}`"
+            type="button"
+            class="reminder-item"
+            @click="openRecordDetail(item, { action: 'feedback' })"
+          >
+            <div class="reminder-item-head">
+              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+              <span>{{ serviceFeedbackTimeText(item) }}</span>
+            </div>
+            <p>{{ serviceFeedbackReminderText(item) }}</p>
+            <div class="reminder-item-meta">
+              <span>{{ item.categoryName || '未分类' }}</span>
+              <span>待提交服务评价</span>
+            </div>
+          </button>
+        </div>
+        <el-empty v-else description="当前没有待服务评价的问诊" />
+        <div class="reminder-foot">
+          <el-button text @click="applyRecordQuickFilter({ progress: 'pending_feedback' })">只看待服务评价</el-button>
+        </div>
+      </article>
     </section>
 
     <section class="reminder-grid">
@@ -47,7 +85,7 @@
             :key="`reply-${item.id}`"
             type="button"
             class="reminder-item"
-            @click="openRecordDetail(item)"
+            @click="openRecordDetail(item, { action: 'conversation' })"
           >
             <div class="reminder-item-head">
               <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -81,7 +119,7 @@
             :key="`waiting-${item.id}`"
             type="button"
             class="reminder-item"
-            @click="openRecordDetail(item)"
+            @click="openRecordDetail(item, { action: 'conversation' })"
           >
             <div class="reminder-item-head">
               <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -119,7 +157,7 @@
             :key="`followup-${item.id}`"
             type="button"
             :class="['reminder-item', followUpReminderItemClass(item)]"
-            @click="openRecordDetail(item)"
+            @click="openRecordDetail(item, { action: 'followup' })"
           >
             <div class="reminder-item-head">
               <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -384,6 +422,7 @@
           <el-option label="已完成" value="completed" />
         </el-select>
         <el-select v-model="recordProgressFilter" style="width: 170px">
+          <el-option label="待服务评价" value="pending_feedback" />
           <el-option label="全部进度" value="all" />
           <el-option label="医生新回复" value="doctor_replied" />
           <el-option label="待医生处理" value="waiting_doctor" />
@@ -676,6 +715,8 @@
             </div>
             <div class="conversation-composer">
               <el-input
+                ref="conversationInputRef"
+                :class="{ 'focus-action-input': focusedDetailSection === 'conversation' }"
                 v-model="messageDraft.content"
                 type="textarea"
                 :rows="3"
@@ -884,7 +925,10 @@
             </div>
           </div>
 
-          <div class="result-panel">
+          <div
+            ref="followUpPanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'followup' }]"
+          >
             <div class="doctor-recommend-head">
               <strong>随访记录</strong>
               <span>如医生在问诊完成后继续跟进，这里会展示后续随访摘要和建议。</span>
@@ -907,6 +951,51 @@
               </article>
             </div>
             <el-empty v-else description="当前暂无随访记录" />
+          </div>
+
+          <div
+            v-if="canSubmitServiceFeedback"
+            ref="serviceFeedbackPanelRef"
+            :class="['feedback-panel', { 'focus-action-panel': focusedDetailSection === 'feedback' }]"
+          >
+            <div class="doctor-recommend-head">
+              <strong>问诊服务评价</strong>
+              <span>医生已完成本轮处理后，你可以补充对本次线上问诊服务的评价，帮助后续持续优化。</span>
+            </div>
+            <div v-if="detailRecord.serviceFeedback" class="feedback-summary">
+              <span>当前评分：{{ detailRecord.serviceFeedback.serviceScore }}/5</span>
+              <span>{{ serviceFeedbackResolvedLabel(detailRecord.serviceFeedback.isResolved) }}</span>
+              <span>评价时间：{{ formatDate(detailRecord.serviceFeedback.updateTime || detailRecord.serviceFeedback.createTime) }}</span>
+            </div>
+            <el-alert
+              v-else
+              title="当前医生处理已完成，欢迎补充本次线上问诊体验和问题是否得到解决。"
+              type="success"
+              :closable="false"
+              class="conversation-alert"
+            />
+            <div class="feedback-form">
+              <el-select v-model="serviceFeedbackForm.serviceScore" style="width: 180px" placeholder="选择服务评分">
+                <el-option v-for="item in [5, 4, 3, 2, 1]" :key="`service-score-${item}`" :label="`${item} 分`" :value="item" />
+              </el-select>
+              <el-select v-model="serviceFeedbackForm.isResolved" style="width: 220px" placeholder="问题是否已解决">
+                <el-option label="本次问题已解决" :value="1" />
+                <el-option label="仍需继续处理" :value="0" />
+              </el-select>
+              <el-input
+                v-model="serviceFeedbackForm.feedbackText"
+                type="textarea"
+                :rows="3"
+                maxlength="1000"
+                show-word-limit
+                placeholder="可补充医生回复是否及时、建议是否清晰、目前还希望继续得到哪些帮助。"
+              />
+              <div class="feedback-actions">
+                <el-button type="primary" :loading="serviceFeedbackSubmitting" @click="submitServiceFeedback">
+                  {{ detailRecord.serviceFeedback ? '更新评价' : '提交评价' }}
+                </el-button>
+              </div>
+            </div>
           </div>
 
           <div v-if="detailRecord.triageSession" class="feedback-panel">
@@ -1036,12 +1125,13 @@
 
 <script setup>
 import { ElMessage } from 'element-plus'
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
 import { comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveTriageMessageInsight } from '@/triage/insight'
+import { isPendingServiceFeedbackRecord, serviceFeedbackBaseTime, serviceFeedbackReminderText } from '@/triage/reminder'
 
 const route = useRoute()
 const router = useRouter()
@@ -1054,6 +1144,10 @@ const activeCategoryId = ref(null)
 const selectedPatientId = ref(null)
 const historySectionRef = ref(null)
 const syncingRecordRoute = ref(false)
+const conversationInputRef = ref(null)
+const followUpPanelRef = ref(null)
+const serviceFeedbackPanelRef = ref(null)
+const focusedDetailSection = ref('')
 const recordKeyword = ref('')
 const recordStatusFilter = ref('')
 const recordProgressFilter = ref('all')
@@ -1070,9 +1164,16 @@ const messageLoading = ref(false)
 const messageSending = ref(false)
 const feedbackOptions = ref({ departments: [], doctors: [] })
 const feedbackSubmitting = ref(false)
+const serviceFeedbackSubmitting = ref(false)
 const formData = reactive({})
 const triageAiDraft = reactive({ content: '' })
 const messageDraft = reactive({ content: '', attachments: [] })
+let detailSectionFocusTimer = null
+const serviceFeedbackForm = reactive({
+  serviceScore: 5,
+  isResolved: 1,
+  feedbackText: ''
+})
 const feedbackForm = reactive({
   userScore: 5,
   isAdopted: 1,
@@ -1131,6 +1232,7 @@ const todayCount = computed(() => {
 const unreadDoctorReplyCount = computed(() => records.value.filter(recordHasUnreadDoctorReply).length)
 const waitingDoctorHandleCount = computed(() => records.value.filter(item => recordProgressStage(item) === 'waiting_doctor').length)
 const pendingFollowUpCount = computed(() => records.value.filter(item => ['pending', 'due_today', 'overdue'].includes(followUpState(item))).length)
+const pendingServiceFeedbackCount = computed(() => records.value.filter(isPendingServiceFeedbackRecord).length)
 const dueTodayFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'due_today').length)
 const overdueFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'overdue').length)
 const unreadReplyRecords = computed(() => records.value
@@ -1148,14 +1250,22 @@ const followUpReminderRecords = computed(() => records.value
   .slice()
   .sort(compareRecordOrder)
   .slice(0, 4))
+const pendingServiceFeedbackRecords = computed(() => records.value
+  .filter(isPendingServiceFeedbackRecord)
+  .slice()
+  .sort((left, right) => compareDateDesc(serviceFeedbackBaseTime(left), serviceFeedbackBaseTime(right)))
+  .slice(0, 4))
 const filteredRecords = computed(() => records.value
   .filter(item => {
     const search = recordKeyword.value.trim().toLowerCase()
-    const matchesKeyword = !search || [item.title, item.categoryName, item.patientName, item.chiefComplaint, recordMessagePreview(item), recordProgressLabel(item), followUpLine(item)]
+    const matchesKeyword = !search || [item.title, item.categoryName, item.patientName, item.chiefComplaint, recordMessagePreview(item), recordProgressLabel(item), followUpLine(item), serviceFeedbackReminderText(item)]
       .filter(Boolean)
       .some(text => `${text}`.toLowerCase().includes(search))
     const matchesStatus = !recordStatusFilter.value || item.status === recordStatusFilter.value
-    const matchesProgress = recordProgressFilter.value === 'all' || recordProgressStage(item) === recordProgressFilter.value
+    const matchesProgress = recordProgressFilter.value === 'all'
+      || (recordProgressFilter.value === 'pending_feedback'
+        ? isPendingServiceFeedbackRecord(item)
+        : recordProgressStage(item) === recordProgressFilter.value)
     const matchesFollowUp = recordFollowUpFilter.value === 'all'
       || (recordFollowUpFilter.value === 'pending' && ['pending', 'due_today', 'overdue'].includes(followUpState(item)))
       || followUpState(item) === recordFollowUpFilter.value
@@ -1166,6 +1276,10 @@ const filteredRecords = computed(() => records.value
 const detailMessageSummary = computed(() => getMessageSummary(detailRecord.value))
 const detailFollowUpReminder = computed(() => followUpReminderText(detailRecord.value))
 const detailTimelineItems = computed(() => buildTimelineItems(detailRecord.value))
+const canSubmitServiceFeedback = computed(() => !!(
+  detailRecord.value
+  && (detailRecord.value.status === 'completed' || detailRecord.value?.doctorHandle?.status === 'completed')
+))
 
 watch(activeCategoryId, (value) => {
   if (value) loadTemplate(value)
@@ -1177,7 +1291,7 @@ watch(() => route.query, () => {
   nextTick(() => { syncingRecordRoute.value = false })
 }, { immediate: true })
 
-watch(() => route.query.id, () => {
+watch(() => [route.query.id, route.query.action], () => {
   autoOpenRecordDetail()
 })
 
@@ -1210,7 +1324,7 @@ function normalizeRecordRouteQuery(query = {}) {
   const status = typeof query.status === 'string' && ['submitted', 'triaged', 'processing', 'completed'].includes(query.status)
     ? query.status
     : ''
-  const progress = typeof query.progress === 'string' && ['doctor_replied', 'waiting_doctor', 'doctor_processing', 'completed'].includes(query.progress)
+  const progress = typeof query.progress === 'string' && ['doctor_replied', 'waiting_doctor', 'doctor_processing', 'pending_feedback', 'completed'].includes(query.progress)
     ? query.progress
     : 'all'
   const followUp = typeof query.followUp === 'string' && ['pending', 'due_today', 'overdue'].includes(query.followUp)
@@ -1219,18 +1333,26 @@ function normalizeRecordRouteQuery(query = {}) {
   return { keyword, status, progress, followUp }
 }
 
-function buildRecordRouteQuery({ includeId = true } = {}) {
+function resolveConsultationAction(value) {
+  const action = typeof value === 'string' ? value.trim() : ''
+  return ['conversation', 'followup', 'feedback'].includes(action) ? action : ''
+}
+
+function buildRecordRouteQuery({ includeId = true, action = null } = {}) {
   const query = { ...route.query }
   const keyword = recordKeyword.value.trim()
+  const routeAction = action === null ? resolveConsultationAction(route.query.action) : resolveConsultationAction(action)
   delete query.keyword
   delete query.status
   delete query.progress
   delete query.followUp
+  delete query.action
   if (!includeId) delete query.id
   if (keyword) query.keyword = keyword
   if (recordStatusFilter.value) query.status = recordStatusFilter.value
   if (recordProgressFilter.value !== 'all') query.progress = recordProgressFilter.value
   if (recordFollowUpFilter.value !== 'all') query.followUp = recordFollowUpFilter.value
+  if (routeAction) query.action = routeAction
   return query
 }
 
@@ -1259,6 +1381,40 @@ function applyRecordQuickFilter({ status = '', progress = 'all', followUp = 'all
 
 function focusHistorySection() {
   historySectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function clearFocusedDetailSection() {
+  focusedDetailSection.value = ''
+  if (detailSectionFocusTimer) {
+    clearTimeout(detailSectionFocusTimer)
+    detailSectionFocusTimer = null
+  }
+}
+
+function focusDetailActionSection(action, recordId = null) {
+  const targetAction = resolveConsultationAction(action)
+  if (!targetAction) return
+  nextTick(() => {
+    const target = targetAction === 'conversation'
+      ? (conversationInputRef.value?.$el || conversationInputRef.value?.textarea || conversationInputRef.value)
+      : targetAction === 'followup'
+        ? (followUpPanelRef.value?.$el || followUpPanelRef.value)
+        : (serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value)
+    if (!target?.scrollIntoView) return
+    clearFocusedDetailSection()
+    focusedDetailSection.value = targetAction
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (targetAction === 'conversation' && canSendMessage.value) {
+      setTimeout(() => conversationInputRef.value?.focus?.(), 180)
+    }
+    detailSectionFocusTimer = setTimeout(() => {
+      if (focusedDetailSection.value === targetAction) focusedDetailSection.value = ''
+      detailSectionFocusTimer = null
+    }, 2400)
+    const nextQuery = buildRecordRouteQuery({ action: '' })
+    if (recordId) nextQuery.id = recordId
+    router.replace({ path: route.path, query: nextQuery })
+  })
 }
 
 function loadPatients() {
@@ -1609,24 +1765,31 @@ function shouldSubmitValue(value) {
 
 function autoOpenRecordDetail() {
   const id = Number(route.query.id || 0)
+  const action = resolveConsultationAction(route.query.action)
   if (!id) return
+  if (detailVisible.value && detailRecord.value?.id === id && !detailLoading.value) {
+    if (action) focusDetailActionSection(action, id)
+    return
+  }
   const record = records.value.find(item => item.id === id)
   if (!record) return
   if (detailVisible.value && (detailRecord.value?.id === id || detailLoading.value)) return
-  openRecordDetail(record, { syncRoute: false })
+  openRecordDetail(record, { syncRoute: false, action })
 }
 
 function openRecordDetail(row, options = {}) {
-  const { syncRoute = true } = options
-  if (syncRoute && Number(route.query.id || 0) !== row.id) {
+  const { syncRoute = true, action = '' } = options
+  const actionValue = resolveConsultationAction(action)
+  if (syncRoute && (Number(route.query.id || 0) !== row.id || resolveConsultationAction(route.query.action) !== actionValue)) {
     router.replace({
       path: route.path,
-      query: { ...buildRecordRouteQuery({ includeId: false }), id: row.id }
+      query: { ...buildRecordRouteQuery({ includeId: false, action: actionValue }), id: row.id }
     })
   }
   detailVisible.value = true
   detailLoading.value = true
   detailRecord.value = null
+  clearFocusedDetailSection()
   triageAiSending.value = false
   consultationMessages.value = []
   messageLoading.value = false
@@ -1640,14 +1803,18 @@ function openRecordDetail(row, options = {}) {
       messageSummary: normalizeMessageSummary(data?.messageSummary)
     } : null
     syncRecordSnapshot(detailRecord.value)
+    applyServiceFeedbackForm(data?.serviceFeedback)
     applyFeedbackForm(data?.triageFeedback)
     loadConsultationMessages(row.id)
     detailLoading.value = false
+    const focusAction = actionValue || resolveConsultationAction(route.query.action)
+    if (focusAction) focusDetailActionSection(focusAction, row.id)
   }, (message) => {
     detailLoading.value = false
     detailVisible.value = false
-    if (route.query.id) {
-      router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false }) })
+    clearFocusedDetailSection()
+    if (route.query.id || route.query.action) {
+      router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false, action: '' }) })
     }
     ElMessage.warning(message || '问诊记录详情加载失败')
   })
@@ -1668,6 +1835,7 @@ function refreshRecordDetail(recordId = detailRecord.value?.id, options = {}) {
       messageSummary: normalizeMessageSummary(data?.messageSummary)
     } : null
     syncRecordSnapshot(detailRecord.value)
+    applyServiceFeedbackForm(data?.serviceFeedback)
     applyFeedbackForm(data?.triageFeedback)
     if (reloadConversation) loadConsultationMessages(recordId)
   }, (message) => {
@@ -1806,6 +1974,7 @@ function recordProgressTagType(record) {
 
 function recordProgressHint(record) {
   const stage = recordProgressStage(record)
+  if (stage === 'completed' && followUpState(record) === 'none' && isPendingServiceFeedbackRecord(record)) return serviceFeedbackReminderText(record)
   if (stage === 'doctor_replied') return recordMessagePreview(record)
   if (stage === 'doctor_processing') return currentDoctorName(record) ? `当前由 ${currentDoctorName(record)} 跟进处理` : '医生已接手，正在整理处理意见'
   if (stage === 'completed') return followUpLine(record)
@@ -1884,6 +2053,11 @@ function followUpReminderText(record) {
   if (state === 'due_today') return '当前问诊的随访计划今天到期，如症状仍有变化，建议今天补充最新情况。'
   if (state === 'pending') return `当前问诊仍处于待随访状态${followUpDueDate(record) ? `，计划时间：${formatDate(followUpDueDate(record), true)}` : ''}`
   return ''
+}
+
+function serviceFeedbackTimeText(record) {
+  const time = serviceFeedbackBaseTime(record)
+  return time ? `完成于 ${formatDate(time)}` : '待提交服务评价'
 }
 
 function followUpReminderType(record) {
@@ -2111,6 +2285,38 @@ function applyFeedbackForm(feedback) {
   feedbackForm.manualCorrectDoctorId = feedback?.manualCorrectDoctorId || null
 }
 
+function applyServiceFeedbackForm(feedback) {
+  serviceFeedbackForm.serviceScore = feedback?.serviceScore || 5
+  serviceFeedbackForm.isResolved = feedback?.isResolved ?? 1
+  serviceFeedbackForm.feedbackText = feedback?.feedbackText || ''
+}
+
+function submitServiceFeedback() {
+  if (!detailRecord.value?.id) return
+  if (!canSubmitServiceFeedback.value) {
+    ElMessage.warning('当前问诊尚未完成医生处理，暂不可提交服务评价')
+    return
+  }
+  if (!serviceFeedbackForm.serviceScore) {
+    ElMessage.warning('请先选择服务评分')
+    return
+  }
+  serviceFeedbackSubmitting.value = true
+  post('/api/user/consultation/service-feedback/submit', {
+    recordId: detailRecord.value.id,
+    serviceScore: serviceFeedbackForm.serviceScore,
+    isResolved: serviceFeedbackForm.isResolved,
+    feedbackText: `${serviceFeedbackForm.feedbackText || ''}`.trim()
+  }, () => {
+    serviceFeedbackSubmitting.value = false
+    ElMessage.success('问诊服务评价已保存')
+    refreshRecordDetail(detailRecord.value.id)
+  }, (message) => {
+    serviceFeedbackSubmitting.value = false
+    ElMessage.warning(message || '问诊服务评价保存失败')
+  })
+}
+
 function submitFeedback() {
   if (!detailRecord.value?.id) return
   if (!feedbackForm.userScore) {
@@ -2135,6 +2341,7 @@ function submitFeedback() {
         messageSummary: normalizeMessageSummary(data?.messageSummary)
       } : null
       syncRecordSnapshot(detailRecord.value)
+      applyServiceFeedbackForm(data?.serviceFeedback)
       applyFeedbackForm(data?.triageFeedback)
     })
   }, (message) => {
@@ -2176,6 +2383,10 @@ function messageTypeLabel(value) {
 
 function feedbackAdoptLabel(value) {
   return value === 1 ? '已采纳' : '未采纳'
+}
+
+function serviceFeedbackResolvedLabel(value) {
+  return value === 1 ? '本次问题已解决' : '仍需继续处理'
 }
 
 function parseJsonArray(value) {
@@ -2325,12 +2536,17 @@ watch(detailVisible, (value) => {
     consultationMessages.value = []
     messageLoading.value = false
     messageSending.value = false
+    clearFocusedDetailSection()
     resetTriageAiDraft()
     resetMessageDraft()
-    if (route.query.id) {
-      router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false }) })
+    if (route.query.id || route.query.action) {
+      router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false, action: '' }) })
     }
   }
+})
+
+onBeforeUnmount(() => {
+  clearFocusedDetailSection()
 })
 
 onMounted(() => loadData())
@@ -2984,6 +3200,11 @@ onMounted(() => loadData())
   color: #8f6514;
 }
 
+.focus-action-panel {
+  border-color: rgba(15, 102, 101, 0.28);
+  box-shadow: 0 0 0 3px rgba(15, 102, 101, 0.12);
+}
+
 .feedback-summary,
 .feedback-form,
 .feedback-actions {
@@ -3077,6 +3298,11 @@ onMounted(() => loadData())
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+:deep(.focus-action-input .el-textarea__inner) {
+  border-color: rgba(15, 102, 101, 0.28);
+  box-shadow: 0 0 0 3px rgba(15, 102, 101, 0.12);
 }
 
 .conversation-attachment-item {

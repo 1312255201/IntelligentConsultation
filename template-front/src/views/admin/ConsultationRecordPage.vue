@@ -12,6 +12,167 @@
     <section class="card block">
       <div class="head">
         <div>
+          <h3>服务评价质控概览</h3>
+          <p>汇总患者对在线问诊服务的评分、是否解决以及医生处理状态，方便后台快速定位需要继续跟进的记录。</p>
+        </div>
+        <el-button @click="applyServiceFeedbackQuickFilter('attention')">只看待关注评价</el-button>
+      </div>
+      <div class="summary-grid feedback-summary-grid">
+        <article class="subcard summary-card">
+          <span>已提交评价</span>
+          <strong>{{ serviceFeedbackCount }}</strong>
+          <small>{{ serviceFeedbackCoverageText }}</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>待关注评价</span>
+          <strong>{{ attentionServiceFeedbackCount }}</strong>
+          <small>低分或未解决，且医生尚未标记为已处理。</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>低分评价</span>
+          <strong>{{ lowScoreServiceFeedbackCount }}</strong>
+          <small>2 星及以下的服务评价，建议优先复盘。</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>医生已处理</span>
+          <strong>{{ handledServiceFeedbackCount }}</strong>
+          <small>{{ serviceFeedbackHandledRateText }}</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>平均处理时长</span>
+          <strong>{{ averageServiceFeedbackHandleDurationText }}</strong>
+          <small>按已处理服务评价统计。</small>
+        </article>
+        <article class="subcard summary-card">
+          <span>超时未处理</span>
+          <strong>{{ overdueUnhandledServiceFeedbackCount }}</strong>
+          <small>{{ `当前阈值 ${SERVICE_FEEDBACK_HANDLE_OVERDUE_HOURS}h` }}</small>
+        </article>
+      </div>
+      <div class="breakdown-grid">
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>最近待关注评价</strong>
+              <p>优先查看低分或未解决，且医生还未完成处理登记的服务评价。</p>
+            </div>
+          </div>
+          <div v-if="attentionServiceFeedbackPreview.length" class="dispatch-wait-list">
+            <article v-for="item in attentionServiceFeedbackPreview" :key="item.id" class="dispatch-wait-card feedback-focus-card">
+              <div class="chips">
+                <span>{{ item.consultationNo }}</span>
+                <span>{{ item.patientName }}</span>
+                <span>{{ item.categoryName }}</span>
+                <span>{{ item.departmentName || '未分配科室' }}</span>
+                <span>{{ formatDate(serviceFeedbackTime(item)) }}</span>
+              </div>
+              <div class="feedback-tag-row">
+                <el-tag :type="serviceFeedbackScoreTagType(item.serviceFeedback?.serviceScore)" effect="light">
+                  {{ item.serviceFeedback?.serviceScore ?? '-' }}/5 分
+                </el-tag>
+                <el-tag :type="serviceFeedbackResolvedTagType(item.serviceFeedback?.isResolved)" effect="light">
+                  {{ serviceFeedbackResolvedLabel(item.serviceFeedback?.isResolved) }}
+                </el-tag>
+                <el-tag :type="serviceFeedbackHandleTagType(item.serviceFeedback?.doctorHandleStatus)" effect="light">
+                  {{ serviceFeedbackHandleLabel(item.serviceFeedback?.doctorHandleStatus) }}
+                </el-tag>
+              </div>
+              <p class="copy"><strong>反馈内容：</strong>{{ item.serviceFeedback?.feedbackText || '患者未填写补充评价内容。' }}</p>
+              <p v-if="item.serviceFeedback?.doctorHandleRemark" class="copy"><strong>处理备注：</strong>{{ item.serviceFeedback.doctorHandleRemark }}</p>
+              <div class="actions">
+                <el-button link type="primary" @click="openDetail(item.id)">查看详情</el-button>
+                <el-button link @click="applyServiceFeedbackQuickFilter('attention')">查看同类记录</el-button>
+              </div>
+            </article>
+          </div>
+          <el-empty v-else description="当前没有待关注的服务评价" />
+        </article>
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>按科室聚合</strong>
+              <p>查看各科室服务评价数量、重点关注量以及医生处理进度，便于做横向比较。</p>
+            </div>
+          </div>
+          <el-table v-if="serviceFeedbackDepartmentBreakdown.length" :data="serviceFeedbackDepartmentBreakdown" size="small" border>
+            <el-table-column prop="departmentName" label="科室" min-width="140" />
+            <el-table-column prop="feedbackCount" label="评价数" width="86" align="center" />
+            <el-table-column prop="attentionCount" label="待关注" width="86" align="center" />
+            <el-table-column prop="lowScoreCount" label="低分" width="86" align="center" />
+            <el-table-column prop="unresolvedCount" label="未解决" width="86" align="center" />
+            <el-table-column prop="handledRateText" label="已处理率" width="100" align="center" />
+          </el-table>
+          <el-empty v-else description="当前暂无可统计的服务评价数据" />
+        </article>
+      </div>
+      <div class="head summary-subhead">
+        <div>
+          <h3>医生处理表现</h3>
+          <p>继续查看各医生收到的服务评价量、重点关注积压和平均处理时长，帮助后台识别服务反馈处理负载。</p>
+        </div>
+      </div>
+      <div class="breakdown-grid">
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>按医生聚合</strong>
+              <p>聚合每位医生的服务评价数量、待关注积压、超时未处理量和平均处理时长。</p>
+            </div>
+          </div>
+          <el-table v-if="serviceFeedbackDoctorBreakdown.length" :data="serviceFeedbackDoctorBreakdown" size="small" border>
+            <el-table-column prop="doctorName" label="医生" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="departmentName" label="科室" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="feedbackCount" label="评价数" width="80" align="center" />
+            <el-table-column prop="attentionCount" label="待关注" width="86" align="center" />
+            <el-table-column prop="overdueUnhandledCount" label="超时未处理" width="100" align="center" />
+            <el-table-column prop="handledRateText" label="已处理率" width="96" align="center" />
+            <el-table-column prop="averageHandleDurationText" label="平均处理时长" min-width="120" align="center" />
+            <el-table-column label="操作" width="100" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="applyServiceFeedbackDoctorQuickFilter(row.doctorName, 'attention')">查看记录</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-else description="当前暂无可统计的医生服务评价数据" />
+        </article>
+        <article class="subcard breakdown-card">
+          <div class="breakdown-head">
+            <div>
+              <strong>超时未处理评价</strong>
+              <p>优先关注超过处理阈值仍未登记处理结果的服务评价，帮助平台及时干预。</p>
+            </div>
+          </div>
+          <div v-if="overdueUnhandledServiceFeedbackPreview.length" class="dispatch-wait-list">
+            <article v-for="item in overdueUnhandledServiceFeedbackPreview" :key="`overdue-${item.id}`" class="dispatch-wait-card feedback-focus-card">
+              <div class="chips">
+                <span>{{ item.consultationNo }}</span>
+                <span>{{ item.patientName }}</span>
+                <span>{{ item.serviceFeedback?.doctorName || '未分配医生' }}</span>
+                <span>{{ formatDate(serviceFeedbackBaseTime(item)) }}</span>
+              </div>
+              <div class="feedback-tag-row">
+                <el-tag :type="serviceFeedbackScoreTagType(item.serviceFeedback?.serviceScore)" effect="light">
+                  {{ item.serviceFeedback?.serviceScore ?? '-' }}/5 分
+                </el-tag>
+                <el-tag type="danger" effect="light">
+                  已等待 {{ serviceFeedbackPendingDurationText(item) }}
+                </el-tag>
+              </div>
+              <p class="copy"><strong>反馈内容：</strong>{{ item.serviceFeedback?.feedbackText || '患者未填写补充评价内容。' }}</p>
+              <div class="actions">
+                <el-button link type="primary" @click="openDetail(item.id)">查看详情</el-button>
+                <el-button link type="danger" @click="applyServiceFeedbackQuickFilter('overdue_unhandled')">查看全部超时</el-button>
+              </div>
+            </article>
+          </div>
+          <el-empty v-else description="当前没有超时未处理的服务评价" />
+        </article>
+      </div>
+    </section>
+
+    <section class="card block">
+      <div class="head">
+        <div>
           <h3>智能分配运营总览</h3>
           <p>查看当前推荐覆盖、首推命中率和待接手积压情况，方便持续优化分配链路。</p>
         </div>
@@ -350,6 +511,15 @@
             <el-option label="其他医生接手" value="claimed_by_other" />
             <el-option label="科室分诊队列" value="department_queue" />
           </el-select>
+          <el-select v-model="feedbackFilter" clearable placeholder="全部服务评价" style="width:180px">
+            <el-option label="已提交评价" value="has_feedback" />
+            <el-option label="待关注评价" value="attention" />
+            <el-option label="低分评价" value="low_score" />
+            <el-option label="未解决评价" value="unresolved" />
+            <el-option label="医生待处理" value="unhandled" />
+            <el-option label="超时未处理" value="overdue_unhandled" />
+            <el-option label="医生已处理" value="handled" />
+          </el-select>
         </div>
         <el-button @click="refreshAll">刷新</el-button>
       </div>
@@ -377,6 +547,25 @@
               <el-tag :type="smartDispatchTagType(row.smartDispatch)" effect="light">{{ smartDispatchStatusLabel(row.smartDispatch) }}</el-tag>
               <span>{{ smartDispatchLine(row) }}</span>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="服务评价" min-width="280">
+          <template #default="{ row }">
+            <div v-if="row.serviceFeedback" class="feedback-cell">
+              <div class="feedback-tag-row">
+                <el-tag :type="serviceFeedbackScoreTagType(row.serviceFeedback.serviceScore)" effect="light">
+                  {{ row.serviceFeedback.serviceScore ?? '-' }}/5 分
+                </el-tag>
+                <el-tag :type="serviceFeedbackResolvedTagType(row.serviceFeedback.isResolved)" effect="light">
+                  {{ serviceFeedbackResolvedLabel(row.serviceFeedback.isResolved) }}
+                </el-tag>
+                <el-tag :type="serviceFeedbackHandleTagType(row.serviceFeedback.doctorHandleStatus)" effect="light">
+                  {{ serviceFeedbackHandleLabel(row.serviceFeedback.doctorHandleStatus) }}
+                </el-tag>
+              </div>
+              <span class="feedback-cell-copy">{{ row.serviceFeedback.feedbackText || '患者未填写补充评价内容。' }}</span>
+            </div>
+            <span v-else class="muted-copy">暂无服务评价</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="110" align="center">
@@ -765,6 +954,29 @@
           </section>
 
           <section class="card panel">
+            <div class="head">
+              <div>
+                <h3>问诊服务评价</h3>
+                <p>查看患者对本次医生在线问诊服务的评分、问题解决情况和补充反馈。</p>
+              </div>
+            </div>
+            <div v-if="detail.serviceFeedback" class="subcard">
+              <div class="chips">
+                <span>服务评分：{{ detail.serviceFeedback.serviceScore ?? '-' }}/5</span>
+                <span>{{ serviceFeedbackResolvedLabel(detail.serviceFeedback.isResolved) }}</span>
+                <span>{{ serviceFeedbackHandleLabel(detail.serviceFeedback.doctorHandleStatus) }}</span>
+                <span v-if="detail.serviceFeedback.patientName">评价人：{{ detail.serviceFeedback.patientName }}</span>
+                <span>评价时间：{{ formatDate(detail.serviceFeedback.updateTime || detail.serviceFeedback.createTime) }}</span>
+                <span v-if="detail.serviceFeedback.doctorHandleTime">处理时间：{{ formatDate(detail.serviceFeedback.doctorHandleTime) }}</span>
+              </div>
+              <p class="copy">{{ detail.serviceFeedback.feedbackText || '患者未填写补充评价内容。' }}</p>
+              <p v-if="detail.serviceFeedback.doctorHandleDoctorName" class="copy"><strong>处理医生：</strong>{{ detail.serviceFeedback.doctorHandleDoctorName }}</p>
+              <p v-if="detail.serviceFeedback.doctorHandleRemark" class="copy"><strong>处理备注：</strong>{{ detail.serviceFeedback.doctorHandleRemark }}</p>
+            </div>
+            <el-empty v-else description="当前暂无问诊服务评价" />
+          </section>
+
+          <section class="card panel">
             <h3>规则命中日志</h3>
             <el-table v-if="detail.ruleHits?.length" :data="detail.ruleHits" border>
               <el-table-column label="主规则" width="90" align="center">
@@ -807,6 +1019,7 @@ import { aiMismatchReasonLabel, aiMismatchReasonOptions, comparisonStatusClass, 
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 
 const SAMPLE_PAGE_SIZE = 20
+const SERVICE_FEEDBACK_HANDLE_OVERDUE_HOURS = 24
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
@@ -837,6 +1050,7 @@ const triageFilter = ref('')
 const statusFilter = ref('')
 const assignmentFilter = ref('')
 const dispatchFilter = ref('')
+const feedbackFilter = ref('')
 const mismatchSampleMeta = ref(createEmptyMismatchSampleMeta())
 const mismatchSampleFilters = reactive(createEmptyMismatchSampleFilters())
 const fieldSampleStatus = ref('mismatch')
@@ -924,6 +1138,110 @@ const todayCount = computed(() => {
 })
 const waitingDispatchCount = computed(() => records.value.filter(item => getSmartDispatch(item).status === 'waiting_accept').length)
 const suggestedAcceptedCount = computed(() => records.value.filter(item => getSmartDispatch(item).status === 'claimed_by_suggested').length)
+const serviceFeedbackRecords = computed(() => records.value.filter(hasServiceFeedback))
+const serviceFeedbackCount = computed(() => serviceFeedbackRecords.value.length)
+const attentionServiceFeedbackRecords = computed(() => serviceFeedbackRecords.value
+  .filter(isAttentionServiceFeedbackRecord)
+  .slice()
+  .sort(compareServiceFeedbackRecord))
+const attentionServiceFeedbackCount = computed(() => attentionServiceFeedbackRecords.value.length)
+const attentionServiceFeedbackPreview = computed(() => attentionServiceFeedbackRecords.value.slice(0, 6))
+const lowScoreServiceFeedbackCount = computed(() => serviceFeedbackRecords.value.filter(isLowScoreServiceFeedbackRecord).length)
+const unresolvedServiceFeedbackCount = computed(() => serviceFeedbackRecords.value.filter(isUnresolvedServiceFeedbackRecord).length)
+const handledServiceFeedbackCount = computed(() => serviceFeedbackRecords.value.filter(isHandledServiceFeedbackRecord).length)
+const overdueUnhandledServiceFeedbackRecords = computed(() => serviceFeedbackRecords.value
+  .filter(record => isOverdueUnhandledServiceFeedbackRecord(record, SERVICE_FEEDBACK_HANDLE_OVERDUE_HOURS))
+  .slice()
+  .sort(compareServiceFeedbackRecord))
+const overdueUnhandledServiceFeedbackCount = computed(() => overdueUnhandledServiceFeedbackRecords.value.length)
+const overdueUnhandledServiceFeedbackPreview = computed(() => overdueUnhandledServiceFeedbackRecords.value.slice(0, 6))
+const serviceFeedbackCoverageText = computed(() => `${serviceFeedbackCount.value} / ${records.value.length}`)
+const serviceFeedbackHandledRateText = computed(() => formatRateText(handledServiceFeedbackCount.value, serviceFeedbackCount.value))
+const averageServiceFeedbackHandleDurationText = computed(() => {
+  const durations = serviceFeedbackRecords.value
+    .map(serviceFeedbackHandleDurationMs)
+    .filter(value => Number.isFinite(value) && value >= 0)
+  return formatAverageDurationText(durations)
+})
+const serviceFeedbackDepartmentBreakdown = computed(() => {
+  const groups = new Map()
+  serviceFeedbackRecords.value.forEach(record => {
+    const departmentName = record.departmentName || record.serviceFeedback?.departmentName || '未分配科室'
+    const current = groups.get(departmentName) || {
+      departmentName,
+      feedbackCount: 0,
+      attentionCount: 0,
+      lowScoreCount: 0,
+      unresolvedCount: 0,
+      handledCount: 0,
+      handledRateText: '-'
+    }
+    current.feedbackCount += 1
+    if (isAttentionServiceFeedbackRecord(record)) current.attentionCount += 1
+    if (isLowScoreServiceFeedbackRecord(record)) current.lowScoreCount += 1
+    if (isUnresolvedServiceFeedbackRecord(record)) current.unresolvedCount += 1
+    if (isHandledServiceFeedbackRecord(record)) current.handledCount += 1
+    groups.set(departmentName, current)
+  })
+  return [...groups.values()]
+    .map(item => ({
+      ...item,
+      handledRateText: formatRateText(item.handledCount, item.feedbackCount)
+    }))
+    .sort((left, right) => {
+      if (right.attentionCount !== left.attentionCount) return right.attentionCount - left.attentionCount
+      if (right.feedbackCount !== left.feedbackCount) return right.feedbackCount - left.feedbackCount
+      return `${left.departmentName}`.localeCompare(`${right.departmentName}`, 'zh-CN')
+    })
+})
+const serviceFeedbackDoctorBreakdown = computed(() => {
+  const groups = new Map()
+  serviceFeedbackRecords.value.forEach(record => {
+    const doctorId = record.serviceFeedback?.doctorId ?? null
+    const doctorName = record.serviceFeedback?.doctorName || record.serviceFeedback?.doctorHandleDoctorName || '未分配医生'
+    const departmentName = record.departmentName || record.serviceFeedback?.departmentName || '未分配科室'
+    const key = doctorId != null ? `doctor:${doctorId}` : `doctor-name:${doctorName}`
+    const current = groups.get(key) || {
+      doctorId,
+      doctorName,
+      departmentName,
+      feedbackCount: 0,
+      attentionCount: 0,
+      lowScoreCount: 0,
+      overdueUnhandledCount: 0,
+      handledCount: 0,
+      totalHandleDurationMs: 0,
+      handleDurationCount: 0,
+      handledRateText: '-',
+      averageHandleDurationText: '-'
+    }
+    current.feedbackCount += 1
+    if (isAttentionServiceFeedbackRecord(record)) current.attentionCount += 1
+    if (isLowScoreServiceFeedbackRecord(record)) current.lowScoreCount += 1
+    if (isOverdueUnhandledServiceFeedbackRecord(record, SERVICE_FEEDBACK_HANDLE_OVERDUE_HOURS)) current.overdueUnhandledCount += 1
+    if (isHandledServiceFeedbackRecord(record)) current.handledCount += 1
+    const duration = serviceFeedbackHandleDurationMs(record)
+    if (Number.isFinite(duration) && duration >= 0) {
+      current.totalHandleDurationMs += duration
+      current.handleDurationCount += 1
+    }
+    groups.set(key, current)
+  })
+  return [...groups.values()]
+    .map(item => ({
+      ...item,
+      handledRateText: formatRateText(item.handledCount, item.feedbackCount),
+      averageHandleDurationText: item.handleDurationCount > 0
+        ? formatDurationText(item.totalHandleDurationMs / item.handleDurationCount)
+        : '-'
+    }))
+    .sort((left, right) => {
+      if (right.overdueUnhandledCount !== left.overdueUnhandledCount) return right.overdueUnhandledCount - left.overdueUnhandledCount
+      if (right.attentionCount !== left.attentionCount) return right.attentionCount - left.attentionCount
+      if (right.feedbackCount !== left.feedbackCount) return right.feedbackCount - left.feedbackCount
+      return `${left.doctorName}`.localeCompare(`${right.doctorName}`, 'zh-CN')
+    })
+})
 const categoryOptions = computed(() => [...new Set(records.value.map(item => item.categoryName).filter(Boolean))])
 const triageOptions = computed(() => [...new Set(records.value.map(item => item.triageLevelName).filter(Boolean))])
 const fieldSampleDoctorOptions = computed(() => [...new Set((aiSummary.value.doctorBreakdown || []).map(item => item.doctorName).filter(Boolean))])
@@ -949,13 +1267,23 @@ const mismatchSampleDialogTitle = computed(() => mismatchSampleMeta.value.title 
 const fieldSampleDialogTitle = computed(() => `${fieldSampleMeta.value.fieldLabel || '字段'}${fieldSampleStatus.value === 'mismatch' ? '偏差样本' : '待补充样本'}`)
 const filteredRecords = computed(() => records.value.filter(item => {
   const search = keyword.value.trim().toLowerCase()
-  const matchesKeyword = !search || [item.consultationNo, item.patientName, item.title, item.chiefComplaint].filter(Boolean).some(text => `${text}`.toLowerCase().includes(search))
+  const matchesKeyword = !search || [
+    item.consultationNo,
+    item.patientName,
+    item.title,
+    item.chiefComplaint,
+    item.serviceFeedback?.doctorName,
+    item.serviceFeedback?.doctorHandleDoctorName,
+    item.serviceFeedback?.feedbackText,
+    item.serviceFeedback?.doctorHandleRemark
+  ].filter(Boolean).some(text => `${text}`.toLowerCase().includes(search))
   const matchesCategory = !categoryFilter.value || item.categoryName === categoryFilter.value
   const matchesTriage = !triageFilter.value || item.triageLevelName === triageFilter.value
   const matchesStatus = !statusFilter.value || item.status === statusFilter.value
   const matchesAssignment = !assignmentFilter.value || assignmentKey(item.doctorAssignment) === assignmentFilter.value
   const matchesDispatch = !dispatchFilter.value || getSmartDispatch(item).status === dispatchFilter.value
-  return matchesKeyword && matchesCategory && matchesTriage && matchesStatus && matchesAssignment && matchesDispatch
+  const matchesFeedback = !feedbackFilter.value || matchesServiceFeedbackFilter(item, feedbackFilter.value)
+  return matchesKeyword && matchesCategory && matchesTriage && matchesStatus && matchesAssignment && matchesDispatch && matchesFeedback
 }))
 
 function loadData() {
@@ -975,6 +1303,19 @@ function refreshAll() {
   loadData()
   loadAiSummary()
   loadSmartDispatchSummary()
+}
+function applyServiceFeedbackQuickFilter(filter = 'attention') {
+  keyword.value = ''
+  categoryFilter.value = ''
+  triageFilter.value = ''
+  assignmentFilter.value = ''
+  dispatchFilter.value = ''
+  statusFilter.value = 'completed'
+  feedbackFilter.value = filter
+}
+function applyServiceFeedbackDoctorQuickFilter(doctorName = '', filter = 'attention') {
+  applyServiceFeedbackQuickFilter(filter)
+  keyword.value = doctorName || ''
 }
 function loadAiSummary() {
   summaryLoading.value = true
@@ -1250,6 +1591,101 @@ function triageBadgeStyle(color) { return color ? { color, borderColor: `${color
 function parseJsonArray(value) { try { const parsed = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed : [] } catch { return [] } }
 function mismatchReasonLabels(codes) { return (codes || []).map(item => aiMismatchReasonLabel(item)).filter(Boolean) }
 function doctorConclusionMismatchReasonLabels(conclusion) { return mismatchReasonLabels(parseJsonArray(conclusion?.aiMismatchReasonsJson)) }
+function hasServiceFeedback(record) { return !!record?.serviceFeedback }
+function serviceFeedbackTime(record) { return record?.serviceFeedback?.updateTime || record?.serviceFeedback?.createTime || record?.updateTime || record?.createTime || null }
+function serviceFeedbackBaseTime(record) { return serviceFeedbackTime(record) }
+function serviceFeedbackHandleDurationMs(record) {
+  if (!isHandledServiceFeedbackRecord(record)) return null
+  const baseTime = serviceFeedbackBaseTime(record)
+  const handleTime = record?.serviceFeedback?.doctorHandleTime
+  if (!baseTime || !handleTime) return null
+  const diff = new Date(handleTime).getTime() - new Date(baseTime).getTime()
+  return Number.isFinite(diff) && diff >= 0 ? diff : null
+}
+function isOverdueUnhandledServiceFeedbackRecord(record, hours = SERVICE_FEEDBACK_HANDLE_OVERDUE_HOURS) {
+  if (!hasServiceFeedback(record) || isHandledServiceFeedbackRecord(record)) return false
+  const baseTime = serviceFeedbackBaseTime(record)
+  if (!baseTime) return false
+  const thresholdMs = Number(hours) * 60 * 60 * 1000
+  return Date.now() - new Date(baseTime).getTime() >= thresholdMs
+}
+function formatDurationText(value) {
+  const ms = Number(value)
+  if (!Number.isFinite(ms) || ms < 0) return '-'
+  const totalMinutes = Math.round(ms / 60000)
+  if (totalMinutes < 60) return `${Math.max(totalMinutes, 1)} 分钟`
+  const totalHours = ms / (60 * 60 * 1000)
+  if (totalHours < 24) return `${totalHours.toFixed(totalHours >= 10 ? 0 : 1)} 小时`
+  const totalDays = totalHours / 24
+  return `${totalDays.toFixed(totalDays >= 10 ? 0 : 1)} 天`
+}
+function formatAverageDurationText(values) {
+  if (!Array.isArray(values) || !values.length) return '-'
+  const total = values.reduce((sum, item) => sum + item, 0)
+  return formatDurationText(total / values.length)
+}
+function serviceFeedbackPendingDurationText(record) {
+  const baseTime = serviceFeedbackBaseTime(record)
+  if (!baseTime) return '-'
+  return formatDurationText(Date.now() - new Date(baseTime).getTime())
+}
+function serviceFeedbackScoreValue(record) {
+  const score = Number(record?.serviceFeedback?.serviceScore)
+  return Number.isFinite(score) ? score : null
+}
+function isLowScoreServiceFeedbackRecord(record) {
+  const score = serviceFeedbackScoreValue(record)
+  return score !== null && score > 0 && score <= 2
+}
+function isUnresolvedServiceFeedbackRecord(record) { return hasServiceFeedback(record) && Number(record?.serviceFeedback?.isResolved) !== 1 }
+function isHandledServiceFeedbackRecord(record) { return hasServiceFeedback(record) && Number(record?.serviceFeedback?.doctorHandleStatus) === 1 }
+function isAttentionServiceFeedbackRecord(record) {
+  if (!hasServiceFeedback(record) || isHandledServiceFeedbackRecord(record)) return false
+  return isLowScoreServiceFeedbackRecord(record) || isUnresolvedServiceFeedbackRecord(record)
+}
+function matchesServiceFeedbackFilter(record, filter) {
+  if (!filter) return true
+  if (filter === 'has_feedback') return hasServiceFeedback(record)
+  if (filter === 'attention') return isAttentionServiceFeedbackRecord(record)
+  if (filter === 'low_score') return isLowScoreServiceFeedbackRecord(record)
+  if (filter === 'unresolved') return isUnresolvedServiceFeedbackRecord(record)
+  if (filter === 'unhandled') return hasServiceFeedback(record) && !isHandledServiceFeedbackRecord(record)
+  if (filter === 'overdue_unhandled') return isOverdueUnhandledServiceFeedbackRecord(record, SERVICE_FEEDBACK_HANDLE_OVERDUE_HOURS)
+  if (filter === 'handled') return isHandledServiceFeedbackRecord(record)
+  return true
+}
+function compareServiceFeedbackRecord(left, right) {
+  const leftAttention = isAttentionServiceFeedbackRecord(left) ? 1 : 0
+  const rightAttention = isAttentionServiceFeedbackRecord(right) ? 1 : 0
+  if (rightAttention !== leftAttention) return rightAttention - leftAttention
+  const leftLowScore = isLowScoreServiceFeedbackRecord(left) ? 1 : 0
+  const rightLowScore = isLowScoreServiceFeedbackRecord(right) ? 1 : 0
+  if (rightLowScore !== leftLowScore) return rightLowScore - leftLowScore
+  const leftUnresolved = isUnresolvedServiceFeedbackRecord(left) ? 1 : 0
+  const rightUnresolved = isUnresolvedServiceFeedbackRecord(right) ? 1 : 0
+  if (rightUnresolved !== leftUnresolved) return rightUnresolved - leftUnresolved
+  const leftTime = serviceFeedbackTime(left) ? new Date(serviceFeedbackTime(left)).getTime() : 0
+  const rightTime = serviceFeedbackTime(right) ? new Date(serviceFeedbackTime(right)).getTime() : 0
+  if (rightTime !== leftTime) return rightTime - leftTime
+  return Number(right?.id || 0) - Number(left?.id || 0)
+}
+function formatRateText(numerator, denominator) {
+  const total = Number(denominator)
+  const current = Number(numerator)
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(current) || current < 0) return '-'
+  return `${Math.round((current / total) * 100)}%`
+}
+function serviceFeedbackResolvedLabel(value) { return value === 1 ? '本次问题已解决' : '仍需继续处理' }
+function serviceFeedbackResolvedTagType(value) { return value === 1 ? 'success' : 'warning' }
+function serviceFeedbackHandleLabel(value) { return value === 1 ? '医生已处理' : '待医生跟进' }
+function serviceFeedbackHandleTagType(value) { return value === 1 ? 'success' : 'info' }
+function serviceFeedbackScoreTagType(value) {
+  const score = Number(value)
+  if (!Number.isFinite(score)) return 'info'
+  if (score <= 2) return 'danger'
+  if (score === 3) return 'warning'
+  return 'success'
+}
 function formatConfidence(value) {
   const number = Number(value)
   return Number.isNaN(number) || number <= 0 ? '-' : `${Math.round(number * 100)}%`
@@ -1361,6 +1797,11 @@ onMounted(() => refreshAll())
   margin-bottom: 18px;
 }
 
+.feedback-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
 .breakdown-grid {
   margin-top: 18px;
 }
@@ -1412,6 +1853,24 @@ onMounted(() => refreshAll())
 
 .copy + .copy {
   margin-top: 8px;
+}
+
+.feedback-cell,
+.feedback-focus-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feedback-tag-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.feedback-cell-copy {
+  color: #41575d;
+  line-height: 1.7;
 }
 
 .chips span {

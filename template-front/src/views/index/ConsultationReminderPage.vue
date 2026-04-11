@@ -6,6 +6,7 @@
         <h2>消息与提醒中心</h2>
         <p>{{ heroSummary }}</p>
         <div class="chip-row">
+          <span v-if="pendingServiceFeedbackCount">待评价 {{ pendingServiceFeedbackCount }}</span>
           <span>{{ totalReminderCount }} 条需要优先关注</span>
           <span v-if="unreadDoctorReplyCount">医生新回复 {{ unreadDoctorReplyCount }}</span>
           <span v-if="waitingDoctorHandleCount">待医生处理 {{ waitingDoctorHandleCount }}</span>
@@ -35,6 +36,10 @@
           <span>待随访</span>
           <strong>{{ pendingFollowUpCount }}</strong>
         </article>
+        <article class="stat-card">
+          <span>待服务评价</span>
+          <strong>{{ pendingServiceFeedbackCount }}</strong>
+        </article>
         <article class="stat-card stat-card-warning">
           <span>今日到期</span>
           <strong>{{ dueTodayFollowUpCount }}</strong>
@@ -42,6 +47,39 @@
         <article class="stat-card stat-card-danger">
           <span>逾期随访</span>
           <strong>{{ overdueFollowUpCount }}</strong>
+        </article>
+
+        <article class="queue-card">
+          <div class="queue-card-head">
+            <div>
+              <strong>待服务评价</strong>
+              <p>医生完成处理后，可在这里快速进入问诊详情，为本次线上问诊补充服务评分与结果反馈。</p>
+            </div>
+            <el-tag type="info" effect="light">{{ pendingServiceFeedbackCount }}</el-tag>
+          </div>
+          <div v-if="pendingServiceFeedbackRecords.length" class="queue-list">
+            <button
+              v-for="item in pendingServiceFeedbackRecords"
+              :key="`feedback-${item.id}`"
+              type="button"
+              class="queue-item"
+              @click="openConsultationRecord(item, feedbackReminderQuery(item))"
+            >
+              <div class="queue-item-head">
+                <strong>{{ item.patientName || '未命名就诊人' }}</strong>
+                <span>{{ serviceFeedbackTimeText(item) }}</span>
+              </div>
+              <p>{{ serviceFeedbackReminderText(item) }}</p>
+              <div class="queue-item-meta">
+                <span>{{ item.categoryName || '未分类' }}</span>
+                <span>待提交服务评价</span>
+              </div>
+            </button>
+          </div>
+          <el-empty v-else description="当前没有待服务评价提醒" />
+          <div class="queue-foot">
+            <el-button text @click="openConsultationList({ progress: 'pending_feedback' })">只看待服务评价</el-button>
+          </div>
         </article>
       </div>
     </section>
@@ -70,7 +108,7 @@
               :key="`unread-${item.id}`"
               type="button"
               class="queue-item"
-              @click="openConsultationRecord(item, { progress: 'doctor_replied' })"
+              @click="openConsultationRecord(item, { progress: 'doctor_replied', action: 'conversation' })"
             >
               <div class="queue-item-head">
                 <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -103,7 +141,7 @@
               :key="`waiting-${item.id}`"
               type="button"
               class="queue-item"
-              @click="openConsultationRecord(item, { progress: 'waiting_doctor' })"
+              @click="openConsultationRecord(item, { progress: 'waiting_doctor', action: 'conversation' })"
             >
               <div class="queue-item-head">
                 <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -140,7 +178,7 @@
               :key="`followup-${item.id}`"
               type="button"
               :class="['queue-item', feedItemClass(item)]"
-              @click="openConsultationRecord(item, followUpState(item) === 'overdue' ? { followUp: 'overdue' } : { followUp: 'pending' })"
+              @click="openConsultationRecord(item, followUpState(item) === 'overdue' ? { followUp: 'overdue', action: 'followup' } : { followUp: 'pending', action: 'followup' })"
             >
               <div class="queue-item-head">
                 <strong>{{ item.patientName || '未命名就诊人' }}</strong>
@@ -169,6 +207,7 @@
           <p>按优先级串联所有需要你处理的问诊，并可一键进入问诊详情或 AI 导诊工作区。</p>
         </div>
         <el-radio-group v-model="feedFilter" size="small">
+          <el-radio-button label="feedback">待评价</el-radio-button>
           <el-radio-button label="all">全部</el-radio-button>
           <el-radio-button label="unread">医生回复</el-radio-button>
           <el-radio-button label="waiting">待处理</el-radio-button>
@@ -196,6 +235,7 @@
             <span>{{ item.categoryName || '未分类' }}</span>
             <span>{{ recordProgressLabel(item) }}</span>
             <span v-if="isPendingFollowUpRecord(item)">{{ followUpLine(item) }}</span>
+            <span v-if="isPendingServiceFeedbackRecord(item)">待服务评价</span>
           </div>
 
           <div class="feed-actions">
@@ -217,7 +257,7 @@ import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get } from '@/net'
 import { smartDispatchHintText, smartDispatchStatusLabel } from '@/triage/dispatch'
-import { normalizeReminderRecords } from '@/triage/reminder'
+import { isPendingServiceFeedbackRecord, normalizeReminderRecords, serviceFeedbackBaseTime, serviceFeedbackReminderText } from '@/triage/reminder'
 
 const router = useRouter()
 const route = useRoute()
@@ -234,6 +274,10 @@ const reminderRecords = computed(() => records.value
 const unreadReplyRecords = computed(() => reminderRecords.value.filter(recordHasUnreadDoctorReply))
 const waitingDoctorRecords = computed(() => reminderRecords.value.filter(item => recordProgressStage(item) === 'waiting_doctor'))
 const followUpRecords = computed(() => reminderRecords.value.filter(isPendingFollowUpRecord))
+const pendingServiceFeedbackRecords = computed(() => reminderRecords.value
+  .filter(isPendingServiceFeedbackRecord)
+  .slice()
+  .sort((left, right) => compareDateDesc(serviceFeedbackBaseTime(left), serviceFeedbackBaseTime(right))))
 const unreadReplyPreviewRecords = computed(() => unreadReplyRecords.value.slice(0, 4))
 const waitingDoctorPreviewRecords = computed(() => waitingDoctorRecords.value.slice(0, 4))
 const followUpPreviewRecords = computed(() => followUpRecords.value.slice(0, 4))
@@ -241,6 +285,7 @@ const followUpPreviewRecords = computed(() => followUpRecords.value.slice(0, 4))
 const unreadDoctorReplyCount = computed(() => unreadReplyRecords.value.length)
 const waitingDoctorHandleCount = computed(() => waitingDoctorRecords.value.length)
 const pendingFollowUpCount = computed(() => followUpRecords.value.length)
+const pendingServiceFeedbackCount = computed(() => pendingServiceFeedbackRecords.value.length)
 const dueTodayFollowUpCount = computed(() => followUpRecords.value.filter(item => followUpState(item) === 'due_today').length)
 const overdueFollowUpCount = computed(() => followUpRecords.value.filter(item => followUpState(item) === 'overdue').length)
 const totalReminderCount = computed(() => reminderRecords.value.length)
@@ -249,11 +294,19 @@ const filteredFeedRecords = computed(() => reminderRecords.value.filter((item) =
   if (feedFilter.value === 'unread') return recordHasUnreadDoctorReply(item)
   if (feedFilter.value === 'waiting') return recordProgressStage(item) === 'waiting_doctor'
   if (feedFilter.value === 'followup') return isPendingFollowUpRecord(item)
+  if (feedFilter.value === 'feedback') return isPendingServiceFeedbackRecord(item)
   if (feedFilter.value === 'overdue') return followUpState(item) === 'overdue'
   return true
 }))
 
 const heroSummary = computed(() => {
+  if (pendingServiceFeedbackCount.value > 0
+    && overdueFollowUpCount.value <= 0
+    && unreadDoctorReplyCount.value <= 0
+    && waitingDoctorHandleCount.value <= 0
+    && pendingFollowUpCount.value <= 0) {
+    return `当前有 ${pendingServiceFeedbackCount.value} 条问诊已完成医生处理，建议补充服务评分和问题是否解决。`
+  }
   if (!records.value.length) return '当前还没有历史问诊记录，可以先发起一次问诊并进入 AI 导诊工作区。'
   if (overdueFollowUpCount.value > 0) return `当前有 ${overdueFollowUpCount.value} 条问诊已进入逾期随访，建议优先回看医生结论并尽快继续跟进。`
   if (unreadDoctorReplyCount.value > 0) return `医生刚回复了 ${unreadDoctorReplyCount.value} 条问诊，建议先查看最新回复并决定是否继续补充信息。`
@@ -298,7 +351,7 @@ function openTriageWorkspace(recordId) {
 }
 
 function resolveFeedFilter(value) {
-  return ['all', 'unread', 'waiting', 'followup', 'overdue'].includes(value) ? value : 'all'
+  return ['all', 'unread', 'waiting', 'followup', 'feedback', 'overdue'].includes(value) ? value : 'all'
 }
 
 function buildReminderCenterQuery(nextFeed) {
@@ -455,8 +508,18 @@ function followUpReminderText(record) {
   return '当前暂无随访提醒'
 }
 
+function serviceFeedbackTimeText(record) {
+  const time = serviceFeedbackBaseTime(record)
+  return time ? `完成于 ${formatDate(time)}` : '待提交服务评价'
+}
+
+function feedbackReminderQuery(record) {
+  return { progress: 'pending_feedback', action: 'feedback', id: record?.id }
+}
+
 function primaryReminderLabel(record) {
   const state = followUpState(record)
+  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
   if (state === 'overdue') return '逾期随访'
   if (state === 'due_today') return '今日到期'
   if (recordHasUnreadDoctorReply(record)) return '医生新回复'
@@ -466,15 +529,18 @@ function primaryReminderLabel(record) {
 
 function reminderQuery(record) {
   const state = followUpState(record)
-  if (state === 'overdue') return { followUp: 'overdue' }
-  if (state === 'due_today' || state === 'pending') return { followUp: 'pending' }
-  if (recordHasUnreadDoctorReply(record)) return { progress: 'doctor_replied' }
-  if (recordProgressStage(record) === 'waiting_doctor') return { progress: 'waiting_doctor' }
+  if (feedFilter.value === 'feedback' && isPendingServiceFeedbackRecord(record)) return { progress: 'pending_feedback', action: 'feedback' }
+  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return { progress: 'pending_feedback', action: 'feedback' }
+  if (state === 'overdue') return { followUp: 'overdue', action: 'followup' }
+  if (state === 'due_today' || state === 'pending') return { followUp: 'pending', action: 'followup' }
+  if (recordHasUnreadDoctorReply(record)) return { progress: 'doctor_replied', action: 'conversation' }
+  if (recordProgressStage(record) === 'waiting_doctor') return { progress: 'waiting_doctor', action: 'conversation' }
   return {}
 }
 
 function feedItemSummary(record) {
   const state = followUpState(record)
+  if (state === 'none' && isPendingServiceFeedbackRecord(record)) return serviceFeedbackReminderText(record)
   if (state === 'overdue' || state === 'due_today' || state === 'pending') return followUpReminderText(record)
   if (recordHasUnreadDoctorReply(record)) return `医生有 ${getMessageSummary(record).unreadCount} 条新回复，最新消息：${recordMessagePreview(record)}`
   return recordProgressHint(record)
@@ -482,6 +548,7 @@ function feedItemSummary(record) {
 
 function feedItemTimeText(record) {
   const state = followUpState(record)
+  if (state === 'none' && isPendingServiceFeedbackRecord(record)) return serviceFeedbackTimeText(record)
   if (state === 'overdue' || state === 'due_today' || state === 'pending') return followUpLine(record)
   if (recordHasUnreadDoctorReply(record)) return formatDate(getMessageSummary(record).latestTime || record.updateTime)
   return formatDate(record.createTime)
@@ -499,6 +566,7 @@ function isReminderRecord(record) {
   return recordHasUnreadDoctorReply(record)
     || recordProgressStage(record) === 'waiting_doctor'
     || isPendingFollowUpRecord(record)
+    || isPendingServiceFeedbackRecord(record)
 }
 
 function reminderPriority(record) {
@@ -508,6 +576,7 @@ function reminderPriority(record) {
   if (recordHasUnreadDoctorReply(record)) return 2
   if (state === 'pending') return 3
   if (recordProgressStage(record) === 'waiting_doctor') return 4
+  if (isPendingServiceFeedbackRecord(record)) return 5
   return 9
 }
 
@@ -523,6 +592,7 @@ function compareReminderRecords(left, right) {
 
 function reminderSortTime(record) {
   if (recordHasUnreadDoctorReply(record)) return getMessageSummary(record).latestTime || record.updateTime || record.createTime
+  if (isPendingServiceFeedbackRecord(record)) return serviceFeedbackBaseTime(record)
   return followUpDueDate(record) || record.updateTime || record.createTime
 }
 

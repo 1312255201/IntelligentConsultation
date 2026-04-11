@@ -51,6 +51,10 @@
         <span>待随访</span>
         <strong>{{ pendingFollowUpCount }}</strong>
       </article>
+      <article class="stat-card">
+        <span>待服务评价</span>
+        <strong>{{ pendingServiceFeedbackCount }}</strong>
+      </article>
       <article class="stat-card stat-card-warning">
         <span>今日到期</span>
         <strong>{{ dueTodayFollowUpCount }}</strong>
@@ -91,6 +95,7 @@
               <span>{{ item.categoryName || '未分类' }}</span>
               <span>{{ recordProgressLabel(item) }}</span>
               <span v-if="isPendingFollowUpRecord(item)">{{ followUpLine(item) }}</span>
+              <span v-if="isPendingServiceFeedbackRecord(item)">待服务评价</span>
             </div>
           </button>
         </div>
@@ -166,6 +171,7 @@
               <span>{{ item.triageLevelName || triageActionLabel(item.triageActionType) }}</span>
               <span v-if="recordHasUnreadDoctorReply(item)">医生新回复 {{ getMessageSummary(item).unreadCount }} 条</span>
               <span v-if="isPendingFollowUpRecord(item)">{{ followUpTagLabel(item) }}</span>
+              <span v-if="isPendingServiceFeedbackRecord(item)">待服务评价</span>
             </div>
             <div class="recent-actions">
               <el-button text type="primary" @click="openConsultationRecord(item, reminderQuery(item))">查看详情</el-button>
@@ -238,7 +244,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { get } from '@/net'
 import { smartDispatchHintText } from '@/triage/dispatch'
-import { normalizeReminderRecords } from '@/triage/reminder'
+import { isPendingServiceFeedbackRecord, normalizeReminderRecords, serviceFeedbackBaseTime, serviceFeedbackReminderText } from '@/triage/reminder'
 
 const router = useRouter()
 const accountContext = inject('account-context', null)
@@ -262,6 +268,7 @@ const historyCoveragePercent = computed(() => percentage(historyCoverageCount.va
 const unreadDoctorReplyCount = computed(() => records.value.filter(recordHasUnreadDoctorReply).length)
 const waitingDoctorHandleCount = computed(() => records.value.filter(item => recordProgressStage(item) === 'waiting_doctor').length)
 const pendingFollowUpCount = computed(() => records.value.filter(isPendingFollowUpRecord).length)
+const pendingServiceFeedbackCount = computed(() => records.value.filter(isPendingServiceFeedbackRecord).length)
 const dueTodayFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'due_today').length)
 const overdueFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'overdue').length)
 const totalReminderCount = computed(() => reminderRecords.value.length)
@@ -279,6 +286,13 @@ const recentRecords = computed(() => records.value
   .sort((left, right) => compareDateDesc(left?.createTime, right?.createTime))
   .slice(0, 4))
 const heroSummary = computed(() => {
+  if (pendingServiceFeedbackCount.value > 0
+    && overdueFollowUpCount.value <= 0
+    && unreadDoctorReplyCount.value <= 0
+    && waitingDoctorHandleCount.value <= 0
+    && pendingFollowUpCount.value <= 0) {
+    return `当前有 ${pendingServiceFeedbackCount.value} 条问诊已完成医生处理，建议补充服务评分和问题是否解决。`
+  }
   if (!records.value.length) return '当前还没有问诊记录，可以先选择就诊人并发起一条问诊，系统会在提交后自动进入 AI 导诊主链路。'
   if (overdueFollowUpCount.value > 0) return `当前有 ${overdueFollowUpCount.value} 条问诊已进入逾期随访，建议先进入提醒中心查看详情并继续跟进恢复情况。`
   if (unreadDoctorReplyCount.value > 0) return `医生刚回复了 ${unreadDoctorReplyCount.value} 条问诊，首页已经把它们归到待办区，适合优先回看并决定是否继续补充信息。`
@@ -469,8 +483,14 @@ function followUpReminderText(record) {
   return '当前暂无随访提醒'
 }
 
+function serviceFeedbackTimeText(record) {
+  const time = serviceFeedbackBaseTime(record)
+  return time ? `完成于 ${formatDate(time)}` : '待提交服务评价'
+}
+
 function primaryReminderLabel(record) {
   const state = followUpState(record)
+  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
   if (state === 'overdue') return '逾期随访'
   if (state === 'due_today') return '今日到期'
   if (recordHasUnreadDoctorReply(record)) return '医生新回复'
@@ -480,6 +500,7 @@ function primaryReminderLabel(record) {
 
 function reminderQuery(record) {
   const state = followUpState(record)
+  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return { progress: 'pending_feedback', action: 'feedback' }
   if (state === 'overdue') return { followUp: 'overdue' }
   if (state === 'due_today' || state === 'pending') return { followUp: 'pending' }
   if (recordHasUnreadDoctorReply(record)) return { progress: 'doctor_replied' }
@@ -489,6 +510,7 @@ function reminderQuery(record) {
 
 function reminderSummary(record) {
   const state = followUpState(record)
+  if (state === 'none' && isPendingServiceFeedbackRecord(record)) return serviceFeedbackReminderText(record)
   if (state === 'overdue' || state === 'due_today' || state === 'pending') return followUpReminderText(record)
   if (recordHasUnreadDoctorReply(record)) return `医生有 ${getMessageSummary(record).unreadCount} 条新回复，最新消息：${recordMessagePreview(record)}`
   return smartDispatchHintText(record?.smartDispatch) || '问诊资料已提交，等待医生进一步处理'
@@ -496,6 +518,7 @@ function reminderSummary(record) {
 
 function reminderTimeText(record) {
   const state = followUpState(record)
+  if (state === 'none' && isPendingServiceFeedbackRecord(record)) return serviceFeedbackTimeText(record)
   if (state === 'overdue' || state === 'due_today' || state === 'pending') return followUpLine(record)
   return formatDate(getMessageSummary(record).latestTime || record.updateTime || record.createTime)
 }
@@ -512,6 +535,7 @@ function isReminderRecord(record) {
   return recordHasUnreadDoctorReply(record)
     || recordProgressStage(record) === 'waiting_doctor'
     || isPendingFollowUpRecord(record)
+    || isPendingServiceFeedbackRecord(record)
 }
 
 function reminderPriority(record) {
@@ -521,6 +545,7 @@ function reminderPriority(record) {
   if (recordHasUnreadDoctorReply(record)) return 2
   if (state === 'pending') return 3
   if (recordProgressStage(record) === 'waiting_doctor') return 4
+  if (isPendingServiceFeedbackRecord(record)) return 5
   return 9
 }
 
@@ -536,6 +561,7 @@ function compareReminderRecords(left, right) {
 
 function reminderSortTime(record) {
   if (recordHasUnreadDoctorReply(record)) return getMessageSummary(record).latestTime || record.updateTime || record.createTime
+  if (isPendingServiceFeedbackRecord(record)) return serviceFeedbackBaseTime(record)
   return followUpDueDate(record) || record.updateTime || record.createTime
 }
 

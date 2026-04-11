@@ -32,7 +32,15 @@ public class DoctorWorkbenchVO {
     Integer recommendedConsultationCount;
     Integer upcomingScheduleCount;
     Integer serviceTagCount;
+    Integer serviceFeedbackCount;
+    Integer resolvedServiceFeedbackCount;
+    Integer unresolvedServiceFeedbackCount;
+    Integer lowScoreServiceFeedbackCount;
+    Integer attentionServiceFeedbackCount;
+    Double averageServiceScore;
+    Double resolvedServiceFeedbackRate;
     List<String> serviceTags;
+    List<ConsultationServiceFeedbackVO> recentServiceFeedbacks;
     List<AdminConsultationRecordVO> recentConsultations;
     List<AdminConsultationRecordVO> unclaimedConsultations;
     List<AdminConsultationRecordVO> recommendedConsultations;

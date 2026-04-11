@@ -3,6 +3,7 @@ package cn.gugufish.controller;
 import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
+import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageMessageSendVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageFeedbackSubmitVO;
 import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
@@ -113,6 +114,13 @@ public class ConsultationController {
     public RestBean<Void> submitFeedback(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                          @RequestBody @Valid ConsultationTriageFeedbackSubmitVO vo) {
         return this.messageHandle(() -> consultationService.submitTriageFeedback(id, vo));
+    }
+
+    @PostMapping("/service-feedback/submit")
+    @Operation(summary = "提交问诊服务评价")
+    public RestBean<Void> submitServiceFeedback(@RequestAttribute(Const.ATTR_USER_ID) int id,
+                                                @RequestBody @Valid ConsultationServiceFeedbackSubmitVO vo) {
+        return this.messageHandle(() -> consultationService.submitServiceFeedback(id, vo));
     }
 
     private <T> RestBean<T> messageHandle(Supplier<String> action) {

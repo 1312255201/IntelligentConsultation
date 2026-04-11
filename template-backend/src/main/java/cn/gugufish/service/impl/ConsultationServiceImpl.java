@@ -28,6 +28,7 @@ import cn.gugufish.entity.dto.TriageSession;
 import cn.gugufish.entity.dto.TriageLevelDict;
 import cn.gugufish.entity.vo.request.ConsultationAnswerSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
+import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageFeedbackSubmitVO;
 import cn.gugufish.entity.vo.response.ConsultationFeedbackDoctorOptionVO;
 import cn.gugufish.entity.vo.response.ConsultationFeedbackDepartmentOptionVO;
@@ -39,6 +40,7 @@ import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
 import cn.gugufish.entity.vo.response.ConsultationRecommendDoctorVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordVO;
+import cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO;
 import cn.gugufish.mapper.BodyPartDictMapper;
 import cn.gugufish.mapper.ConsultationCategoryMapper;
 import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
@@ -69,6 +71,8 @@ import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
+import cn.gugufish.service.ConsultationServiceFeedbackQueryService;
+import cn.gugufish.service.ConsultationServiceFeedbackService;
 import cn.gugufish.service.ConsultationAiEnrichmentService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageFeedbackService;
@@ -84,6 +88,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.beans.BeanUtils;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
@@ -148,8 +153,10 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationDoctorConclusionQueryService consultationDoctorConclusionQueryService;
     @Resource ConsultationDoctorFollowUpQueryService consultationDoctorFollowUpQueryService;
     @Resource ConsultationDoctorHandleQueryService consultationDoctorHandleQueryService;
+    @Resource ConsultationServiceFeedbackQueryService consultationServiceFeedbackQueryService;
     @Resource ConsultationAiEnrichmentService consultationAiEnrichmentService;
     @Resource TriageFeedbackService triageFeedbackService;
+    @Resource ConsultationServiceFeedbackService consultationServiceFeedbackService;
     @Resource ConsultationMessageService consultationMessageService;
     @Resource ConsultationDoctorRecommendationService consultationDoctorRecommendationService;
 
@@ -274,6 +281,8 @@ public class ConsultationServiceImpl implements ConsultationService {
                         .orderByDesc("create_time")
                         .orderByDesc("id"))
                 .forEach(item -> latestFollowUpMap.putIfAbsent(item.getConsultationId(), item));
+        Map<Integer, cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO> serviceFeedbackMap
+                = consultationServiceFeedbackQueryService.mapByConsultationIds(consultationIds);
 
         return records
                 .stream()
@@ -296,6 +305,7 @@ public class ConsultationServiceImpl implements ConsultationService {
                             ? List.of()
                             : List.of(latestFollowUp.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO.class)));
                     vo.setMessageSummary(messageSummaryMap.get(item.getId()));
+                    vo.setServiceFeedback(sanitizeUserServiceFeedback(serviceFeedbackMap.get(item.getId())));
                     vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                             assignment == null ? null : assignment.getDoctorId(),
                             assignment == null ? null : assignment.getDoctorName(),
@@ -329,6 +339,7 @@ public class ConsultationServiceImpl implements ConsultationService {
         var triageSession = triageSessionQueryService.detailByConsultationId(id);
         var triageResult = triageResultQueryService.detailByConsultationId(id);
         var triageFeedback = triageFeedbackQueryService.detailByConsultationId(id);
+        var serviceFeedback = consultationServiceFeedbackQueryService.detailByConsultationId(id);
         ConsultationDoctorAssignment assignment = consultationDoctorAssignmentMapper.selectOne(Wrappers.<ConsultationDoctorAssignment>query()
                 .eq("consultation_id", id)
                 .orderByDesc("update_time")
@@ -359,6 +370,7 @@ public class ConsultationServiceImpl implements ConsultationService {
             vo.setTriageSession(triageSession);
             vo.setTriageResult(triageResult);
             vo.setTriageFeedback(triageFeedback);
+            vo.setServiceFeedback(sanitizeUserServiceFeedback(serviceFeedback));
         });
     }
 
@@ -475,6 +487,11 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Override
     public String submitTriageFeedback(int accountId, ConsultationTriageFeedbackSubmitVO vo) {
         return triageFeedbackService.submitFeedback(accountId, vo);
+    }
+
+    @Override
+    public String submitServiceFeedback(int accountId, ConsultationServiceFeedbackSubmitVO vo) {
+        return consultationServiceFeedbackService.submitFeedback(accountId, vo);
     }
 
     private ConsultationIntakeTemplate pickDefaultTemplate(int categoryId) {
@@ -1753,6 +1770,19 @@ public class ConsultationServiceImpl implements ConsultationService {
     private String abbreviate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) return value;
         return value.substring(0, Math.max(maxLength - 3, 0)) + "...";
+    }
+
+    private ConsultationServiceFeedbackVO sanitizeUserServiceFeedback(ConsultationServiceFeedbackVO feedback) {
+        if (feedback == null) return null;
+        ConsultationServiceFeedbackVO sanitized = new ConsultationServiceFeedbackVO();
+        BeanUtils.copyProperties(feedback, sanitized);
+        sanitized.setDoctorHandleStatus(null);
+        sanitized.setDoctorHandleRemark(null);
+        sanitized.setDoctorHandleAccountId(null);
+        sanitized.setDoctorHandleDoctorId(null);
+        sanitized.setDoctorHandleDoctorName(null);
+        sanitized.setDoctorHandleTime(null);
+        return sanitized;
     }
 
     private String trimToNull(String value) {

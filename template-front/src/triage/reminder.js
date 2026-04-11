@@ -82,6 +82,26 @@ export function recordProgressLabel(record) {
   })[recordProgressStage(record)] || '待医生处理'
 }
 
+export function isCompletedConsultation(record) {
+  return !!record && (record.status === 'completed' || record?.doctorHandle?.status === 'completed')
+}
+
+export function serviceFeedbackBaseTime(record) {
+  return record?.doctorHandle?.completeTime
+    || record?.doctorConclusion?.updateTime
+    || record?.updateTime
+    || record?.createTime
+    || null
+}
+
+export function hasServiceFeedback(record) {
+  return !!record?.serviceFeedback
+}
+
+export function isPendingServiceFeedbackRecord(record) {
+  return isCompletedConsultation(record) && !hasServiceFeedback(record)
+}
+
 export function latestFollowUp(record) {
   return Array.isArray(record?.doctorFollowUps) && record.doctorFollowUps.length
     ? record.doctorFollowUps[0]
@@ -169,8 +189,17 @@ export function followUpReminderText(record) {
   return '当前暂无随访提醒'
 }
 
+export function serviceFeedbackReminderText(record) {
+  const doctorName = currentDoctorName(record)
+  if (doctorName) {
+    return `鏈闂瘖宸茬敱 ${doctorName} 瀹屾垚澶勭悊锛屾杩庤ˉ鍏呮湇鍔¤瘎鍒嗗拰闂鏄惁宸茶В鍐炽€?`
+  }
+  return '鏈闂瘖宸插畬鎴愬尰鐢熷鐞嗭紝娆㈣繋琛ュ厖鏈嶅姟璇勫垎骞舵彁浜ら棶棰樻槸鍚﹀凡瑙ｅ喅銆?'
+}
+
 export function primaryReminderLabel(record) {
   const state = followUpState(record)
+  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
   if (state === 'overdue') return '逾期随访'
   if (state === 'due_today') return '今日到期'
   if (recordHasUnreadDoctorReply(record)) return '医生新回复'
@@ -180,6 +209,9 @@ export function primaryReminderLabel(record) {
 
 export function reminderQuery(record) {
   const state = followUpState(record)
+  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) {
+    return { progress: 'pending_feedback', action: 'feedback' }
+  }
   if (state === 'overdue') return { followUp: 'overdue' }
   if (state === 'due_today' || state === 'pending') return { followUp: 'pending' }
   if (recordHasUnreadDoctorReply(record)) return { progress: 'doctor_replied' }
@@ -191,6 +223,7 @@ export function isReminderRecord(record) {
   return recordHasUnreadDoctorReply(record)
     || recordProgressStage(record) === 'waiting_doctor'
     || isPendingFollowUpRecord(record)
+    || isPendingServiceFeedbackRecord(record)
 }
 
 export function reminderPriority(record) {
@@ -200,11 +233,13 @@ export function reminderPriority(record) {
   if (recordHasUnreadDoctorReply(record)) return 2
   if (state === 'pending') return 3
   if (recordProgressStage(record) === 'waiting_doctor') return 4
+  if (isPendingServiceFeedbackRecord(record)) return 5
   return 9
 }
 
 export function reminderSortTime(record) {
   if (recordHasUnreadDoctorReply(record)) return getMessageSummary(record).latestTime || record.updateTime || record.createTime
+  if (isPendingServiceFeedbackRecord(record)) return serviceFeedbackBaseTime(record)
   return followUpDueDate(record) || record.updateTime || record.createTime
 }
 

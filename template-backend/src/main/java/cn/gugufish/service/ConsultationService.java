@@ -1,6 +1,7 @@
 package cn.gugufish.service;
 
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
+import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageFeedbackSubmitVO;
 import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
 import cn.gugufish.entity.vo.response.ConsultationEntryCategoryVO;
@@ -17,4 +18,5 @@ public interface ConsultationService {
     String createRecord(int accountId, ConsultationRecordCreateVO vo);
     ConsultationFeedbackOptionsVO feedbackOptions();
     String submitTriageFeedback(int accountId, ConsultationTriageFeedbackSubmitVO vo);
+    String submitServiceFeedback(int accountId, ConsultationServiceFeedbackSubmitVO vo);
 }
