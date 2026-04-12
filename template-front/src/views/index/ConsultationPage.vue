@@ -2478,9 +2478,66 @@ function autoOpenRecordDetail() {
     return
   }
   const record = records.value.find(item => item.id === id)
-  if (!record) return
+  if (!record) {
+    openRecordDetailById(id, { action })
+    return
+  }
   if (detailVisible.value && (detailRecord.value?.id === id || detailLoading.value)) return
   openRecordDetail(record, { syncRoute: false, action })
+}
+
+function openRecordDetailById(recordId, options = {}) {
+  const { action = '' } = options
+  if (!recordId) return
+  if (detailVisible.value && (detailRecord.value?.id === recordId || detailLoading.value)) return
+
+  detailVisible.value = true
+  detailLoading.value = true
+  detailRecord.value = null
+  stopConversationPolling()
+  clearConversationNewMessageState()
+  resetConversationSyncState()
+  clearFocusedDetailSection()
+  triageAiSending.value = false
+  consultationMessages.value = []
+  messageLoading.value = false
+  messageSending.value = false
+  resetTriageAiDraft()
+  resetMessageDraft()
+  resetFollowUpUpdateForm()
+  resetCheckResultUpdateForm()
+
+  get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
+    try {
+      detailRecord.value = data ? {
+        ...data,
+        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+        messageSummary: normalizeMessageSummary(data?.messageSummary)
+      } : null
+      syncRecordSnapshot(detailRecord.value)
+      applyServiceFeedbackForm(data?.serviceFeedback)
+      applyFeedbackForm(data?.triageFeedback)
+      loadConsultationMessages(recordId, { preserveScroll: false })
+      startConversationPolling()
+      const focusAction = resolveConsultationAction(action || route.query.action)
+      if (focusAction) focusDetailActionSection(focusAction, recordId)
+    } catch (error) {
+      console.error(error)
+      stopConversationPolling()
+      ElMessage.warning('问诊记录详情处理失败，请刷新后重试')
+    } finally {
+      detailLoading.value = false
+    }
+  }, (message) => {
+    detailLoading.value = false
+    detailVisible.value = false
+    stopConversationPolling()
+    clearFocusedDetailSection()
+    if (route.query.id || route.query.action) {
+      router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false, action: '' }) })
+    }
+    ElMessage.warning(message || '问诊记录详情加载失败')
+  })
 }
 
 function openRecordDetail(row, options = {}) {
@@ -2508,19 +2565,26 @@ function openRecordDetail(row, options = {}) {
   resetFollowUpUpdateForm()
   resetCheckResultUpdateForm()
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
-    detailRecord.value = data ? {
-      ...data,
-      smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
-      messageSummary: normalizeMessageSummary(data?.messageSummary)
-    } : null
-    syncRecordSnapshot(detailRecord.value)
-    applyServiceFeedbackForm(data?.serviceFeedback)
-    applyFeedbackForm(data?.triageFeedback)
-    loadConsultationMessages(row.id, { preserveScroll: false })
-    startConversationPolling()
-    detailLoading.value = false
-    const focusAction = actionValue || resolveConsultationAction(route.query.action)
-    if (focusAction) focusDetailActionSection(focusAction, row.id)
+    try {
+      detailRecord.value = data ? {
+        ...data,
+        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+        messageSummary: normalizeMessageSummary(data?.messageSummary)
+      } : null
+      syncRecordSnapshot(detailRecord.value)
+      applyServiceFeedbackForm(data?.serviceFeedback)
+      applyFeedbackForm(data?.triageFeedback)
+      loadConsultationMessages(row.id, { preserveScroll: false })
+      startConversationPolling()
+      const focusAction = actionValue || resolveConsultationAction(route.query.action)
+      if (focusAction) focusDetailActionSection(focusAction, row.id)
+    } catch (error) {
+      console.error(error)
+      stopConversationPolling()
+      ElMessage.warning('问诊记录详情处理失败，请刷新后重试')
+    } finally {
+      detailLoading.value = false
+    }
   }, (message) => {
     detailLoading.value = false
     detailVisible.value = false
@@ -2542,15 +2606,20 @@ function refreshRecordDetail(recordId = detailRecord.value?.id, options = {}) {
   if (!recordId) return
   const { reloadConversation = false } = options
   get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
-    detailRecord.value = data ? {
-      ...data,
-      smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
-      messageSummary: normalizeMessageSummary(data?.messageSummary)
-    } : null
-    syncRecordSnapshot(detailRecord.value)
-    applyServiceFeedbackForm(data?.serviceFeedback)
-    applyFeedbackForm(data?.triageFeedback)
-    if (reloadConversation) loadConsultationMessages(recordId)
+    try {
+      detailRecord.value = data ? {
+        ...data,
+        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+        messageSummary: normalizeMessageSummary(data?.messageSummary)
+      } : null
+      syncRecordSnapshot(detailRecord.value)
+      applyServiceFeedbackForm(data?.serviceFeedback)
+      applyFeedbackForm(data?.triageFeedback)
+      if (reloadConversation) loadConsultationMessages(recordId)
+    } catch (error) {
+      console.error(error)
+      ElMessage.warning('问诊记录刷新后处理失败，请稍后重试')
+    }
   }, (message) => {
     ElMessage.warning(message || '问诊记录详情刷新失败')
   })
@@ -2597,24 +2666,31 @@ function loadConsultationMessages(recordId = detailRecord.value?.id, options = {
   conversationSyncStatus.value = 'syncing'
   if (!silent) messageLoading.value = true
   get(`/api/user/consultation/message/list?recordId=${recordId}`, (data) => {
-    consultationMessages.value = data || []
-    syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
-    recordConversationSyncSuccess()
-    const nextLatestId = Number(consultationMessages.value[consultationMessages.value.length - 1]?.id || 0)
-    if (!silent) messageLoading.value = false
-    if (shouldStickToBottom) {
-      clearConversationNewMessageState()
-      scrollConversationToBottom(true)
-    } else if (nextLatestId > 0 && nextLatestId !== previousLatestId) {
-      const newMessages = consultationMessages.value.filter(item => Number(item?.id || 0) > previousLatestId)
-      const incomingMessages = newMessages.filter(item => !isUserMessage(item))
-      const deltaCount = Math.max(incomingMessages.length || consultationMessages.value.length - previousCount, 1)
-      conversationPendingNewMessageCount.value += deltaCount
-      conversationPendingNewMessageLabel.value = buildConversationPendingNewMessageLabel(
-        incomingMessages[incomingMessages.length - 1] || newMessages[newMessages.length - 1] || consultationMessages.value[consultationMessages.value.length - 1]
-      )
+    try {
+      consultationMessages.value = data || []
+      syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
+      recordConversationSyncSuccess()
+      const nextLatestId = Number(consultationMessages.value[consultationMessages.value.length - 1]?.id || 0)
+      if (shouldStickToBottom) {
+        clearConversationNewMessageState()
+        scrollConversationToBottom(true)
+      } else if (nextLatestId > 0 && nextLatestId !== previousLatestId) {
+        const newMessages = consultationMessages.value.filter(item => Number(item?.id || 0) > previousLatestId)
+        const incomingMessages = newMessages.filter(item => !isUserMessage(item))
+        const deltaCount = Math.max(incomingMessages.length || consultationMessages.value.length - previousCount, 1)
+        conversationPendingNewMessageCount.value += deltaCount
+        conversationPendingNewMessageLabel.value = buildConversationPendingNewMessageLabel(
+          incomingMessages[incomingMessages.length - 1] || newMessages[newMessages.length - 1] || consultationMessages.value[consultationMessages.value.length - 1]
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      conversationSyncStatus.value = 'failed'
+      ElMessage.warning('问诊沟通消息处理失败，请稍后重试')
+    } finally {
+      if (!silent) messageLoading.value = false
+      onFinally?.()
     }
-    onFinally?.()
   }, (message) => {
     if (!silent) consultationMessages.value = []
     if (!silent) messageLoading.value = false

@@ -110,16 +110,34 @@ function handleResponse(url, data, success, failure) {
   }
 }
 
+function handleRequestError(url, err, failure, error = defaultError) {
+  const status = err?.response?.status
+  const message = err?.response?.data?.message
+
+  if (status === 401) {
+    failure(message || '登录状态已过期，请重新登录', status, url)
+    deleteAccessToken(true)
+    return
+  }
+
+  if (status || message) {
+    failure(message || '请求失败，请稍后重试', status, url)
+    return
+  }
+
+  error(err)
+}
+
 function internalPost(url, data, headers, success, failure, error = defaultError) {
   axios.post(url, data, { headers }).then(({ data }) => {
     handleResponse(url, data, success, failure)
-  }).catch(err => error(err))
+  }).catch(err => handleRequestError(url, err, failure, error))
 }
 
 function internalGet(url, headers, success, failure, error = defaultError) {
   axios.get(url, { headers }).then(({ data }) => {
     handleResponse(url, data, success, failure)
-  }).catch(err => error(err))
+  }).catch(err => handleRequestError(url, err, failure, error))
 }
 
 async function parseBlobPayload(blob) {

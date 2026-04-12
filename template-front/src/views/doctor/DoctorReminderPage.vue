@@ -163,7 +163,7 @@ const assignmentLoadingId = ref(0)
 const assignmentType = ref('')
 
 const doctorSummary = computed(() => accountContext?.doctorWorkspaceSummary || {})
-const doctorSummaryLoading = computed(() => accountContext?.doctorWorkspaceSummaryLoading ?? false)
+const doctorSummaryLoading = computed(() => accountContext?.doctorWorkspaceSummaryLoading?.value ?? false)
 const doctorId = computed(() => doctorSummary.value?.doctorId || null)
 const doctorBound = computed(() => doctorSummary.value?.bound === 1)
 
