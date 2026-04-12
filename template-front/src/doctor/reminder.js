@@ -6,6 +6,8 @@ export function normalizeDoctorMessageSummary(summary) {
     userMessageCount: Number(summary?.userMessageCount || 0),
     doctorMessageCount: Number(summary?.doctorMessageCount || 0),
     unreadCount: Number(summary?.unreadCount || 0),
+    unreadByDoctorCount: Number(summary?.unreadByDoctorCount ?? summary?.unreadCount ?? 0),
+    unreadByPatientCount: Number(summary?.unreadByPatientCount ?? 0),
     latestSenderType: summary?.latestSenderType || '',
     latestSenderName: summary?.latestSenderName || '',
     latestMessageType: summary?.latestMessageType || '',
@@ -47,27 +49,70 @@ export function hasUnreadMessages(record) {
   return getDoctorMessageSummary(record).unreadCount > 0
 }
 
+export function isFollowUpUpdateMessageType(messageType) {
+  return `${messageType || ''}`.trim().toLowerCase() === 'followup_update'
+}
+
+export function isCheckResultUpdateMessageType(messageType) {
+  return `${messageType || ''}`.trim().toLowerCase() === 'check_result_update'
+}
+
+export function isDoctorGuidanceAckMessageType(messageType) {
+  return `${messageType || ''}`.trim().toLowerCase() === 'doctor_guidance_ack'
+}
+
 export function waitingDoctorReply(record) {
   const summary = getDoctorMessageSummary(record)
-  return summary.totalCount > 0 && summary.latestSenderType === 'user'
+  return summary.totalCount > 0
+    && summary.latestSenderType === 'user'
+    && !isDoctorGuidanceAckMessageType(summary.latestMessageType)
 }
 
 export function messageProgressLabel(record) {
   const summary = getDoctorMessageSummary(record)
+  const isFollowUpUpdate = isFollowUpUpdateMessageType(summary.latestMessageType)
+  const isCheckResultUpdate = isCheckResultUpdateMessageType(summary.latestMessageType)
+  const isGuidanceAck = isDoctorGuidanceAckMessageType(summary.latestMessageType)
+  if (summary.totalCount <= 0) return '暂无沟通'
+  if (summary.latestSenderType === 'user' && isGuidanceAck) return '患者已确认查看'
+  if (summary.unreadCount > 0 && isCheckResultUpdate) return '患者补充检查结果'
+  if (summary.latestSenderType === 'user' && isCheckResultUpdate) return '待查看检查结果'
   if (summary.totalCount <= 0) return '未沟通'
-  if (summary.unreadCount > 0) return '患者新消息'
-  if (summary.latestSenderType === 'user') return '待医生回复'
+  if (summary.unreadCount > 0) return isFollowUpUpdate ? '患者恢复更新' : '患者新消息'
+  if (summary.latestSenderType === 'user') return isFollowUpUpdate ? '待跟进恢复更新' : '待医生回复'
   if (summary.latestSenderType === 'doctor') return '已回复患者'
   return '沟通中'
 }
 
 export function messageProgressType(record) {
   const summary = getDoctorMessageSummary(record)
+  const isFollowUpUpdate = isFollowUpUpdateMessageType(summary.latestMessageType)
+  const isCheckResultUpdate = isCheckResultUpdateMessageType(summary.latestMessageType)
+  const isGuidanceAck = isDoctorGuidanceAckMessageType(summary.latestMessageType)
   if (summary.totalCount <= 0) return 'info'
-  if (summary.unreadCount > 0) return 'danger'
-  if (summary.latestSenderType === 'user') return 'warning'
+  if (summary.latestSenderType === 'user' && isGuidanceAck) return 'success'
+  if (summary.unreadCount > 0 && isCheckResultUpdate) return 'success'
+  if (summary.latestSenderType === 'user' && isCheckResultUpdate) return 'success'
+  if (summary.totalCount <= 0) return 'info'
+  if (summary.unreadCount > 0) return isFollowUpUpdate ? 'warning' : 'danger'
+  if (summary.latestSenderType === 'user') return isFollowUpUpdate ? 'primary' : 'warning'
   if (summary.latestSenderType === 'doctor') return 'success'
   return 'info'
+}
+
+export function doctorMessagePreview(record) {
+  const summary = getDoctorMessageSummary(record)
+  const preview = summary.latestMessagePreview || ''
+  if (!preview) return ''
+  if (isDoctorGuidanceAckMessageType(summary.latestMessageType)) {
+    return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
+  }
+  if (isCheckResultUpdateMessageType(summary.latestMessageType)) {
+    return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
+  }
+  if (!isFollowUpUpdateMessageType(summary.latestMessageType)) return preview
+  if (preview.startsWith('[恢复更新]') || preview.startsWith('[Recovery Update]')) return preview
+  return `[恢复更新] ${preview}`
 }
 
 export function ownerType(record, doctorId) {
@@ -259,4 +304,148 @@ export function compareRecentDoctorRecord(left, right) {
   const createTimeDiff = compareDateDesc(left?.createTime, right?.createTime)
   if (createTimeDiff !== 0) return createTimeDiff
   return compareNumber(Number(right?.id || 0), Number(left?.id || 0))
+}
+
+export function patientUnreadDoctorReplyCount(record) {
+  return getDoctorMessageSummary(record).unreadByPatientCount
+}
+
+export function hasPatientUnreadDoctorReply(record) {
+  return patientUnreadDoctorReplyCount(record) > 0
+}
+
+export function hasLatestPatientFollowUpUpdate(record) {
+  const summary = getDoctorMessageSummary(record)
+  return summary.latestSenderType === 'user' && isFollowUpUpdateMessageType(summary.latestMessageType)
+}
+
+export function hasLatestPatientCheckResultUpdate(record) {
+  const summary = getDoctorMessageSummary(record)
+  return summary.latestSenderType === 'user' && isCheckResultUpdateMessageType(summary.latestMessageType)
+}
+
+export function hasLatestPatientGuidanceAck(record) {
+  const summary = getDoctorMessageSummary(record)
+  return summary.latestSenderType === 'user' && isDoctorGuidanceAckMessageType(summary.latestMessageType)
+}
+
+export function patientActionState(record) {
+  const summary = getDoctorMessageSummary(record)
+  const followState = followUpState(record)
+  const feedback = record?.serviceFeedback
+  const feedbackHandled = Number(feedback?.doctorHandleStatus || 0) === 1
+  const feedbackResolved = Number(feedback?.isResolved || 0) === 1
+  const feedbackScore = Number(feedback?.serviceScore || 0)
+  if (patientUnreadDoctorReplyCount(record) > 0) return 'doctor_reply_unread_by_patient'
+  if (hasLatestPatientCheckResultUpdate(record)) return 'patient_check_result_update'
+  if (hasLatestPatientFollowUpUpdate(record)) return 'patient_followup_update'
+  if (feedback) {
+    if (feedbackHandled) return 'service_feedback_handled'
+    if (!feedbackResolved) return 'service_feedback_pending'
+    if (feedbackScore > 0 && feedbackScore <= 2) {
+      return 'service_feedback_low_score'
+    }
+    return 'service_feedback_submitted'
+  }
+  if (hasLatestPatientGuidanceAck(record)) return 'patient_acknowledged_guidance'
+  if (followState === 'overdue') return 'followup_waiting_patient'
+  if (followState === 'due_today') return 'followup_due_today'
+  if (followState === 'pending') return 'followup_pending'
+  if (summary.doctorMessageCount > 0) return 'doctor_reply_read_by_patient'
+  return 'none'
+}
+
+export function patientActionLabel(record) {
+  const state = patientActionState(record)
+  if (state === 'doctor_reply_unread_by_patient') {
+    const count = patientUnreadDoctorReplyCount(record)
+    return count > 1 ? `待患者查看 ${count} 条` : '待患者查看'
+  }
+  if (state === 'patient_check_result_update') return '已补充检查结果'
+  if (state === 'patient_followup_update') return '已补充恢复更新'
+  if (state === 'service_feedback_handled') return '评价已处理'
+  if (state === 'service_feedback_pending') return '已提交评价'
+  if (state === 'service_feedback_low_score') return '低分评价'
+  if (state === 'service_feedback_submitted') return '已提交评价'
+  if (state === 'patient_acknowledged_guidance') return '已确认查看医生建议'
+  if (state === 'followup_waiting_patient') return '等待患者反馈'
+  if (state === 'followup_due_today') return '今日随访'
+  if (state === 'followup_pending') return '随访进行中'
+  if (state === 'doctor_reply_read_by_patient') return '患者已读最近回复'
+  return '暂无患者后续动作'
+}
+
+export function patientActionTagType(record) {
+  const state = patientActionState(record)
+  if (state === 'doctor_reply_unread_by_patient') return 'warning'
+  if (state === 'patient_check_result_update') return 'success'
+  if (state === 'patient_followup_update') return 'success'
+  if (state === 'service_feedback_handled') return 'success'
+  if (state === 'service_feedback_pending') return 'warning'
+  if (state === 'service_feedback_low_score') return 'danger'
+  if (state === 'service_feedback_submitted') return 'primary'
+  if (state === 'patient_acknowledged_guidance') return 'success'
+  if (state === 'followup_waiting_patient') return 'warning'
+  if (state === 'followup_due_today') return 'primary'
+  if (state === 'followup_pending') return 'info'
+  if (state === 'doctor_reply_read_by_patient') return 'success'
+  return 'info'
+}
+
+export function patientActionSummary(record) {
+  const state = patientActionState(record)
+  const summary = getDoctorMessageSummary(record)
+  const preview = doctorMessagePreview(record)
+  const followUpText = followUpReminderText(record)
+  const feedback = record?.serviceFeedback
+  const feedbackScore = feedback?.serviceScore == null ? '' : `评分 ${feedback.serviceScore}/5，`
+  if (state === 'doctor_reply_unread_by_patient') {
+    const count = patientUnreadDoctorReplyCount(record)
+    if (preview) return `最近有 ${count} 条医生回复患者尚未查看，最新内容：${preview}`
+    return `最近有 ${count} 条医生回复患者尚未查看。`
+  }
+  if (state === 'patient_check_result_update') {
+    return preview || '患者刚补充了新的检查结果，可优先查看并决定后续处理。'
+  }
+  if (state === 'patient_followup_update') {
+    return preview || '患者刚补充了恢复情况更新，可继续登记随访或补充指导。'
+  }
+  if (state === 'service_feedback_handled') {
+    const remark = shortenDoctorReminderText(feedback?.doctorHandleRemark, 48)
+    return remark || '患者服务评价已经登记处理结果。'
+  }
+  if (state === 'service_feedback_pending') {
+    const content = shortenDoctorReminderText(feedback?.feedbackText, 48)
+    return `${feedbackScore}患者反馈当前问题仍需继续处理${content ? `：${content}` : '。'}`
+  }
+  if (state === 'service_feedback_low_score') {
+    const content = shortenDoctorReminderText(feedback?.feedbackText, 48)
+    return `${feedbackScore}患者已提交低分评价${content ? `：${content}` : '。'}`
+  }
+  if (state === 'service_feedback_submitted') {
+    const content = shortenDoctorReminderText(feedback?.feedbackText, 48)
+    return `${feedbackScore}患者已提交本次服务评价${content ? `：${content}` : '。'}`
+  }
+  if (state === 'patient_acknowledged_guidance') {
+    return preview || '患者已确认查看本轮医生结论或随访建议，当前无需额外提醒。'
+  }
+  if (state === 'followup_waiting_patient' || state === 'followup_due_today' || state === 'followup_pending') {
+    return followUpText || '当前仍处于患者恢复跟踪阶段。'
+  }
+  if (state === 'doctor_reply_read_by_patient') {
+    return preview ? `最近医生回复已被患者查看：${preview}` : '最近医生回复已被患者查看。'
+  }
+  if (summary.latestSenderType === 'user' && preview) return `患者最近补充：${preview}`
+  return '当前还没有新的患者补充、检查结果或服务评价。'
+}
+
+function trimDoctorReminderText(value) {
+  return `${value || ''}`.trim()
+}
+
+function shortenDoctorReminderText(value, maxLength = 48) {
+  const text = trimDoctorReminderText(value)
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, Math.max(maxLength - 3, 1))}...`
 }

@@ -10,6 +10,8 @@ public class ConsultationMessageSummaryVO {
     Integer userMessageCount;
     Integer doctorMessageCount;
     Integer unreadCount;
+    Integer unreadByDoctorCount;
+    Integer unreadByPatientCount;
     String latestSenderType;
     String latestSenderName;
     String latestMessageType;

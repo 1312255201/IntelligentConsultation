@@ -1,6 +1,8 @@
 package cn.gugufish.service.impl;
 
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
+import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
+import cn.gugufish.entity.dto.ConsultationDoctorFollowUp;
 import cn.gugufish.entity.dto.ConsultationDoctorHandle;
 import cn.gugufish.entity.dto.ConsultationMessage;
 import cn.gugufish.entity.dto.ConsultationRecord;
@@ -11,6 +13,8 @@ import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
 import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
+import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
+import cn.gugufish.mapper.ConsultationDoctorFollowUpMapper;
 import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
 import cn.gugufish.mapper.ConsultationMessageMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
@@ -46,6 +50,12 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
     ConsultationDoctorHandleMapper consultationDoctorHandleMapper;
 
     @Resource
+    ConsultationDoctorConclusionMapper consultationDoctorConclusionMapper;
+
+    @Resource
+    ConsultationDoctorFollowUpMapper consultationDoctorFollowUpMapper;
+
+    @Resource
     DoctorMapper doctorMapper;
 
     @Resource
@@ -78,11 +88,20 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
     @Override
     @Transactional
     public String sendUserMessage(int accountId, ConsultationMessageSendVO vo) {
+        String sceneType = normalizeMessageSceneType(vo == null ? null : vo.getSceneType());
         ConsultationRecord record = consultationRecordMapper.selectOne(Wrappers.<ConsultationRecord>query()
                 .eq("id", vo.getRecordId())
                 .eq("account_id", accountId));
         if (record == null) return "问诊记录不存在或暂无发送权限";
         if (!hasMessagePayload(vo)) return "请至少填写消息内容或上传图片附件";
+
+        if ("followup_update".equals(sceneType) && !canSendFollowUpUpdate(record)) {
+            return "褰撳墠闂瘖鏆傛棤寰呴殢璁夸簨椤癸紝璇峰厛鍦ㄦ櫘閫氭矡閫氬尯琛ュ厖鎯呭喌";
+        }
+
+        if ("check_result_update".equals(sceneType) && !canSendCheckResultUpdate(record)) {
+            return "当前问诊尚未进入可补充检查结果的阶段，可先通过普通留言补充资料";
+        }
 
         ConsultationMessage message = saveMessage(
                 record.getId(),
@@ -191,8 +210,14 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
                     summary.setTotalCount(defaultInt(summary.getTotalCount()) + 1);
                     if ("user".equals(item.getSenderType())) {
                         summary.setUserMessageCount(defaultInt(summary.getUserMessageCount()) + 1);
+                        if (!Objects.equals(item.getReadStatus(), 1)) {
+                            summary.setUnreadByDoctorCount(defaultInt(summary.getUnreadByDoctorCount()) + 1);
+                        }
                     } else if ("doctor".equals(item.getSenderType())) {
                         summary.setDoctorMessageCount(defaultInt(summary.getDoctorMessageCount()) + 1);
+                        if (!Objects.equals(item.getReadStatus(), 1)) {
+                            summary.setUnreadByPatientCount(defaultInt(summary.getUnreadByPatientCount()) + 1);
+                        }
                     }
                     if (isUnreadForViewer(item, viewerType)) {
                         summary.setUnreadCount(defaultInt(summary.getUnreadCount()) + 1);
@@ -218,9 +243,8 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         List<String> attachments = normalizeAttachments(vo.getAttachments());
         if (content == null && attachments.isEmpty()) return null;
 
-        String messageType = attachments.isEmpty()
-                ? "text"
-                : content == null ? "image" : "mixed";
+        String messageType = resolveMessageType(vo, content, attachments);
+        boolean autoRead = isAutoReadMessageType(messageType);
 
         ConsultationMessage message = new ConsultationMessage(
                 null,
@@ -233,12 +257,34 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
                 content,
                 attachments.isEmpty() ? null : JSON.toJSONString(attachments),
                 1,
-                0,
-                null,
+                autoRead ? 1 : 0,
+                autoRead ? now : null,
                 now,
                 now
         );
         return consultationMessageMapper.insert(message) > 0 ? message : null;
+    }
+
+    private String resolveMessageType(ConsultationMessageSendVO vo, String content, List<String> attachments) {
+        String sceneType = normalizeMessageSceneType(vo == null ? null : vo.getSceneType());
+        if ("followup_update".equals(sceneType)) return "followup_update";
+        if ("check_result_update".equals(sceneType)) return "check_result_update";
+        if ("doctor_guidance_ack".equals(sceneType)) return "doctor_guidance_ack";
+        return attachments == null || attachments.isEmpty()
+                ? "text"
+                : content == null ? "image" : "mixed";
+    }
+
+    private String normalizeMessageSceneType(String sceneType) {
+        String normalized = trimToNull(sceneType);
+        if (normalized == null) return null;
+        normalized = normalized.toLowerCase().replace('-', '_');
+        return switch (normalized) {
+            case "follow_up_update", "followup_update", "recovery_update" -> "followup_update";
+            case "check_result", "check_result_update", "report_update", "report_upload", "inspection_result", "result_update" -> "check_result_update";
+            case "doctor_guidance_ack", "guidance_ack", "doctor_ack", "conclusion_ack", "advice_ack" -> "doctor_guidance_ack";
+            default -> null;
+        };
     }
 
     private boolean hasMessagePayload(ConsultationMessageSendVO vo) {
@@ -309,6 +355,8 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         summary.setUserMessageCount(0);
         summary.setDoctorMessageCount(0);
         summary.setUnreadCount(0);
+        summary.setUnreadByDoctorCount(0);
+        summary.setUnreadByPatientCount(0);
         return summary;
     }
 
@@ -325,12 +373,30 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
                 ? null
                 : attachmentCount == 1 ? "[图片]" : "[图片 x" + attachmentCount + "]";
 
+        String preview;
         if (content != null && imageSuffix != null) {
-            return abbreviateText(content + " " + imageSuffix, 72);
+            preview = abbreviateText(content + " " + imageSuffix, 72);
+        } else if (content != null) {
+            preview = abbreviateText(content, 72);
+        } else if (imageSuffix != null) {
+            preview = imageSuffix;
+        } else {
+            preview = "[消息]";
         }
-        if (content != null) return abbreviateText(content, 72);
-        if (imageSuffix != null) return imageSuffix;
-        return "[消息]";
+        String messageType = trimToNull(message.getMessageType());
+        if (isDoctorGuidanceAckMessageType(messageType)) {
+            return preview.startsWith("[已确认查看]") || preview.startsWith("[Acknowledged]")
+                    ? preview
+                    : abbreviateText("[已确认查看] " + preview, 72);
+        }
+        if ("check_result_update".equals(messageType)) {
+            return preview.startsWith("[检查结果]") || preview.startsWith("[Check Result]")
+                    ? preview
+                    : abbreviateText("[检查结果] " + preview, 72);
+        }
+        if (!"followup_update".equals(messageType) && !"check_result_update".equals(messageType)) return preview;
+        if (preview.startsWith("[恢复更新]") || preview.startsWith("[Recovery Update]")) return preview;
+        return abbreviateText("[恢复更新] " + preview, 72);
     }
 
     private String abbreviateText(String value, int maxLength) {
@@ -340,6 +406,14 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private boolean isAutoReadMessageType(String messageType) {
+        return isDoctorGuidanceAckMessageType(messageType);
+    }
+
+    private boolean isDoctorGuidanceAckMessageType(String messageType) {
+        return "doctor_guidance_ack".equals(trimToNull(messageType));
     }
 
     private Doctor validDoctor(int accountId) {
@@ -362,6 +436,39 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         return consultationDoctorHandleMapper.selectOne(Wrappers.<ConsultationDoctorHandle>query()
                 .eq("consultation_id", consultationId)
                 .last("limit 1"));
+    }
+
+    private ConsultationDoctorConclusion findConclusion(int consultationId) {
+        return consultationDoctorConclusionMapper.selectOne(Wrappers.<ConsultationDoctorConclusion>query()
+                .eq("consultation_id", consultationId)
+                .orderByDesc("update_time")
+                .orderByDesc("id")
+                .last("limit 1"));
+    }
+
+    private ConsultationDoctorFollowUp findLatestFollowUp(int consultationId) {
+        return consultationDoctorFollowUpMapper.selectOne(Wrappers.<ConsultationDoctorFollowUp>query()
+                .eq("consultation_id", consultationId)
+                .orderByDesc("create_time")
+                .orderByDesc("id")
+                .last("limit 1"));
+    }
+
+    private boolean canSendFollowUpUpdate(ConsultationRecord record) {
+        if (record == null) return false;
+        ConsultationDoctorHandle handle = findHandle(record.getId());
+        if (handle == null || !"completed".equals(handle.getStatus())) return false;
+        ConsultationDoctorConclusion conclusion = findConclusion(record.getId());
+        if (conclusion == null || !Objects.equals(conclusion.getNeedFollowUp(), 1)) return false;
+        ConsultationDoctorFollowUp latestFollowUp = findLatestFollowUp(record.getId());
+        return latestFollowUp == null || !Objects.equals(latestFollowUp.getNeedRevisit(), 0);
+    }
+
+    private boolean canSendCheckResultUpdate(ConsultationRecord record) {
+        if (record == null) return false;
+        String status = trimToNull(record.getStatus());
+        if ("triaged".equals(status) || "processing".equals(status) || "completed".equals(status)) return true;
+        return trimToNull(record.getTriageLevelName()) != null;
     }
 
     private String ensureClaimed(int consultationId, Doctor doctor, String departmentName, Date now) {

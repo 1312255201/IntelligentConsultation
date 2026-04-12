@@ -466,7 +466,9 @@ function followUpDueDate(record) {
 }
 
 function followUpState(record) {
-  if (record?.doctorConclusion?.needFollowUp !== 1 && !latestFollowUp(record)?.nextFollowUpDate) return 'none'
+  const latest = latestFollowUp(record)
+  if (record?.doctorConclusion?.needFollowUp !== 1 && !latest?.nextFollowUpDate) return 'none'
+  if (latest?.needRevisit === 0) return 'done'
   const dueValue = followUpDueDate(record)
   if (!dueValue) return 'pending'
   const dueDate = new Date(dueValue)
@@ -487,16 +489,19 @@ function followUpTagLabel(record) {
     overdue: '已逾期随访',
     due_today: '今日到期随访',
     pending: '待随访',
+    done: '本轮已完成',
     none: '无需随访'
   })[followUpState(record)] || '待随访'
 }
 
 function followUpLine(record) {
+  const latest = latestFollowUp(record)
   const dueValue = followUpDueDate(record)
   const state = followUpState(record)
   if (state === 'overdue') return `已逾期 ${formatDate(dueValue, true)}`
   if (state === 'due_today') return `今日到期 ${formatDate(dueValue, true)}`
   if (state === 'pending') return dueValue ? `计划于 ${formatDate(dueValue, true)} 跟进` : '已标记后续继续跟进'
+  if (state === 'done') return latest?.createTime ? `最近随访 ${formatDate(latest.createTime)}` : '本轮随访已完成'
   return '当前暂无随访计划'
 }
 
@@ -505,6 +510,7 @@ function followUpReminderText(record) {
   if (state === 'overdue') return `当前问诊已进入逾期随访状态，建议尽快完成本轮随访。计划时间：${formatDate(followUpDueDate(record), true)}`
   if (state === 'due_today') return `当前问诊今天需要继续跟进，建议及时查看恢复情况并回看医生建议。`
   if (state === 'pending') return `当前问诊仍处于待随访状态${followUpDueDate(record) ? `，计划时间：${formatDate(followUpDueDate(record), true)}` : ''}`
+  if (state === 'done') return '本轮随访已完成，如恢复情况又有变化，仍可继续补充给医生。'
   return '当前暂无随访提醒'
 }
 
@@ -519,7 +525,7 @@ function feedbackReminderQuery(record) {
 
 function primaryReminderLabel(record) {
   const state = followUpState(record)
-  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
+  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
   if (state === 'overdue') return '逾期随访'
   if (state === 'due_today') return '今日到期'
   if (recordHasUnreadDoctorReply(record)) return '医生新回复'
@@ -530,7 +536,7 @@ function primaryReminderLabel(record) {
 function reminderQuery(record) {
   const state = followUpState(record)
   if (feedFilter.value === 'feedback' && isPendingServiceFeedbackRecord(record)) return { progress: 'pending_feedback', action: 'feedback' }
-  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return { progress: 'pending_feedback', action: 'feedback' }
+  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return { progress: 'pending_feedback', action: 'feedback' }
   if (state === 'overdue') return { followUp: 'overdue', action: 'followup' }
   if (state === 'due_today' || state === 'pending') return { followUp: 'pending', action: 'followup' }
   if (recordHasUnreadDoctorReply(record)) return { progress: 'doctor_replied', action: 'conversation' }
@@ -540,7 +546,7 @@ function reminderQuery(record) {
 
 function feedItemSummary(record) {
   const state = followUpState(record)
-  if (state === 'none' && isPendingServiceFeedbackRecord(record)) return serviceFeedbackReminderText(record)
+  if (['none', 'done'].includes(state) && isPendingServiceFeedbackRecord(record)) return serviceFeedbackReminderText(record)
   if (state === 'overdue' || state === 'due_today' || state === 'pending') return followUpReminderText(record)
   if (recordHasUnreadDoctorReply(record)) return `医生有 ${getMessageSummary(record).unreadCount} 条新回复，最新消息：${recordMessagePreview(record)}`
   return recordProgressHint(record)
@@ -548,7 +554,7 @@ function feedItemSummary(record) {
 
 function feedItemTimeText(record) {
   const state = followUpState(record)
-  if (state === 'none' && isPendingServiceFeedbackRecord(record)) return serviceFeedbackTimeText(record)
+  if (['none', 'done'].includes(state) && isPendingServiceFeedbackRecord(record)) return serviceFeedbackTimeText(record)
   if (state === 'overdue' || state === 'due_today' || state === 'pending') return followUpLine(record)
   if (recordHasUnreadDoctorReply(record)) return formatDate(getMessageSummary(record).latestTime || record.updateTime)
   return formatDate(record.createTime)

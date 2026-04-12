@@ -525,6 +525,106 @@
             class="conversation-alert"
           />
 
+          <div v-if="patientJourneyCards.length" class="result-panel journey-panel">
+            <div class="doctor-recommend-head">
+              <div>
+                <strong>接下来怎么做</strong>
+                <span>{{ patientJourneyLeadText }}</span>
+              </div>
+              <div v-if="patientJourneyTags.length" class="chip-row">
+                <span v-for="item in patientJourneyTags" :key="`journey-tag-${item}`">{{ item }}</span>
+              </div>
+            </div>
+            <p class="result-copy journey-lead">{{ patientJourneySummaryText }}</p>
+            <div class="journey-grid">
+              <article v-for="item in patientJourneyCards" :key="item.key" class="journey-card">
+                <div class="journey-card-head">
+                  <strong>{{ item.title }}</strong>
+                  <span :class="['journey-status', `is-${item.tone}`]">{{ item.status }}</span>
+                </div>
+                <p>{{ item.description }}</p>
+                <div class="journey-actions">
+                  <el-button text type="primary" @click="focusDetailActionSection(item.action, detailRecord.id)">{{ item.actionLabel }}</el-button>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div
+            v-if="detailArchiveSummary"
+            ref="archiveSummaryPanelRef"
+            :class="['result-panel', 'archive-panel', { 'focus-action-panel': focusedDetailSection === 'archive' }]"
+          >
+            <div class="doctor-recommend-head">
+              <div>
+                <strong>问诊归档摘要</strong>
+                <span>把本次问诊的重要结论、随访进展和后续建议整理到一起，便于回看与留存。</span>
+              </div>
+              <div class="archive-toolbar">
+                <span v-if="detailArchiveSummary.lastUpdateTime" class="archive-updated">最近更新 {{ formatDate(detailArchiveSummary.lastUpdateTime) }}</span>
+                <el-button text @click="downloadArchiveSummary">下载摘要</el-button>
+                <el-button text type="primary" @click="copyArchiveSummary">复制摘要</el-button>
+              </div>
+            </div>
+            <div class="archive-metrics">
+              <span>{{ detailArchiveSummary.stageText }}</span>
+              <span v-if="detailArchiveSummary.doctorName">跟进医生 {{ detailArchiveSummary.doctorName }}</span>
+              <span>沟通 {{ detailArchiveSummary.messageCount || 0 }} 条</span>
+              <span>随访 {{ detailArchiveSummary.followUpCount || 0 }} 次</span>
+              <span v-if="detailArchiveSummary.serviceScore !== null && detailArchiveSummary.serviceScore !== undefined">服务评分 {{ detailArchiveSummary.serviceScore }}/5</span>
+            </div>
+            <p class="result-copy archive-lead">{{ detailArchiveSummary.archiveConclusion || detailArchiveSummary.patientActionHint }}</p>
+            <el-alert
+              v-if="detailArchiveSummary.patientActionHint"
+              :title="detailArchiveSummary.patientActionHint"
+              type="success"
+              :closable="false"
+              class="conversation-alert"
+            />
+            <div class="archive-grid">
+              <article class="archive-card">
+                <strong>问诊概览</strong>
+                <p>{{ detailArchiveSummary.overview }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>导诊结论</strong>
+                <p>{{ detailArchiveSummary.triageSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>医生处理</strong>
+                <p>{{ detailArchiveSummary.doctorSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>随访进展</strong>
+                <p>{{ detailArchiveSummary.followUpSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>服务评价</strong>
+                <p>{{ detailArchiveSummary.serviceSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>最近沟通</strong>
+                <p>{{ detailArchiveSummary.latestMessageSummary }}</p>
+              </article>
+            </div>
+            <div v-if="detailArchiveSummary.riskFlags?.length" class="chip-row danger">
+              <span v-for="item in detailArchiveSummary.riskFlags" :key="`risk-${item}`">{{ item }}</span>
+            </div>
+            <div v-if="detailArchiveSummary.conclusionTags?.length" class="chip-row">
+              <span v-for="item in detailArchiveSummary.conclusionTags" :key="`tag-${item}`">{{ item }}</span>
+            </div>
+            <div v-if="detailArchiveSummary.nextActions?.length" class="archive-next-list">
+              <article
+                v-for="(item, index) in detailArchiveSummary.nextActions"
+                :key="`${index}-${item}`"
+                class="archive-next-item"
+              >
+                <span>{{ index + 1 }}</span>
+                <p>{{ item }}</p>
+              </article>
+            </div>
+          </div>
+
           <div class="result-panel timeline-panel">
             <div class="doctor-recommend-head">
               <strong>问诊进度时间线</strong>
@@ -679,6 +779,11 @@
                 <span>{{ detailMessageSummary.totalCount }} 条消息</span>
                 <span v-if="detailMessageSummary.unreadCount">医生新回复 {{ detailMessageSummary.unreadCount }} 条</span>
                 <span v-if="detailMessageSummary.latestTime">最近更新 {{ formatDate(detailMessageSummary.latestTime) }}</span>
+                <span
+                  :class="['conversation-sync-text', { 'is-failed': conversationSyncStatus === 'failed' }]"
+                >
+                  {{ conversationSyncText }}
+                </span>
               </div>
             </div>
             <el-alert
@@ -689,7 +794,12 @@
               class="conversation-alert"
             />
             <div v-loading="messageLoading" class="conversation-board">
-              <div v-if="consultationMessages.length" class="conversation-list">
+              <div
+                v-if="consultationMessages.length"
+                ref="conversationBoardRef"
+                class="conversation-list"
+                @scroll="handleConversationBoardScroll"
+              >
                 <article
                   v-for="item in consultationMessages"
                   :key="item.id"
@@ -712,6 +822,11 @@
                 </article>
               </div>
               <el-empty v-else description="当前还没有沟通消息" />
+            </div>
+            <div v-if="conversationPendingNewMessageCount > 0" class="conversation-jump-bar">
+              <el-button type="primary" plain @click="jumpConversationToLatest">
+                {{ conversationPendingNewMessageText }}
+              </el-button>
             </div>
             <div class="conversation-composer">
               <el-input
@@ -790,7 +905,11 @@
             </div>
           </div>
 
-          <div v-if="detailRecord.doctorHandle" class="result-panel">
+          <div
+            v-if="detailRecord.doctorHandle"
+            ref="doctorHandlePanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'doctor_handle' }]"
+          >
             <div class="doctor-recommend-head">
               <strong>医生处理结果</strong>
               <span>查看医生是否已接手当前问诊，以及本次处理建议和随访安排。</span>
@@ -808,7 +927,11 @@
             </div>
           </div>
 
-          <div v-if="detailRecord.doctorConclusion" class="result-panel">
+          <div
+            v-if="detailRecord.doctorConclusion"
+            ref="doctorConclusionPanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'doctor_conclusion' }]"
+          >
             <div class="doctor-recommend-head">
               <strong>结构化结论</strong>
               <span>这是医生最终沉淀的标准化结论，可用于后续复诊、统计和系统优化。</span>
@@ -951,6 +1074,170 @@
               </article>
             </div>
             <el-empty v-else description="当前暂无随访记录" />
+          </div>
+
+          <div
+            v-if="showGuidanceAcknowledgementPanel"
+            ref="guidanceAckPanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'guidance_ack' }]"
+          >
+            <div class="doctor-recommend-head">
+              <strong>查看确认</strong>
+              <span>如果你已经阅读本轮医生结论或随访建议，可以在这里确认，医生侧会同步看到。</span>
+            </div>
+            <div class="feedback-summary">
+              <span>{{ doctorGuidanceAckStatusText }}</span>
+              <span v-if="latestDoctorGuidanceTime">最近建议时间：{{ formatDate(latestDoctorGuidanceTime) }}</span>
+              <span v-if="latestPatientGuidanceAck?.createTime">确认时间：{{ formatDate(latestPatientGuidanceAck.createTime) }}</span>
+            </div>
+            <el-alert
+              :title="doctorGuidanceAckHint"
+              :type="hasPatientAcknowledgedGuidance ? 'success' : 'info'"
+              :closable="false"
+              class="conversation-alert"
+            />
+            <div class="feedback-actions">
+              <el-button
+                v-if="canSubmitDoctorGuidanceAck"
+                type="primary"
+                :loading="doctorGuidanceAckSubmitting"
+                @click="submitDoctorGuidanceAck"
+              >
+                确认已查看
+              </el-button>
+              <el-button
+                v-else-if="latestDoctorGuidanceFocusAction"
+                plain
+                @click="focusDetailActionSection(latestDoctorGuidanceFocusAction, detailRecord?.id || null)"
+              >
+                查看对应内容
+              </el-button>
+            </div>
+          </div>
+
+          <div
+            v-if="canSubmitCheckResultUpdate"
+            ref="checkResultUpdatePanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'check_result' }]"
+          >
+            <div class="doctor-recommend-head">
+              <strong>检查结果补充</strong>
+              <span>把化验、影像、病理或其他检查结果结构化补充给医生，便于继续判断和处理。</span>
+            </div>
+            <el-alert
+              :title="checkResultUpdateHint"
+              type="info"
+              :closable="false"
+              class="conversation-alert"
+            />
+            <article v-if="latestPatientCheckResultUpdate" class="detail-answer-card">
+              <div class="chip-row">
+                <span>Latest result update {{ formatDate(latestPatientCheckResultUpdate.createTime) }}</span>
+                <span v-if="messageAttachments(latestPatientCheckResultUpdate).length">Images {{ messageAttachments(latestPatientCheckResultUpdate).length }}</span>
+              </div>
+              <div class="detail-answer-value">
+                <p>{{ latestPatientCheckResultUpdate.content || 'The latest check-result update only contains image attachments.' }}</p>
+              </div>
+            </article>
+            <div class="feedback-form followup-update-form">
+              <el-select
+                v-model="checkResultUpdateForm.resultType"
+                style="width: 220px"
+                placeholder="选择检查类型"
+              >
+                <el-option
+                  v-for="item in checkResultTypeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+              <el-input
+                v-model="checkResultUpdateForm.resultSummary"
+                type="textarea"
+                :rows="3"
+                maxlength="600"
+                show-word-limit
+                placeholder="请概括关键结果，例如：血常规白细胞 11.2，CRP 18，胸片提示右下肺轻度炎症。"
+              />
+              <el-input
+                v-model="checkResultUpdateForm.doctorQuestion"
+                type="textarea"
+                :rows="2"
+                maxlength="300"
+                show-word-limit
+                placeholder="可以补充想请医生判断的问题，例如：这些结果是否提示需要调整用药或线下复查？"
+              />
+              <span class="conversation-tip">如需上传报告图片，可先带入消息框，再在沟通区继续上传图片。</span>
+              <div class="feedback-actions">
+                <el-button plain @click="applyCheckResultUpdateToMessageDraft">带入消息框</el-button>
+                <el-button type="primary" :loading="checkResultUpdateSubmitting" @click="submitCheckResultUpdate">
+                  发送检查结果
+                </el-button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="canSubmitFollowUpUpdate"
+            ref="followUpUpdatePanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'followup_update' }]"
+          >
+            <div class="doctor-recommend-head">
+              <strong>恢复更新</strong>
+              <span>将最近的症状变化、恢复进展和仍需帮助的问题同步给医生，方便继续随访。</span>
+            </div>
+            <el-alert
+              :title="followUpUpdateHint"
+              :type="followUpReminderType(detailRecord)"
+              :closable="false"
+              class="conversation-alert"
+            />
+            <article v-if="latestPatientFollowUpUpdate" class="detail-answer-card">
+              <div class="chip-row">
+                <span>Latest update {{ formatDate(latestPatientFollowUpUpdate.createTime) }}</span>
+                <span v-if="messageAttachments(latestPatientFollowUpUpdate).length">Images {{ messageAttachments(latestPatientFollowUpUpdate).length }}</span>
+              </div>
+              <div class="detail-answer-value">
+                <p>{{ latestPatientFollowUpUpdate.content || 'The latest recovery update only contains image attachments.' }}</p>
+              </div>
+            </article>
+            <div class="feedback-form followup-update-form">
+              <el-select
+                v-model="followUpUpdateForm.recoveryStatus"
+                style="width: 220px"
+                placeholder="Select recovery status"
+              >
+                <el-option
+                  v-for="item in followUpRecoveryStatusOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+              <el-input
+                v-model="followUpUpdateForm.progressNote"
+                type="textarea"
+                :rows="3"
+                maxlength="500"
+                show-word-limit
+                placeholder="Describe recent changes, for example: fever is gone but coughing is still obvious at night."
+              />
+              <el-input
+                v-model="followUpUpdateForm.helpRequest"
+                type="textarea"
+                :rows="2"
+                maxlength="300"
+                show-word-limit
+                placeholder="Describe what still needs help, for example: whether another review visit is needed."
+              />
+              <div class="feedback-actions">
+                <el-button plain @click="applyFollowUpUpdateToMessageDraft">带入消息框</el-button>
+                <el-button type="primary" :loading="followUpUpdateSubmitting" @click="submitFollowUpUpdate">
+                  发送恢复更新
+                </el-button>
+              </div>
+            </div>
           </div>
 
           <div
@@ -1127,7 +1414,7 @@
 import { ElMessage } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
+import { authHeader, backendBaseUrl, download, get, post, resolveImagePath } from '@/net'
 import { comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveTriageMessageInsight } from '@/triage/insight'
@@ -1145,7 +1432,18 @@ const selectedPatientId = ref(null)
 const historySectionRef = ref(null)
 const syncingRecordRoute = ref(false)
 const conversationInputRef = ref(null)
+const conversationBoardRef = ref(null)
+const conversationPendingNewMessageCount = ref(0)
+const conversationPendingNewMessageLabel = ref('')
+const conversationLastSyncedAt = ref(null)
+const conversationSyncStatus = ref('idle')
+const archiveSummaryPanelRef = ref(null)
+const doctorHandlePanelRef = ref(null)
+const doctorConclusionPanelRef = ref(null)
 const followUpPanelRef = ref(null)
+const guidanceAckPanelRef = ref(null)
+const checkResultUpdatePanelRef = ref(null)
+const followUpUpdatePanelRef = ref(null)
 const serviceFeedbackPanelRef = ref(null)
 const focusedDetailSection = ref('')
 const recordKeyword = ref('')
@@ -1162,17 +1460,45 @@ const triageAiSending = ref(false)
 const consultationMessages = ref([])
 const messageLoading = ref(false)
 const messageSending = ref(false)
+const followUpUpdateSubmitting = ref(false)
+const checkResultUpdateSubmitting = ref(false)
+const doctorGuidanceAckSubmitting = ref(false)
 const feedbackOptions = ref({ departments: [], doctors: [] })
 const feedbackSubmitting = ref(false)
 const serviceFeedbackSubmitting = ref(false)
 const formData = reactive({})
 const triageAiDraft = reactive({ content: '' })
-const messageDraft = reactive({ content: '', attachments: [] })
+const messageDraft = reactive({ content: '', attachments: [], sceneType: '' })
 let detailSectionFocusTimer = null
+let conversationPollTimer = null
+let conversationPollBusy = false
+const CONVERSATION_POLL_INTERVAL = 12000
+const followUpRecoveryStatusOptions = [
+  { label: '鏄庢樉濂借浆', value: 'improved' },
+  { label: '鍩烘湰绋冲畾', value: 'stable' },
+  { label: '鍑虹幇鍔犻噸', value: 'worsened' },
+  { label: '鍏朵粬鎯呭喌', value: 'other' }
+]
+const checkResultTypeOptions = [
+  { label: '化验检查', value: 'lab' },
+  { label: '影像检查', value: 'imaging' },
+  { label: '病理结果', value: 'pathology' },
+  { label: '其他结果', value: 'other' }
+]
 const serviceFeedbackForm = reactive({
   serviceScore: 5,
   isResolved: 1,
   feedbackText: ''
+})
+const followUpUpdateForm = reactive({
+  recoveryStatus: 'stable',
+  progressNote: '',
+  helpRequest: ''
+})
+const checkResultUpdateForm = reactive({
+  resultType: 'lab',
+  resultSummary: '',
+  doctorQuestion: ''
 })
 const feedbackForm = reactive({
   userScore: 5,
@@ -1273,9 +1599,276 @@ const filteredRecords = computed(() => records.value
   })
   .slice()
   .sort(compareRecordOrder))
+const detailArchiveSummary = computed(() => detailRecord.value?.archiveSummary || null)
 const detailMessageSummary = computed(() => getMessageSummary(detailRecord.value))
+const conversationSyncText = computed(() => {
+  if (conversationSyncStatus.value === 'failed') {
+    return conversationLastSyncedAt.value
+      ? `同步失败，最近成功同步 ${formatSyncTime(conversationLastSyncedAt.value)}`
+      : '同步失败，稍后重试'
+  }
+  const parts = []
+  if (detailVisible.value) parts.push('实时同步中')
+  if (conversationLastSyncedAt.value) parts.push(`最近同步 ${formatSyncTime(conversationLastSyncedAt.value)}`)
+  return parts.join(' · ') || '等待首次同步'
+})
+const conversationPendingNewMessageText = computed(() => {
+  const count = conversationPendingNewMessageCount.value
+  if (count <= 0) return ''
+  const label = trimText(conversationPendingNewMessageLabel.value)
+  if (count > 1) {
+    return label
+      ? `${label}，另有 ${count - 1} 条新消息，跳到最新`
+      : `收到 ${count} 条新消息，跳到最新`
+  }
+  return label ? `${label}，跳到最新` : '收到新消息，跳到最新'
+})
+const patientJourneyLeadText = computed(() => {
+  const record = detailRecord.value
+  if (!record) return ''
+  const stage = recordProgressStage(record)
+  if (stage === 'waiting_doctor') return '医生接手前，你仍可以继续补充症状变化、检查结果和相关图片资料。'
+  if (recordHasUnreadDoctorReply(record)) return '医生刚有新回复，建议先查看本轮处理结果，再决定是否继续补充资料。'
+  if (canSubmitDoctorGuidanceAck.value) return '医生已经给出本轮结论或随访建议，建议查看后点击“确认已查看”，让医生知道你已经收到。'
+  if (hasPatientAcknowledgedGuidance.value) return '你已经确认查看本轮医生结论与后续建议，如恢复情况有变化，仍可继续补充。'
+  if (canSubmitServiceFeedback.value && !record.serviceFeedback) return '医生已完成本轮处理，建议查看结论后补充服务评价，帮助后续继续优化。'
+  if (canSubmitFollowUpUpdate.value) return '当前已进入恢复观察阶段，建议按计划同步最新恢复情况和仍需帮助的问题。'
+  return detailArchiveSummary.value?.patientActionHint
+    || detailRecord.value?.doctorConclusion?.patientInstruction
+    || '下面整理了本次问诊最关键的查看入口和后续动作，可以按需快速跳转。'
+})
+const patientJourneySummaryText = computed(() => {
+  const record = detailRecord.value
+  if (!record) return ''
+  const parts = []
+  const doctorName = currentDoctorName(record)
+  if (record?.doctorHandle?.completeTime) {
+    parts.push(`${doctorName || '医生'}已于 ${formatDate(record.doctorHandle.completeTime)} 完成本轮处理`)
+  } else if (record?.doctorHandle?.receiveTime) {
+    parts.push(`${doctorName || '医生'}已接手，正在跟进处理`)
+  } else {
+    parts.push('当前问诊仍在等待医生接手')
+  }
+  if (detailMessageSummary.value.unreadCount > 0) {
+    parts.push(`有 ${detailMessageSummary.value.unreadCount} 条医生新回复待查看`)
+  }
+  if (hasDoctorGuidanceToAcknowledge.value) {
+    parts.push(hasPatientAcknowledgedGuidance.value ? '已确认查看医生结论与后续建议' : '医生结论与后续建议待确认查看')
+  }
+  if (canSubmitServiceFeedback.value) {
+    parts.push(record.serviceFeedback ? '服务评价已提交，可随时补充修改' : '本次服务评价仍待提交')
+  }
+  return parts.join('；')
+})
+const patientJourneyTags = computed(() => {
+  const record = detailRecord.value
+  if (!record) return []
+  const tags = [recordProgressLabel(record)]
+  const doctorName = currentDoctorName(record)
+  if (doctorName) tags.push(`跟进医生 ${doctorName}`)
+  const followState = followUpState(record)
+  if (followState !== 'none') {
+    tags.push(followUpState(record) === 'done' ? '随访已完成' : followUpTagLabel(record))
+  }
+  if (hasDoctorGuidanceToAcknowledge.value) {
+    tags.push(hasPatientAcknowledgedGuidance.value ? '已确认查看医生建议' : '待确认查看医生建议')
+  }
+  if (canSubmitServiceFeedback.value) {
+    tags.push(record.serviceFeedback ? '已提交服务评价' : '待提交服务评价')
+  }
+  return tags.slice(0, 4)
+})
+const patientJourneyCards = computed(() => {
+  const record = detailRecord.value
+  if (!record) return []
+  const cards = [{
+    key: 'conversation',
+    title: '医患沟通',
+    status: recordMessageStatus(record),
+    description: abbreviateText(recordMessagePreview(record), 96),
+    action: 'conversation',
+    actionLabel: recordHasUnreadDoctorReply(record) ? '查看回复' : '打开沟通',
+    tone: recordHasUnreadDoctorReply(record) ? 'success' : recordProgressStage(record) === 'waiting_doctor' ? 'warning' : 'info'
+  }]
+  if (record.doctorHandle || record.doctorConclusion) {
+    const hasConclusion = !!record.doctorConclusion
+    cards.push({
+      key: 'doctor_result',
+      title: hasConclusion ? '最终结论' : '医生处理结果',
+      status: hasConclusion
+        ? (record.doctorConclusion.needFollowUp === 1 ? '需继续随访' : '已形成结论')
+        : doctorHandleStatusLabel(record.doctorHandle?.status),
+      description: abbreviateText(
+        trimText(record.doctorConclusion?.patientInstruction || record.doctorConclusion?.diagnosisDirection || record.doctorHandle?.summary || record.doctorHandle?.medicalAdvice || '医生正在整理处理意见。'),
+        96
+      ),
+      action: hasConclusion ? 'doctor_conclusion' : 'doctor_handle',
+      actionLabel: hasConclusion ? '查看结论' : '查看处理',
+      tone: hasConclusion || record.doctorHandle?.status === 'completed' ? 'success' : 'info'
+    })
+  }
+  if (hasDoctorGuidanceToAcknowledge.value) {
+    cards.push({
+      key: 'guidance_ack',
+      title: '查看确认',
+      status: hasPatientAcknowledgedGuidance.value ? '已确认查看' : '待确认查看',
+      description: abbreviateText(
+        trimText(
+          hasPatientAcknowledgedGuidance.value
+            ? (latestPatientGuidanceAck.value?.content || '你已确认查看本轮医生结论与后续建议。')
+            : doctorGuidanceAckHint.value
+        ),
+        96
+      ),
+      action: 'guidance_ack',
+      actionLabel: hasPatientAcknowledgedGuidance.value ? '查看状态' : '去确认',
+      tone: hasPatientAcknowledgedGuidance.value ? 'success' : 'warning'
+    })
+  }
+  if (canSubmitCheckResultUpdate.value) {
+    cards.push({
+      key: 'check_result',
+      title: '检查结果补充',
+      status: latestPatientCheckResultUpdate.value ? '最近已补充' : '可补充',
+      description: abbreviateText(trimText(latestPatientCheckResultUpdate.value?.content || checkResultUpdateHint.value || '如有新的化验、影像或病理结果，可继续补充给医生。'), 96),
+      action: 'check_result',
+      actionLabel: latestPatientCheckResultUpdate.value ? '继续补充' : '去补充',
+      tone: latestPatientCheckResultUpdate.value ? 'success' : 'info'
+    })
+  }
+  const followState = followUpState(record)
+  if (followState !== 'none' || Array.isArray(record.doctorFollowUps) && record.doctorFollowUps.length) {
+    const hasPendingFollowUpUpdate = canSubmitFollowUpUpdate.value
+    const latestDoctorFollowUp = latestFollowUp(record)
+    cards.push({
+      key: 'followup',
+      title: hasPendingFollowUpUpdate ? '恢复更新' : '随访安排',
+      status: hasPendingFollowUpUpdate
+        ? (followState === 'done' ? '随访已完成' : followUpTagLabel(record))
+        : (latestDoctorFollowUp ? `已记录 ${record.doctorFollowUps.length} 次随访` : '暂无新的随访安排'),
+      description: abbreviateText(
+        trimText(
+          latestPatientFollowUpUpdate.value?.content
+          || latestDoctorFollowUp?.summary
+          || detailFollowUpReminder.value
+          || followUpUpdateHint.value
+          || followUpLine(record)
+          || '当前暂无新的随访进展。'
+        ),
+        96
+      ),
+      action: hasPendingFollowUpUpdate ? 'followup_update' : 'followup',
+      actionLabel: hasPendingFollowUpUpdate ? '去更新' : '查看随访',
+      tone: hasPendingFollowUpUpdate ? journeyToneFromFollowUpState(followState) : latestDoctorFollowUp ? 'success' : 'info'
+    })
+  }
+  if (canSubmitServiceFeedback.value) {
+    const feedback = record.serviceFeedback
+    cards.push({
+      key: 'feedback',
+      title: '服务评价',
+      status: feedback ? '已提交评价' : '待提交评价',
+      description: abbreviateText(
+        trimText(
+          feedback?.feedbackText
+          || (feedback ? `${feedback.serviceScore || '-'} 分，${serviceFeedbackResolvedLabel(feedback.isResolved)}` : serviceFeedbackReminderText(record) || '欢迎补充本次线上问诊体验，以及问题是否已经得到解决。')
+        ),
+        96
+      ),
+      action: 'feedback',
+      actionLabel: feedback ? '更新评价' : '去评价',
+      tone: feedback ? (feedback.isResolved === 1 && Number(feedback.serviceScore || 0) >= 3 ? 'success' : 'warning') : 'warning'
+    })
+  }
+  if (detailArchiveSummary.value) {
+    cards.push({
+      key: 'archive',
+      title: '问诊归档摘要',
+      status: '已生成摘要',
+      description: abbreviateText(trimText(detailArchiveSummary.value.archiveConclusion || detailArchiveSummary.value.patientActionHint || detailArchiveSummary.value.overview || '可集中回看本次问诊的重要结论与后续建议。'), 96),
+      action: 'archive',
+      actionLabel: '查看摘要',
+      tone: 'info'
+    })
+  }
+  return cards
+})
 const detailFollowUpReminder = computed(() => followUpReminderText(detailRecord.value))
 const detailTimelineItems = computed(() => buildTimelineItems(detailRecord.value))
+const latestPatientFollowUpUpdate = computed(() => [...consultationMessages.value]
+  .reverse()
+  .find(item => isFollowUpUpdateMessage(item)) || null)
+const latestPatientCheckResultUpdate = computed(() => [...consultationMessages.value]
+  .reverse()
+  .find(item => isCheckResultUpdateMessage(item)) || null)
+const latestPatientGuidanceAck = computed(() => [...consultationMessages.value]
+  .reverse()
+  .find(item => item?.senderType === 'user' && isDoctorGuidanceAckMessage(item)) || null)
+const hasDoctorGuidanceToAcknowledge = computed(() => !!(detailRecord.value?.doctorConclusion || latestFollowUp(detailRecord.value)))
+const latestDoctorGuidanceTime = computed(() => {
+  const timestamps = [
+    toTimestamp(detailRecord.value?.doctorConclusion?.updateTime),
+    toTimestamp(latestFollowUp(detailRecord.value)?.createTime)
+  ].filter(value => value != null)
+  if (!timestamps.length) return null
+  return new Date(Math.max(...timestamps))
+})
+const hasPatientAcknowledgedGuidance = computed(() => {
+  if (!hasDoctorGuidanceToAcknowledge.value) return false
+  const ackTime = toTimestamp(latestPatientGuidanceAck.value?.createTime)
+  if (ackTime == null) return false
+  const guidanceTime = toTimestamp(latestDoctorGuidanceTime.value)
+  return guidanceTime == null || ackTime >= guidanceTime
+})
+const canSubmitDoctorGuidanceAck = computed(() => hasDoctorGuidanceToAcknowledge.value && !hasPatientAcknowledgedGuidance.value)
+const showGuidanceAcknowledgementPanel = computed(() => hasDoctorGuidanceToAcknowledge.value || !!latestPatientGuidanceAck.value)
+const latestDoctorGuidanceFocusAction = computed(() => {
+  const followUpTime = toTimestamp(latestFollowUp(detailRecord.value)?.createTime)
+  const conclusionTime = toTimestamp(detailRecord.value?.doctorConclusion?.updateTime)
+  if (followUpTime != null && (conclusionTime == null || followUpTime >= conclusionTime)) return 'followup'
+  if (detailRecord.value?.doctorConclusion) return 'doctor_conclusion'
+  return ''
+})
+const doctorGuidanceAckStatusText = computed(() => {
+  if (hasPatientAcknowledgedGuidance.value) {
+    return latestPatientGuidanceAck.value?.createTime
+      ? `已于 ${formatDate(latestPatientGuidanceAck.value.createTime)} 确认查看`
+      : '已确认查看'
+  }
+  if (hasDoctorGuidanceToAcknowledge.value) return '待确认查看'
+  return '暂无待确认内容'
+})
+const doctorGuidanceAckHint = computed(() => {
+  if (hasPatientAcknowledgedGuidance.value) {
+    return '你已确认查看本轮医生结论与后续建议，如恢复情况有变化，仍可继续补充。'
+  }
+  if (!hasDoctorGuidanceToAcknowledge.value) {
+    return '当前还没有需要确认查看的医生结论或随访建议。'
+  }
+  if (detailRecord.value?.doctorConclusion?.needFollowUp === 1) {
+    return '建议先完整阅读医生结论和随访安排，再确认已查看，方便医生判断你已经收到后续计划。'
+  }
+  return '建议先完整阅读本轮医生结论和患者指导，再确认已查看。'
+})
+const canSubmitCheckResultUpdate = computed(() => {
+  if (!detailRecord.value) return false
+  const status = `${detailRecord.value.status || ''}`.trim().toLowerCase()
+  return ['triaged', 'processing', 'completed'].includes(status) || !!`${detailRecord.value.triageLevelName || ''}`.trim()
+})
+const checkResultUpdateHint = computed(() => {
+  if (!detailRecord.value) return ''
+  if (detailRecord.value.status === 'completed') return '问诊已完成，如有新的化验、影像或病理结果，仍可继续补充给医生，便于判断是否需要调整建议。'
+  if (detailRecord.value.status === 'processing') return '如果医生让你补充化验单、影像报告或其它检查结果，可在这里结构化提交。'
+  return '导诊完成后，可先把关键检查结果结构化补充给医生，医生接手后能更快继续判断。'
+})
+const canSubmitFollowUpUpdate = computed(() => !!detailRecord.value && ['pending', 'due_today', 'overdue'].includes(followUpState(detailRecord.value)))
+const followUpUpdateHint = computed(() => {
+  if (!detailRecord.value) return ''
+  const state = followUpState(detailRecord.value)
+  if (state === 'overdue') return '褰撳墠宸叉槸閫炬湡闅忚锛屽缓璁敖蹇妸鏈€鏂版仮澶嶆儏鍐点€佺棁鐘跺彉鍖栧拰浠嶉渶甯姪鐨勫湴鏂瑰悓姝ョ粰鍖荤敓銆?'
+  if (state === 'due_today') return '褰撳墠闅忚璁″垝浠婂ぉ鍒版湡锛屽彲鍏堣ˉ鍏呬粖澶╃殑鎭㈠鎯呭喌锛屾柟渚垮尰鐢熷強鏃跺洖鐪嬨€?'
+  return '濡傜棁鐘朵粛鏈夊彉鍖栨垨杩橀渶甯姪锛屽彲鍦ㄨ繖閲岀敤缁撴瀯鍖栨柟寮忚ˉ鍏呮仮澶嶆洿鏂般€?'
+})
 const canSubmitServiceFeedback = computed(() => !!(
   detailRecord.value
   && (detailRecord.value.status === 'completed' || detailRecord.value?.doctorHandle?.status === 'completed')
@@ -1335,7 +1928,7 @@ function normalizeRecordRouteQuery(query = {}) {
 
 function resolveConsultationAction(value) {
   const action = typeof value === 'string' ? value.trim() : ''
-  return ['conversation', 'followup', 'feedback'].includes(action) ? action : ''
+  return ['conversation', 'followup', 'feedback', 'archive', 'doctor_handle', 'doctor_conclusion', 'guidance_ack', 'check_result', 'followup_update'].includes(action) ? action : ''
 }
 
 function buildRecordRouteQuery({ includeId = true, action = null } = {}) {
@@ -1399,7 +1992,19 @@ function focusDetailActionSection(action, recordId = null) {
       ? (conversationInputRef.value?.$el || conversationInputRef.value?.textarea || conversationInputRef.value)
       : targetAction === 'followup'
         ? (followUpPanelRef.value?.$el || followUpPanelRef.value)
-        : (serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value)
+        : targetAction === 'feedback'
+          ? (serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value)
+          : targetAction === 'archive'
+            ? (archiveSummaryPanelRef.value?.$el || archiveSummaryPanelRef.value)
+            : targetAction === 'doctor_handle'
+              ? (doctorHandlePanelRef.value?.$el || doctorHandlePanelRef.value)
+              : targetAction === 'doctor_conclusion'
+                ? (doctorConclusionPanelRef.value?.$el || doctorConclusionPanelRef.value)
+                : targetAction === 'guidance_ack'
+                  ? (guidanceAckPanelRef.value?.$el || guidanceAckPanelRef.value)
+                : targetAction === 'check_result'
+                  ? (checkResultUpdatePanelRef.value?.$el || checkResultUpdatePanelRef.value)
+                  : (followUpUpdatePanelRef.value?.$el || followUpUpdatePanelRef.value)
     if (!target?.scrollIntoView) return
     clearFocusedDetailSection()
     focusedDetailSection.value = targetAction
@@ -1763,6 +2368,107 @@ function shouldSubmitValue(value) {
   return value !== null && value !== undefined && value !== '' && value !== '[]'
 }
 
+function resolveConversationBoardElement() {
+  return conversationBoardRef.value?.$el || conversationBoardRef.value || null
+}
+
+function isConversationNearBottom(threshold = 96) {
+  const element = resolveConversationBoardElement()
+  if (!element) return true
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+}
+
+function scrollConversationToBottom(force = false) {
+  nextTick(() => {
+    const element = resolveConversationBoardElement()
+    if (!element) return
+    if (!force && !isConversationNearBottom()) return
+    element.scrollTop = element.scrollHeight
+  })
+}
+
+function clearConversationNewMessageState() {
+  conversationPendingNewMessageCount.value = 0
+  conversationPendingNewMessageLabel.value = ''
+}
+
+function resetConversationSyncState() {
+  conversationLastSyncedAt.value = null
+  conversationSyncStatus.value = 'idle'
+}
+
+function recordConversationSyncSuccess() {
+  conversationLastSyncedAt.value = new Date()
+  conversationSyncStatus.value = 'live'
+}
+
+function buildConversationPendingNewMessageLabel(message) {
+  if (!message) return ''
+  const senderName = trimText(message?.senderName) || '医生'
+  const preview = trimText(buildLocalMessagePreview(message))
+  if (preview) return `${senderName}有新回复：${abbreviateText(preview, 20)}`
+  return `${senderName}有新回复`
+}
+
+function handleConversationBoardScroll() {
+  if (isConversationNearBottom()) {
+    clearConversationNewMessageState()
+  }
+}
+
+function jumpConversationToLatest() {
+  clearConversationNewMessageState()
+  scrollConversationToBottom(true)
+}
+
+function canPollConversation() {
+  return detailVisible.value
+    && !!detailRecord.value?.id
+    && !detailLoading.value
+    && typeof document !== 'undefined'
+    && document.visibilityState === 'visible'
+}
+
+function stopConversationPolling() {
+  if (conversationPollTimer) {
+    clearInterval(conversationPollTimer)
+    conversationPollTimer = null
+  }
+  conversationPollBusy = false
+}
+
+function pollConversationMessages() {
+  const recordId = detailRecord.value?.id
+  if (!recordId || !canPollConversation() || conversationPollBusy || messageLoading.value || messageSending.value || triageAiSending.value) return
+  conversationPollBusy = true
+  loadConsultationMessages(recordId, {
+    silent: true,
+    onFinally: () => {
+      conversationPollBusy = false
+    }
+  })
+}
+
+function startConversationPolling() {
+  stopConversationPolling()
+  if (!detailVisible.value) return
+  conversationPollTimer = setInterval(() => {
+    pollConversationMessages()
+  }, CONVERSATION_POLL_INTERVAL)
+}
+
+function handleConversationVisibilityChange() {
+  if (typeof document === 'undefined') return
+  if (document.visibilityState === 'visible') {
+    if (detailVisible.value) {
+      startConversationPolling()
+      pollConversationMessages()
+    }
+    return
+  }
+  stopConversationPolling()
+}
+
 function autoOpenRecordDetail() {
   const id = Number(route.query.id || 0)
   const action = resolveConsultationAction(route.query.action)
@@ -1789,6 +2495,9 @@ function openRecordDetail(row, options = {}) {
   detailVisible.value = true
   detailLoading.value = true
   detailRecord.value = null
+  stopConversationPolling()
+  clearConversationNewMessageState()
+  resetConversationSyncState()
   clearFocusedDetailSection()
   triageAiSending.value = false
   consultationMessages.value = []
@@ -1796,6 +2505,8 @@ function openRecordDetail(row, options = {}) {
   messageSending.value = false
   resetTriageAiDraft()
   resetMessageDraft()
+  resetFollowUpUpdateForm()
+  resetCheckResultUpdateForm()
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
     detailRecord.value = data ? {
       ...data,
@@ -1805,13 +2516,15 @@ function openRecordDetail(row, options = {}) {
     syncRecordSnapshot(detailRecord.value)
     applyServiceFeedbackForm(data?.serviceFeedback)
     applyFeedbackForm(data?.triageFeedback)
-    loadConsultationMessages(row.id)
+    loadConsultationMessages(row.id, { preserveScroll: false })
+    startConversationPolling()
     detailLoading.value = false
     const focusAction = actionValue || resolveConsultationAction(route.query.action)
     if (focusAction) focusDetailActionSection(focusAction, row.id)
   }, (message) => {
     detailLoading.value = false
     detailVisible.value = false
+    stopConversationPolling()
     clearFocusedDetailSection()
     if (route.query.id || route.query.action) {
       router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false, action: '' }) })
@@ -1871,16 +2584,43 @@ function sendTriageAiMessage() {
   })
 }
 
-function loadConsultationMessages(recordId = detailRecord.value?.id) {
+function loadConsultationMessages(recordId = detailRecord.value?.id, options = {}) {
   if (!recordId) return
-  messageLoading.value = true
+  const {
+    silent = false,
+    preserveScroll = true,
+    onFinally = null
+  } = options
+  const shouldStickToBottom = !preserveScroll || isConversationNearBottom() || !consultationMessages.value.length
+  const previousCount = consultationMessages.value.length
+  const previousLatestId = Number(consultationMessages.value[consultationMessages.value.length - 1]?.id || 0)
+  conversationSyncStatus.value = 'syncing'
+  if (!silent) messageLoading.value = true
   get(`/api/user/consultation/message/list?recordId=${recordId}`, (data) => {
     consultationMessages.value = data || []
     syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
-    messageLoading.value = false
+    recordConversationSyncSuccess()
+    const nextLatestId = Number(consultationMessages.value[consultationMessages.value.length - 1]?.id || 0)
+    if (!silent) messageLoading.value = false
+    if (shouldStickToBottom) {
+      clearConversationNewMessageState()
+      scrollConversationToBottom(true)
+    } else if (nextLatestId > 0 && nextLatestId !== previousLatestId) {
+      const newMessages = consultationMessages.value.filter(item => Number(item?.id || 0) > previousLatestId)
+      const incomingMessages = newMessages.filter(item => !isUserMessage(item))
+      const deltaCount = Math.max(incomingMessages.length || consultationMessages.value.length - previousCount, 1)
+      conversationPendingNewMessageCount.value += deltaCount
+      conversationPendingNewMessageLabel.value = buildConversationPendingNewMessageLabel(
+        incomingMessages[incomingMessages.length - 1] || newMessages[newMessages.length - 1] || consultationMessages.value[consultationMessages.value.length - 1]
+      )
+    }
+    onFinally?.()
   }, (message) => {
-    consultationMessages.value = []
-    messageLoading.value = false
+    if (!silent) consultationMessages.value = []
+    if (!silent) messageLoading.value = false
+    conversationSyncStatus.value = 'failed'
+    if (silent) return onFinally?.()
+    onFinally?.()
     ElMessage.warning(message || '问诊沟通消息加载失败')
   })
 }
@@ -1911,6 +2651,7 @@ function recordMessageStatus(record) {
   const summary = getMessageSummary(record)
   if (summary.totalCount <= 0) return '暂无沟通'
   if (summary.unreadCount > 0) return `医生新回复 ${summary.unreadCount} 条`
+  if (summary.latestSenderType === 'user' && isDoctorGuidanceAckMessage({ messageType: summary.latestMessageType })) return '已确认查看医生建议'
   if (summary.latestSenderType === 'user') return '已发送，待医生处理'
   if (summary.latestSenderType === 'doctor') return '医生已回复'
   return '沟通中'
@@ -2159,13 +2900,101 @@ function buildLocalMessageSummary(messages) {
 function buildLocalMessagePreview(message) {
   const content = `${message?.content || ''}`.trim()
   const attachmentCount = messageAttachments(message).length
+  const decoratePreview = (preview) => {
+    if (!preview) return preview
+    if (isDoctorGuidanceAckMessage(message)) {
+      return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
+    }
+    if (isCheckResultUpdateMessage(message)) {
+      return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
+    }
+    if (isFollowUpUpdateMessage(message)) {
+      return preview.startsWith('[恢复更新]') || preview.startsWith('[Recovery Update]') ? preview : `[恢复更新] ${preview}`
+    }
+    return preview
+  }
   const imageSuffix = attachmentCount <= 0
     ? ''
     : attachmentCount === 1 ? '[图片]' : `[图片 x${attachmentCount}]`
-  if (content && imageSuffix) return abbreviateText(`${content} ${imageSuffix}`, 72)
-  if (content) return abbreviateText(content, 72)
-  if (imageSuffix) return imageSuffix
+  if (content && imageSuffix) return decoratePreview(abbreviateText(`${content} ${imageSuffix}`, 72))
+  if (content) return decoratePreview(abbreviateText(content, 72))
+  if (imageSuffix) return decoratePreview(imageSuffix)
   return '暂未产生沟通消息'
+}
+
+function formatSyncTime(value) {
+  if (!value) return '--:--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--:--'
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  return new Intl.DateTimeFormat('zh-CN', sameDay
+    ? {
+        hour: '2-digit',
+        minute: '2-digit'
+      }
+    : {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(date)
+}
+
+function downloadArchiveSummary() {
+  const recordId = detailRecord.value?.id
+  if (!recordId) {
+    ElMessage.warning('当前问诊记录还未完成加载')
+    return
+  }
+  download(`/api/user/consultation/record/archive/export?recordId=${recordId}`, 'consultation-archive.txt', () => {
+    ElMessage.success('问诊归档摘要已开始下载')
+  })
+}
+
+async function copyArchiveSummary() {
+  const content = `${detailArchiveSummary.value?.plainText || ''}`.trim()
+  if (!content) {
+    ElMessage.warning('当前暂无可复制的问诊归档摘要')
+    return
+  }
+  const copied = await copyText(content)
+  if (copied) {
+    ElMessage.success('问诊归档摘要已复制')
+  } else {
+    ElMessage.warning('当前环境不支持自动复制，请手动复制摘要内容')
+  }
+}
+
+async function copyText(value) {
+  const text = `${value || ''}`.trim()
+  if (!text) return false
+  if (navigator?.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fall through to legacy copy below.
+    }
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'readonly')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+
+  let copied = false
+  try {
+    copied = document.execCommand('copy')
+  } catch {
+    copied = false
+  }
+  document.body.removeChild(textarea)
+  return copied
 }
 
 function syncRecordMessageSummary(recordId, summary) {
@@ -2203,6 +3032,19 @@ function syncRecordSnapshot(record) {
 function resetMessageDraft() {
   messageDraft.content = ''
   messageDraft.attachments = []
+  messageDraft.sceneType = ''
+}
+
+function resetFollowUpUpdateForm() {
+  followUpUpdateForm.recoveryStatus = 'stable'
+  followUpUpdateForm.progressNote = ''
+  followUpUpdateForm.helpRequest = ''
+}
+
+function resetCheckResultUpdateForm() {
+  checkResultUpdateForm.resultType = 'lab'
+  checkResultUpdateForm.resultSummary = ''
+  checkResultUpdateForm.doctorQuestion = ''
 }
 
 function messageAttachments(message) {
@@ -2214,6 +3056,19 @@ function messageAttachments(message) {
 function isUserMessage(message) {
   return message?.senderType === 'user'
 }
+
+function isFollowUpUpdateMessage(message) {
+  return `${message?.messageType || ''}`.trim().toLowerCase() === 'followup_update'
+}
+
+function isCheckResultUpdateMessage(message) {
+  return `${message?.messageType || ''}`.trim().toLowerCase() === 'check_result_update'
+}
+
+function isDoctorGuidanceAckMessage(message) {
+  return `${message?.messageType || ''}`.trim().toLowerCase() === 'doctor_guidance_ack'
+}
+
 
 function messageSenderLabel(message) {
   if (message?.senderType === 'user') return message.senderName || detailRecord.value?.patientName || '患者'
@@ -2265,15 +3120,162 @@ function sendConsultationMessage() {
   post('/api/user/consultation/message/send', {
     recordId,
     content,
-    attachments: messageDraft.attachments
+    attachments: messageDraft.attachments,
+    sceneType: messageDraft.sceneType || null
   }, () => {
     messageSending.value = false
     resetMessageDraft()
     ElMessage.success('消息已发送')
-    loadConsultationMessages(recordId)
+    loadConsultationMessages(recordId, { preserveScroll: false })
   }, (message) => {
     messageSending.value = false
     ElMessage.warning(message || '问诊消息发送失败')
+  })
+}
+
+function followUpRecoveryStatusLabel(value) {
+  return followUpRecoveryStatusOptions.find(item => item.value === value)?.label || 'Other'
+}
+
+function checkResultTypeLabel(value) {
+  return checkResultTypeOptions.find(item => item.value === value)?.label || '其他结果'
+}
+
+function buildFollowUpUpdateContent() {
+  const segments = [`Recovery status: ${followUpRecoveryStatusLabel(followUpUpdateForm.recoveryStatus)}`]
+  const progressNote = `${followUpUpdateForm.progressNote || ''}`.trim()
+  const helpRequest = `${followUpUpdateForm.helpRequest || ''}`.trim()
+  if (progressNote) segments.push(`Current changes: ${progressNote}`)
+  if (helpRequest) segments.push(`Still need help: ${helpRequest}`)
+  return segments.filter(Boolean).join('\n')
+}
+
+function buildCheckResultUpdateContent() {
+  const resultSummary = `${checkResultUpdateForm.resultSummary || ''}`.trim()
+  const doctorQuestion = `${checkResultUpdateForm.doctorQuestion || ''}`.trim()
+  if (!resultSummary && !doctorQuestion) return ''
+  const segments = [`检查类型：${checkResultTypeLabel(checkResultUpdateForm.resultType)}`]
+  if (resultSummary) segments.push(`结果摘要：${resultSummary}`)
+  if (doctorQuestion) segments.push(`希望医生帮助判断：${doctorQuestion}`)
+  return segments.join('\n')
+}
+
+function applyFollowUpUpdateToMessageDraft() {
+  if (!canSubmitFollowUpUpdate.value) {
+    ElMessage.warning('No pending follow-up for this consultation right now.')
+    return
+  }
+  const content = buildFollowUpUpdateContent()
+  if (!content) {
+    ElMessage.warning('Please complete the recovery update first.')
+    return
+  }
+  const current = `${messageDraft.content || ''}`.trim()
+  messageDraft.content = current && current !== content ? `${current}\n\n${content}` : content
+  messageDraft.sceneType = 'followup_update'
+  ElMessage.success('Recovery update was added to the message box.')
+  focusDetailActionSection('conversation', detailRecord.value?.id || null)
+}
+
+function submitFollowUpUpdate() {
+  const recordId = detailRecord.value?.id
+  if (!recordId || !canSubmitFollowUpUpdate.value) {
+    ElMessage.warning('No pending follow-up for this consultation right now.')
+    return
+  }
+  const content = buildFollowUpUpdateContent()
+  if (!content) {
+    ElMessage.warning('Please complete the recovery update first.')
+    return
+  }
+  followUpUpdateSubmitting.value = true
+  post('/api/user/consultation/message/send', {
+    recordId,
+    content,
+    sceneType: 'followup_update'
+  }, () => {
+    followUpUpdateSubmitting.value = false
+    resetFollowUpUpdateForm()
+    ElMessage.success('Recovery update was sent to the doctor.')
+    loadConsultationMessages(recordId, { preserveScroll: false })
+    refreshRecordDetail(recordId)
+  }, (message) => {
+    followUpUpdateSubmitting.value = false
+    ElMessage.warning(message || 'Failed to send the recovery update.')
+  })
+}
+
+function buildDoctorGuidanceAckContent() {
+  if (detailRecord.value?.doctorConclusion?.needFollowUp === 1) {
+    return '已查看本轮医生结论与随访建议，我会按当前计划继续观察并及时补充恢复情况。'
+  }
+  return '已查看本轮医生结论与后续建议，如有新的变化我会继续补充。'
+}
+
+function submitDoctorGuidanceAck() {
+  const recordId = detailRecord.value?.id
+  if (!recordId || !canSubmitDoctorGuidanceAck.value) {
+    ElMessage.warning(doctorGuidanceAckHint.value || '当前没有需要确认查看的医生建议。')
+    return
+  }
+  doctorGuidanceAckSubmitting.value = true
+  post('/api/user/consultation/message/send', {
+    recordId,
+    content: buildDoctorGuidanceAckContent(),
+    sceneType: 'doctor_guidance_ack'
+  }, () => {
+    doctorGuidanceAckSubmitting.value = false
+    ElMessage.success('已确认查看医生结论与后续建议')
+    loadConsultationMessages(recordId, { preserveScroll: false })
+    refreshRecordDetail(recordId)
+  }, (message) => {
+    doctorGuidanceAckSubmitting.value = false
+    ElMessage.warning(message || '查看确认提交失败')
+  })
+}
+
+function applyCheckResultUpdateToMessageDraft() {
+  if (!canSubmitCheckResultUpdate.value) {
+    ElMessage.warning('The current consultation is not ready for structured check-result updates yet.')
+    return
+  }
+  const content = buildCheckResultUpdateContent()
+  if (!content) {
+    ElMessage.warning('Please complete the check-result update first.')
+    return
+  }
+  const current = `${messageDraft.content || ''}`.trim()
+  messageDraft.content = current && current !== content ? `${current}\n\n${content}` : content
+  messageDraft.sceneType = 'check_result_update'
+  ElMessage.success('Check-result update was added to the message box.')
+  focusDetailActionSection('conversation', detailRecord.value?.id || null)
+}
+
+function submitCheckResultUpdate() {
+  const recordId = detailRecord.value?.id
+  if (!recordId || !canSubmitCheckResultUpdate.value) {
+    ElMessage.warning('The current consultation is not ready for structured check-result updates yet.')
+    return
+  }
+  const content = buildCheckResultUpdateContent()
+  if (!content) {
+    ElMessage.warning('Please complete the check-result update first.')
+    return
+  }
+  checkResultUpdateSubmitting.value = true
+  post('/api/user/consultation/message/send', {
+    recordId,
+    content,
+    sceneType: 'check_result_update'
+  }, () => {
+    checkResultUpdateSubmitting.value = false
+    resetCheckResultUpdateForm()
+    ElMessage.success('Check-result update was sent to the doctor.')
+    loadConsultationMessages(recordId, { preserveScroll: false })
+    refreshRecordDetail(recordId)
+  }, (message) => {
+    checkResultUpdateSubmitting.value = false
+    ElMessage.warning(message || 'Failed to send the check-result update.')
   })
 }
 
@@ -2368,6 +3370,9 @@ function messageRoleLabel(value) {
 }
 
 function messageTypeLabel(value) {
+  if (value === 'followup_update') return '恢复更新'
+  if (value === 'check_result_update') return '检查结果补充'
+  if (value === 'doctor_guidance_ack') return '已确认查看'
   return {
     intake_summary: '问诊摘要',
     health_summary: '健康摘要',
@@ -2387,6 +3392,13 @@ function feedbackAdoptLabel(value) {
 
 function serviceFeedbackResolvedLabel(value) {
   return value === 1 ? '本次问题已解决' : '仍需继续处理'
+}
+
+function journeyToneFromFollowUpState(value) {
+  if (value === 'overdue') return 'danger'
+  if (value === 'due_today') return 'warning'
+  if (value === 'done') return 'success'
+  return 'info'
 }
 
 function parseJsonArray(value) {
@@ -2468,6 +3480,15 @@ function buildTimelineItems(record) {
       'success'
     ))
   }
+  if (hasPatientAcknowledgedGuidance.value && latestPatientGuidanceAck.value) {
+    items.push(createTimelineItem(
+      'guidance_ack',
+      '已确认查看医生建议',
+      latestPatientGuidanceAck.value.createTime,
+      latestPatientGuidanceAck.value.content || '患者已确认查看本轮医生结论与后续建议。',
+      'success'
+    ))
+  }
   if (followUpState(record) !== 'none') {
     items.push(createTimelineItem(
       'follow_up',
@@ -2531,14 +3552,22 @@ function formatDate(value, onlyDate = false) {
 
 watch(detailVisible, (value) => {
   if (!value) {
+    stopConversationPolling()
+    clearConversationNewMessageState()
+    resetConversationSyncState()
     detailRecord.value = null
     triageAiSending.value = false
     consultationMessages.value = []
     messageLoading.value = false
     messageSending.value = false
+    doctorGuidanceAckSubmitting.value = false
+    followUpUpdateSubmitting.value = false
+    checkResultUpdateSubmitting.value = false
     clearFocusedDetailSection()
     resetTriageAiDraft()
     resetMessageDraft()
+    resetFollowUpUpdateForm()
+    resetCheckResultUpdateForm()
     if (route.query.id || route.query.action) {
       router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false, action: '' }) })
     }
@@ -2546,10 +3575,19 @@ watch(detailVisible, (value) => {
 })
 
 onBeforeUnmount(() => {
+  stopConversationPolling()
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleConversationVisibilityChange)
+  }
   clearFocusedDetailSection()
 })
 
-onMounted(() => loadData())
+onMounted(() => {
+  loadData()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleConversationVisibilityChange)
+  }
+})
 </script>
 
 <style scoped>
@@ -3078,6 +4116,15 @@ onMounted(() => loadData())
   line-height: 1.6;
 }
 
+.conversation-sync-text {
+  color: #0f6665;
+  font-weight: 600;
+}
+
+.conversation-sync-text.is-failed {
+  color: #b94c3b;
+}
+
 .doctor-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -3104,6 +4151,76 @@ onMounted(() => loadData())
 
 .compare-panel {
   background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.78));
+}
+
+.journey-panel {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.1), rgba(255, 255, 255, 0.94));
+}
+
+.journey-lead {
+  color: #31474d;
+}
+
+.journey-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.journey-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.journey-card-head,
+.journey-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.journey-card-head strong {
+  color: #31474d;
+}
+
+.journey-card p {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.8;
+}
+
+.journey-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.journey-status.is-success {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.journey-status.is-warning {
+  background: rgba(210, 155, 47, 0.14);
+  color: #8f6514;
+}
+
+.journey-status.is-danger {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
 }
 
 .compare-grid {
@@ -3207,13 +4324,16 @@ onMounted(() => loadData())
 
 .feedback-summary,
 .feedback-form,
-.feedback-actions {
+.feedback-actions,
+.archive-toolbar,
+.archive-metrics {
   display: flex;
   gap: 12px;
 }
 
 .feedback-summary,
-.feedback-form {
+.feedback-form,
+.archive-metrics {
   flex-wrap: wrap;
 }
 
@@ -3232,12 +4352,111 @@ onMounted(() => loadData())
   width: 100%;
 }
 
+.archive-panel {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.92));
+}
+
+.archive-toolbar {
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.archive-updated {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.archive-metrics {
+  margin-bottom: 14px;
+}
+
+.archive-metrics span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.08);
+  color: #48656d;
+  font-size: 12px;
+}
+
+.archive-lead {
+  margin-bottom: 14px;
+  color: #31474d;
+}
+
+.archive-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summary-panel,
+.archive-card,
+.archive-next-item {
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.summary-panel {
+  margin-top: 14px;
+}
+
+.summary-panel p,
+.archive-card p,
+.archive-next-item p {
+  margin: 10px 0 0;
+  color: var(--app-muted);
+  line-height: 1.8;
+}
+
+.archive-card strong {
+  display: block;
+}
+
+.archive-next-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.archive-next-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.archive-next-item span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.12);
+  color: #0f6665;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.archive-next-item p {
+  margin: 0;
+}
+
 .conversation-alert {
   margin-bottom: 14px;
 }
 
 .conversation-board {
   margin-bottom: 14px;
+}
+
+.conversation-jump-bar {
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: center;
 }
 
 .conversation-list {
@@ -3511,10 +4730,12 @@ onMounted(() => loadData())
   .reminder-grid,
   .entry-layout,
   .detail-meta,
+  .journey-grid,
   .triage-grid,
   .doctor-list,
   .candidate-list,
-  .compare-grid {
+  .compare-grid,
+  .archive-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -3535,6 +4756,9 @@ onMounted(() => loadData())
   .triage-ai-toolbar,
   .compare-item,
   .compare-kv,
+  .archive-toolbar,
+  .journey-card-head,
+  .journey-actions,
   .feedback-actions,
   .conversation-meta,
   .conversation-toolbar,

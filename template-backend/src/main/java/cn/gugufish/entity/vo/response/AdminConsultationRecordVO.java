@@ -39,6 +39,7 @@ public class AdminConsultationRecordVO {
     ConsultationDoctorConclusionVO doctorConclusion;
     ConsultationSmartDispatchVO smartDispatch;
     ConsultationMessageSummaryVO messageSummary;
+    ConsultationArchiveSummaryVO archiveSummary;
     ConsultationAiComparisonVO aiComparison;
     List<ConsultationDoctorFollowUpVO> doctorFollowUps;
     TriageSessionVO triageSession;

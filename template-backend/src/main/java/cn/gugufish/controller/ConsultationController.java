@@ -20,6 +20,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +32,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -37,6 +43,9 @@ import java.util.function.Supplier;
 @RequestMapping("/api/user/consultation")
 @Tag(name = "用户发起问诊", description = "用户选择问诊分类、装配前置模板并提交问诊资料")
 public class ConsultationController {
+
+    private static final MediaType TEXT_MEDIA_TYPE = MediaType.parseMediaType("text/plain;charset=UTF-8");
+    private static final DateTimeFormatter EXPORT_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     @Resource
     ConsultationService consultationService;
@@ -72,6 +81,24 @@ public class ConsultationController {
                                                  @RequestParam @Positive int recordId) {
         ConsultationRecordVO record = consultationService.recordDetail(id, recordId);
         return record == null ? RestBean.failure(404, "问诊记录不存在") : RestBean.success(record);
+    }
+
+    @GetMapping("/record/archive/export")
+    @Operation(summary = "下载问诊归档摘要")
+    public ResponseEntity<?> exportArchive(@RequestAttribute(Const.ATTR_USER_ID) int id,
+                                           @RequestParam @Positive int recordId) {
+        ConsultationRecordVO record = consultationService.recordDetail(id, recordId);
+        if (record == null) {
+            return ResponseEntity.status(404).body(RestBean.failure(404, "问诊记录不存在"));
+        }
+        String content = record.getArchiveSummary() == null ? null : record.getArchiveSummary().getPlainText();
+        if (content == null || content.isBlank()) {
+            return ResponseEntity.badRequest().body(RestBean.failure(400, "当前问诊暂未生成可导出的归档摘要"));
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + archiveFileName(record) + "\"")
+                .contentType(TEXT_MEDIA_TYPE)
+                .body(utf8TextWithBom(content));
     }
 
     @GetMapping("/message/list")
@@ -130,5 +157,23 @@ public class ConsultationController {
         } else {
             return RestBean.failure(400, message);
         }
+    }
+
+    private String archiveFileName(ConsultationRecordVO record) {
+        String consultationNo = record == null ? null : record.getConsultationNo();
+        String suffix = consultationNo == null || consultationNo.isBlank()
+                ? LocalDateTime.now().format(EXPORT_TIME_FORMATTER)
+                : consultationNo.replaceAll("[^A-Za-z0-9_-]", "-");
+        return "consultation-archive-" + suffix + ".txt";
+    }
+
+    private byte[] utf8TextWithBom(String content) {
+        byte[] textBytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
+        byte[] result = new byte[textBytes.length + 3];
+        result[0] = (byte) 0xEF;
+        result[1] = (byte) 0xBB;
+        result[2] = (byte) 0xBF;
+        System.arraycopy(textBytes, 0, result, 3, textBytes.length);
+        return result;
     }
 }

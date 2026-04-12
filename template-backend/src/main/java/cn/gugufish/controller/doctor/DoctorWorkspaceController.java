@@ -25,6 +25,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,6 +37,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Validated
@@ -41,6 +47,9 @@ import java.util.List;
 @RequestMapping("/api/doctor")
 @Tag(name = "Doctor Workspace", description = "医生工作台概览、问诊认领处理与排班查询")
 public class DoctorWorkspaceController {
+
+    private static final MediaType TEXT_MEDIA_TYPE = MediaType.parseMediaType("text/plain;charset=UTF-8");
+    private static final DateTimeFormatter EXPORT_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     @Resource
     DoctorWorkspaceService doctorWorkspaceService;
@@ -68,6 +77,24 @@ public class DoctorWorkspaceController {
         return record == null
                 ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
                 : RestBean.success(record);
+    }
+
+    @GetMapping("/consultation/archive/export")
+    @Operation(summary = "下载医生端问诊归档摘要")
+    public ResponseEntity<?> exportConsultationArchive(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                       @RequestParam("id") @Positive int recordId) {
+        AdminConsultationRecordVO record = doctorWorkspaceService.consultationDetail(accountId, recordId);
+        if (record == null) {
+            return ResponseEntity.status(404).body(RestBean.failure(404, "当前问诊记录不存在或暂无查看权限"));
+        }
+        String content = record.getArchiveSummary() == null ? null : record.getArchiveSummary().getPlainText();
+        if (content == null || content.isBlank()) {
+            return ResponseEntity.badRequest().body(RestBean.failure(400, "当前问诊暂未生成可导出的归档摘要"));
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + archiveFileName(record) + "\"")
+                .contentType(TEXT_MEDIA_TYPE)
+                .body(utf8TextWithBom(content));
     }
 
     @GetMapping("/consultation/message/list")
@@ -178,5 +205,23 @@ public class DoctorWorkspaceController {
     @Operation(summary = "查询当前医生排班列表")
     public RestBean<List<DoctorScheduleVO>> scheduleList(@RequestAttribute(Const.ATTR_USER_ID) int accountId) {
         return RestBean.success(doctorWorkspaceService.scheduleList(accountId));
+    }
+
+    private String archiveFileName(AdminConsultationRecordVO record) {
+        String consultationNo = record == null ? null : record.getConsultationNo();
+        String suffix = consultationNo == null || consultationNo.isBlank()
+                ? LocalDateTime.now().format(EXPORT_TIME_FORMATTER)
+                : consultationNo.replaceAll("[^A-Za-z0-9_-]", "-");
+        return "doctor-consultation-archive-" + suffix + ".txt";
+    }
+
+    private byte[] utf8TextWithBom(String content) {
+        byte[] textBytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
+        byte[] result = new byte[textBytes.length + 3];
+        result[0] = (byte) 0xEF;
+        result[1] = (byte) 0xBB;
+        result[2] = (byte) 0xBF;
+        System.arraycopy(textBytes, 0, result, 3, textBytes.length);
+        return result;
     }
 }

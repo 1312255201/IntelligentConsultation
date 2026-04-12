@@ -20,6 +20,9 @@ public class ConsultationMessageSendVO {
     @Size(max = 6)
     List<String> attachments;
 
+    @Length(max = 32)
+    String sceneType;
+
     @Positive
     Integer aiLogId;
 }

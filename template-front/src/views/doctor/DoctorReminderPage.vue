@@ -100,9 +100,11 @@
               <span>{{ item.categoryName || '未分类' }}</span>
               <span>{{ messageProgressLabel(item) }}</span>
               <span>{{ ownerLabel(item) }}</span>
+              <span v-if="hasPatientActionInsight(item)" :class="patientActionChipClass(item)">{{ patientActionLabel(item) }}</span>
               <span v-if="isAttentionServiceFeedbackRecord(item, doctorId)">{{ serviceFeedbackLabel(item, doctorId) }}</span>
               <span v-if="isPendingFollowUpRecord(item)">{{ followUpTagLabel(item) }}</span>
             </div>
+            <p v-if="hasPatientActionInsight(item)" class="patient-action-line">患者后续：{{ patientActionSummary(item) }}</p>
             <div class="feed-actions">
               <el-button
                 type="primary"
@@ -143,10 +145,11 @@ import { get, post } from '@/net'
 import {
   compareDateAsc, compareDateDesc, compareRecentDoctorRecord, followUpDueDate, followUpLine,
   followUpReminderText, followUpState, followUpTagLabel, formatDoctorReminderDate,
+  doctorMessagePreview,
   getDoctorMessageSummary, hasUnreadMessages, isAttentionServiceFeedbackRecord, isPendingFollowUpRecord,
   isRecommendedConsultation, isRiskConsultation, messageProgressLabel, normalizeDoctorReminderRecords,
   ownerType, serviceFeedbackLabel, serviceFeedbackReminderText, serviceFeedbackState, serviceFeedbackTime,
-  waitingDoctorReply
+  waitingDoctorReply, patientActionLabel, patientActionState, patientActionSummary, patientActionTagType
 } from '@/doctor/reminder'
 
 const router = useRouter()
@@ -360,17 +363,15 @@ function primaryTaskLabel(record) {
   if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return serviceFeedbackLabel(record, doctorId.value)
   if (followUpState(record) === 'overdue') return '逾期随访'
   if (followUpState(record) === 'due_today') return '今日到期随访'
-  if (hasUnreadMessages(record)) return '患者新消息'
-  if (waitingDoctorReply(record)) return '待医生回复'
+  if (hasUnreadMessages(record) || waitingDoctorReply(record)) return messageProgressLabel(record)
   if (ownerType(record, doctorId.value) === 'unclaimed' && isRiskConsultation(record)) return '高优先级待认领'
   if (ownerType(record, doctorId.value) === 'unclaimed') return '待认领'
   if (isRecommendedConsultation(record, doctorId.value)) return '系统推荐'
   return '处理中'
 }
 function feedItemSummary(record) {
-  const summary = getDoctorMessageSummary(record)
   if (isAttentionServiceFeedbackRecord(record, doctorId.value)) return serviceFeedbackReminderText(record, doctorId.value)
-  if (hasUnreadMessages(record) || waitingDoctorReply(record)) return summary.latestMessagePreview || record.chiefComplaint || '暂无更多沟通内容'
+  if (hasUnreadMessages(record) || waitingDoctorReply(record)) return doctorMessagePreview(record) || record.chiefComplaint || '暂无更多沟通内容'
   if (isPendingFollowUpRecord(record)) return followUpReminderText(record)
   if (isRecommendedConsultation(record, doctorId.value)) return record.smartDispatch?.hint || record.chiefComplaint || '系统建议由你优先接手当前问诊。'
   if (ownerType(record, doctorId.value) === 'unclaimed') return record.smartDispatch?.hint || record.chiefComplaint || '当前问诊尚未认领，可优先接手后继续处理。'
@@ -391,6 +392,17 @@ function feedItemClass(record) {
   if (hasUnreadMessages(record) || (ownerType(record, doctorId.value) === 'unclaimed' && isRiskConsultation(record))) return 'is-urgent'
   if (isRecommendedConsultation(record, doctorId.value)) return 'is-accent'
   return ''
+}
+function hasPatientActionInsight(record) {
+  return patientActionState(record) !== 'none'
+}
+function patientActionChipClass(record) {
+  const type = patientActionTagType(record)
+  if (type === 'danger') return 'chip-danger'
+  if (type === 'warning') return 'chip-warning'
+  if (type === 'success') return 'chip-success'
+  if (type === 'primary') return 'chip-primary'
+  return 'chip-info'
 }
 function compareNumber(left, right) {
   if (left === right) return 0
@@ -491,6 +503,10 @@ onMounted(() => {
 .chip-row, .hero-actions, .feed-actions, .feed-tabs { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .chip-row { margin-top: 16px; }
 .chip-row span { display: inline-flex; padding: 8px 14px; border-radius: 999px; background: rgba(19, 73, 80, 0.08); color: #27646d; }
+.chip-row .chip-info { background: rgba(19, 73, 80, 0.08); color: #27646d; }
+.chip-row .chip-primary { background: rgba(49, 93, 196, 0.12); color: #315dc4; }
+.chip-row .chip-success { background: rgba(31, 143, 89, 0.12); color: #1f8f59; }
+.chip-row .chip-warning { background: rgba(210, 155, 47, 0.14); color: #9a6a16; }
 .chip-row .chip-danger { background: rgba(214, 95, 80, 0.14); color: #9f4336; }
 .hero-actions { margin-top: 18px; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
@@ -512,6 +528,7 @@ onMounted(() => {
 .feed-item-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
 .feed-item-head p { margin-top: 8px; color: #41575d; }
 .feed-item-head span { color: var(--app-muted); font-size: 13px; line-height: 1.5; }
+.patient-action-line { margin: 12px 0 0; color: #41575d; line-height: 1.7; }
 .feed-actions { margin-top: 14px; }
 .feed-item.is-urgent, .focus-card:hover { border-color: rgba(214, 95, 80, 0.2); box-shadow: 0 10px 22px rgba(19, 73, 80, 0.08); }
 .feed-item.is-warning { border-color: rgba(210, 155, 47, 0.24); background: linear-gradient(180deg, rgba(210, 155, 47, 0.08), rgba(255, 255, 255, 0.98)); }

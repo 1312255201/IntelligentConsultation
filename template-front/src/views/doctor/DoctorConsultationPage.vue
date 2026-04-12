@@ -7,6 +7,7 @@
       <article class="card stat"><span>我认领的</span><strong>{{ mineCount }}</strong></article>
       <article class="card stat"><span>系统推荐给我</span><strong>{{ recommendedToMeCount }}</strong></article>
       <article class="card stat"><span>消息未读</span><strong>{{ unreadRecordCount }}</strong></article>
+      <article class="card stat"><span>待患者查看</span><strong>{{ patientUnreadDoctorReplyRecordCount }}</strong></article>
       <article class="card stat"><span>待回复</span><strong>{{ pendingReplyCount }}</strong></article>
       <article class="card stat"><span>待随访</span><strong>{{ pendingFollowUpCount }}</strong></article>
       <article class="card stat"><span>已逾期随访</span><strong>{{ overdueFollowUpCount }}</strong></article>
@@ -58,6 +59,15 @@
             <el-option label="全部已评价" value="has_feedback" />
             <el-option label="低分评价" value="low_score" />
             <el-option label="未解决评价" value="unresolved" />
+          </el-select>
+          <el-select v-model="patientActionFilter" style="width:190px">
+            <el-option label="全部患者动作" value="all" />
+            <el-option label="待患者查看回复" value="unread_reply" />
+            <el-option label="已补充恢复更新" value="followup_update" />
+            <el-option label="已补充检查结果" value="check_result_update" />
+            <el-option label="已确认查看医生建议" value="guidance_ack" />
+            <el-option label="已提交服务评价" value="service_feedback" />
+            <el-option label="等待患者随访反馈" value="followup_waiting" />
           </el-select>
           <el-select v-model="riskFilter" style="width:160px">
             <el-option label="全部优先级" value="all" />
@@ -116,6 +126,14 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="患者后续动作" min-width="230">
+          <template #default="{ row }">
+            <div class="patient-action-cell">
+              <el-tag :type="patientActionTagType(row)" effect="light">{{ patientActionLabel(row) }}</el-tag>
+              <span>{{ patientActionSummary(row) }}</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="随访提醒" min-width="180">
           <template #default="{ row }">
             <div class="message-summary-cell">
@@ -163,6 +181,101 @@
               <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
               <el-descriptions-item label="提交时间">{{ formatDate(detail.createTime) }}</el-descriptions-item>
             </el-descriptions>
+          </section>
+
+          <section v-if="detailArchiveSummary" class="card panel archive-panel">
+            <div class="head">
+              <div>
+                <h3>问诊归档摘要</h3>
+                <p>把当前问诊的分诊、处理、随访和服务状态整理到一起，便于医生回看、交接和继续跟进。</p>
+              </div>
+              <div class="archive-toolbar">
+                <span v-if="detailArchiveSummary.lastUpdateTime" class="archive-updated">最近更新 {{ formatDate(detailArchiveSummary.lastUpdateTime) }}</span>
+                <el-button text @click="downloadDetailArchiveSummary">下载摘要</el-button>
+                <el-button text type="primary" @click="copyDetailArchiveSummary">复制摘要</el-button>
+              </div>
+            </div>
+            <div class="archive-metrics">
+              <span>{{ detailArchiveSummary.stageText }}</span>
+              <span v-if="detailArchiveSummary.doctorName">跟进医生 {{ detailArchiveSummary.doctorName }}</span>
+              <span>沟通 {{ detailArchiveSummary.messageCount || 0 }} 条</span>
+              <span>随访 {{ detailArchiveSummary.followUpCount || 0 }} 次</span>
+              <span v-if="detailArchiveSummary.serviceScore !== null && detailArchiveSummary.serviceScore !== undefined">服务评分 {{ detailArchiveSummary.serviceScore }}/5</span>
+            </div>
+            <p class="copy archive-lead">{{ detailArchiveSummary.archiveConclusion || detailArchiveSummary.patientActionHint }}</p>
+            <el-alert
+              v-if="detailArchiveSummary.patientActionHint"
+              :title="detailArchiveSummary.patientActionHint"
+              type="info"
+              :closable="false"
+              class="notice"
+            />
+            <div class="archive-grid">
+              <article class="archive-card">
+                <strong>问诊概览</strong>
+                <p>{{ detailArchiveSummary.overview }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>分诊结论</strong>
+                <p>{{ detailArchiveSummary.triageSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>医生处理</strong>
+                <p>{{ detailArchiveSummary.doctorSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>随访进展</strong>
+                <p>{{ detailArchiveSummary.followUpSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>服务评价</strong>
+                <p>{{ detailArchiveSummary.serviceSummary }}</p>
+              </article>
+              <article class="archive-card">
+                <strong>最近沟通</strong>
+                <p>{{ detailArchiveSummary.latestMessageSummary }}</p>
+              </article>
+            </div>
+            <div v-if="detailArchiveSummary.riskFlags?.length" class="archive-tags danger">
+              <span v-for="item in detailArchiveSummary.riskFlags" :key="`doctor-risk-${item}`">{{ item }}</span>
+            </div>
+            <div v-if="detailArchiveSummary.conclusionTags?.length" class="archive-tags">
+              <span v-for="item in detailArchiveSummary.conclusionTags" :key="`doctor-tag-${item}`">{{ item }}</span>
+            </div>
+            <div v-if="detailArchiveSummary.nextActions?.length" class="archive-next-list">
+              <article
+                v-for="(item, index) in detailArchiveSummary.nextActions"
+                :key="`${index}-${item}`"
+                class="archive-next-item"
+              >
+                <span>{{ index + 1 }}</span>
+                <p>{{ item }}</p>
+              </article>
+            </div>
+          </section>
+
+          <section v-if="patientActionCards.length" ref="patientActionPanelRef" class="card panel patient-action-panel">
+            <div class="head">
+              <div>
+                <h3>患者后续动作</h3>
+                <p>{{ patientActionLeadText }}</p>
+              </div>
+              <div v-if="patientActionTags.length" class="chips">
+                <span v-for="item in patientActionTags" :key="`patient-action-tag-${item}`">{{ item }}</span>
+              </div>
+            </div>
+            <div class="patient-action-grid">
+              <article v-for="item in patientActionCards" :key="item.key" class="patient-action-card">
+                <div class="patient-action-card-head">
+                  <strong>{{ item.title }}</strong>
+                  <span :class="['patient-action-status', `is-${item.tone}`]">{{ item.status }}</span>
+                </div>
+                <p class="copy">{{ item.description }}</p>
+                <div class="actions patient-action-actions">
+                  <el-button text type="primary" @click="focusDetailActionSection(item.action, detail.id)">{{ item.actionLabel }}</el-button>
+                </div>
+              </article>
+            </div>
           </section>
 
           <section class="card panel">
@@ -239,6 +352,11 @@
                   <span v-if="detailMessageSummary.unreadCount">未读 {{ detailMessageSummary.unreadCount }} 条</span>
                   <span v-if="detailMessageSummary.totalCount">{{ messageProgressLabel(detail) }}</span>
                   <span v-if="detailMessageSummary.latestTime">最近更新 {{ formatDate(detailMessageSummary.latestTime) }}</span>
+                  <span
+                    :class="['message-sync-text', { 'is-failed': messageSyncStatus === 'failed' }]"
+                  >
+                    {{ messageSyncText }}
+                  </span>
                 </div>
                 <el-button text @click="loadConsultationMessages(detail.id)">刷新消息</el-button>
               </div>
@@ -251,7 +369,12 @@
               class="notice"
             />
             <div v-loading="messageLoading" class="message-board">
-              <div v-if="consultationMessages.length" class="message-list">
+              <div
+                v-if="consultationMessages.length"
+                ref="messageBoardRef"
+                class="message-list"
+                @scroll="handleMessageBoardScroll"
+              >
                 <article
                   v-for="item in consultationMessages"
                   :key="item.id"
@@ -261,6 +384,12 @@
                     <strong>{{ messageSenderLabel(item) }}</strong>
                     <div class="message-meta-tags">
                       <span>{{ formatDate(item.createTime) }}</span>
+                      <el-tag v-if="isCheckResultUpdateMessage(item)" size="small" effect="plain" type="success">
+                        检查结果补充
+                      </el-tag>
+                      <el-tag v-if="isFollowUpUpdateMessage(item)" size="small" effect="plain" type="warning">
+                        恢复更新
+                      </el-tag>
                       <el-tag v-if="item.senderType === 'doctor'" size="small" effect="plain" :type="messageReadStatusType(item)">
                         {{ messageReadStatusLabel(item) }}
                       </el-tag>
@@ -279,6 +408,11 @@
                 </article>
               </div>
               <el-empty v-else description="当前暂无沟通消息" />
+            </div>
+            <div v-if="messagePendingNewCount > 0" class="message-jump-bar">
+              <el-button type="primary" plain @click="jumpMessageBoardToLatest">
+                {{ messagePendingNewText }}
+              </el-button>
             </div>
             <div class="message-composer">
               <div class="template-banner ai-message-banner">
@@ -493,6 +627,23 @@
                 <span v-for="item in handleAiDraft.riskFlags" :key="`handle-draft-risk-${item}`">{{ item }}</span>
               </div>
             </div>
+            <article v-if="latestPatientCheckResultUpdate" class="subcard">
+              <div class="head">
+                <div>
+                  <strong>患者检查结果补充</strong>
+                  <p>这里汇总患者最近一次结构化补充的检查结果，医生可直接带入处理摘要继续判断。</p>
+                </div>
+                <div class="chips">
+                  <span>{{ formatDate(latestPatientCheckResultUpdate.createTime) }}</span>
+                  <span v-if="messageAttachments(latestPatientCheckResultUpdate).length">图片 {{ messageAttachments(latestPatientCheckResultUpdate).length }} 张</span>
+                </div>
+              </div>
+              <p class="copy">{{ latestPatientCheckResultUpdate.content || '本次检查结果补充仅包含图片附件。' }}</p>
+              <div class="actions">
+                <el-button plain :disabled="!canEdit" @click="applyPatientCheckResultUpdateToHandle">带入处理摘要</el-button>
+                <el-button text @click="focusDetailActionSection('reply', detail.id)">在沟通区查看</el-button>
+              </div>
+            </article>
             <el-form label-position="top" :disabled="!canEdit">
               <el-form-item label="医生判断摘要">
                 <div v-if="sceneTemplates('handle_summary').length" class="template-tools">
@@ -707,6 +858,30 @@
               :closable="false"
               class="notice"
             />
+            <el-alert
+              v-if="followUpAssistState.source === 'patient_followup_update'"
+              :title="followUpAssistState.summary"
+              type="warning"
+              :closable="false"
+              class="notice"
+            />
+            <article v-if="latestPatientFollowUpUpdate" class="subcard">
+              <div class="head">
+                <div>
+                  <strong>患者恢复更新</strong>
+                  <p>这里会展示患者最近一次结构化恢复反馈，可直接作为随访补充依据。</p>
+                </div>
+                <div class="chips">
+                  <span>{{ formatDate(latestPatientFollowUpUpdate.createTime) }}</span>
+                  <span v-if="messageAttachments(latestPatientFollowUpUpdate).length">图片 {{ messageAttachments(latestPatientFollowUpUpdate).length }} 张</span>
+                </div>
+              </div>
+              <p class="copy">{{ latestPatientFollowUpUpdate.content || '本次恢复更新仅包含图片附件。' }}</p>
+              <div class="actions">
+                <el-button plain :disabled="!canSubmitFollowUp" @click="applyPatientFollowUpUpdateToFollowUp">带入随访摘要</el-button>
+                <el-button text @click="focusDetailActionSection('reply', detail.id)">在沟通区查看</el-button>
+              </div>
+            </article>
             <div class="template-banner ai-message-banner">
               <div>
                 <strong>AI 随访草稿</strong>
@@ -1016,7 +1191,7 @@
 import { ElMessage } from 'element-plus'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { authHeader, backendBaseUrl, get, post, resolveImagePath } from '@/net'
+import { authHeader, backendBaseUrl, download, get, post, resolveImagePath } from '@/net'
 import {
   compareDateAsc,
   compareRecentDoctorRecord as compareRecentRecord,
@@ -1037,6 +1212,12 @@ import {
   normalizeDoctorReminderRecord,
   normalizeDoctorMessageSummary as normalizeMessageSummary,
   ownerType as resolveOwnerType,
+  patientActionLabel,
+  patientActionState,
+  patientActionSummary,
+  patientActionTagType,
+  hasPatientUnreadDoctorReply,
+  isDoctorGuidanceAckMessageType,
   serviceFeedbackLabel,
   serviceFeedbackState,
   serviceFeedbackTime,
@@ -1107,6 +1288,7 @@ const messageFilter = ref('all')
 const dispatchFilter = ref('all')
 const followUpFilter = ref('all')
 const feedbackFilter = ref('all')
+const patientActionFilter = ref('all')
 const riskFilter = ref('all')
 const sortMode = ref('recent')
 const records = ref([])
@@ -1148,10 +1330,19 @@ const followUpAiUsage = reactive(createEmptyFormAiUsage())
 const messageAiScene = ref('opening')
 const messageAiUsage = reactive(createEmptyMessageAiUsage())
 const messageInputRef = ref(null)
+const messageBoardRef = ref(null)
+const messagePendingNewCount = ref(0)
+const messagePendingNewLabel = ref('')
+const messageLastSyncedAt = ref(null)
+const messageSyncStatus = ref('idle')
+const patientActionPanelRef = ref(null)
 const followUpActionButtonRef = ref(null)
 const serviceFeedbackPanelRef = ref(null)
 const focusedDetailSection = ref('')
 let detailSectionFocusTimer = null
+let messagePollTimer = null
+let messagePollBusy = false
+const MESSAGE_POLL_INTERVAL = 12000
 const templateSelection = reactive({
   handle_summary: null,
   medical_advice: null,
@@ -1187,8 +1378,9 @@ const filteredRecords = computed(() => records.value
     const matchesDispatch = matchesDispatchFilter(item)
     const matchesFollowUp = matchesFollowUpFilter(item)
     const matchesFeedback = matchesFeedbackFilter(item)
+    const matchesPatientAction = matchesPatientActionFilter(item)
     const matchesRisk = matchesRiskFilter(item)
-    return matchesKeyword && matchesOwner && matchesStatus && matchesMessage && matchesDispatch && matchesFollowUp && matchesFeedback && matchesRisk
+    return matchesKeyword && matchesOwner && matchesStatus && matchesMessage && matchesDispatch && matchesFollowUp && matchesFeedback && matchesPatientAction && matchesRisk
   })
   .slice()
   .sort(compareRecordOrder))
@@ -1196,12 +1388,207 @@ const unclaimedCount = computed(() => records.value.filter(item => ownerType(ite
 const mineCount = computed(() => records.value.filter(item => ownerType(item) === 'mine').length)
 const recommendedToMeCount = computed(() => records.value.filter(item => isRecommendedToDoctor(item?.smartDispatch, doctor.doctorId)).length)
 const unreadRecordCount = computed(() => records.value.filter(hasUnreadMessages).length)
+const patientUnreadDoctorReplyRecordCount = computed(() => records.value.filter(hasPatientUnreadDoctorReply).length)
 const pendingReplyCount = computed(() => records.value.filter(waitingDoctorReply).length)
 const pendingFollowUpCount = computed(() => records.value.filter(isPendingFollowUpRecord).length)
 const overdueFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'overdue').length)
 const attentionServiceFeedbackCount = computed(() => records.value.filter(item => isAttentionServiceFeedbackRecord(item, doctor.doctorId)).length)
 const riskCount = computed(() => records.value.filter(isRiskConsultation).length)
 const detailMessageSummary = computed(() => getMessageSummary(detail.value))
+const messageSyncText = computed(() => {
+  if (messageSyncStatus.value === 'failed') {
+    return messageLastSyncedAt.value
+      ? `同步失败，最近成功同步 ${formatSyncTime(messageLastSyncedAt.value)}`
+      : '同步失败，稍后重试'
+  }
+  const parts = []
+  if (detailVisible.value) parts.push('实时同步中')
+  if (messageLastSyncedAt.value) parts.push(`最近同步 ${formatSyncTime(messageLastSyncedAt.value)}`)
+  return parts.join(' · ') || '等待首次同步'
+})
+const messagePendingNewText = computed(() => {
+  const count = messagePendingNewCount.value
+  if (count <= 0) return ''
+  const label = trimText(messagePendingNewLabel.value)
+  if (count > 1) {
+    return label
+      ? `${label}，另有 ${count - 1} 条新消息，跳到最新`
+      : `收到 ${count} 条新消息，跳到最新`
+  }
+  return label ? `${label}，跳到最新` : '收到新消息，跳到最新'
+})
+const detailArchiveSummary = computed(() => detail.value?.archiveSummary || null)
+const latestDoctorMessage = computed(() => [...consultationMessages.value]
+  .reverse()
+  .find(item => item?.senderType === 'doctor') || null)
+const unreadDoctorMessageCount = computed(() => consultationMessages.value
+  .filter(item => item?.senderType === 'doctor' && item?.readStatus !== 1).length)
+const latestPatientFollowUpUpdate = computed(() => [...consultationMessages.value]
+  .reverse()
+  .find(item => isFollowUpUpdateMessage(item) && item.senderType === 'user') || null)
+const latestPatientCheckResultUpdate = computed(() => [...consultationMessages.value]
+  .reverse()
+  .find(item => isCheckResultUpdateMessage(item) && item.senderType === 'user') || null)
+const latestPatientGuidanceAck = computed(() => [...consultationMessages.value]
+  .reverse()
+  .find(item => item?.senderType === 'user' && isDoctorGuidanceAckMessage(item)) || null)
+const latestDoctorGuidanceReferenceTime = computed(() => {
+  const timestamps = [
+    parseTime(detail.value?.doctorConclusion?.updateTime),
+    parseTime((Array.isArray(detail.value?.doctorFollowUps) && detail.value.doctorFollowUps.length ? detail.value.doctorFollowUps[0]?.createTime : null))
+  ].filter(value => value > 0)
+  return timestamps.length ? new Date(Math.max(...timestamps)) : null
+})
+const hasPatientAcknowledgedGuidance = computed(() => {
+  const ackTime = parseTime(latestPatientGuidanceAck.value?.createTime)
+  if (!ackTime) return false
+  const guidanceTime = parseTime(latestDoctorGuidanceReferenceTime.value)
+  return !guidanceTime || ackTime >= guidanceTime
+})
+const patientActionLeadText = computed(() => {
+  if (!detail.value) return ''
+  if (unreadDoctorMessageCount.value > 0) {
+    return `最近仍有 ${unreadDoctorMessageCount.value} 条医生回复未被患者查看，可继续观察是否需要再次提醒。`
+  }
+  if (latestDoctorGuidanceReferenceTime.value) {
+    return hasPatientAcknowledgedGuidance.value
+      ? '患者已确认查看本轮医生结论或随访建议，当前可继续关注恢复进展、检查资料和后续反馈。'
+      : '当前已形成医生结论或随访建议，可优先关注患者是否完成查看确认，再决定是否继续提醒。'
+  }
+  if (latestPatientCheckResultUpdate.value || latestPatientFollowUpUpdate.value) {
+    return '患者最近补充了新的恢复或检查信息，可直接带入当前处理与随访。'
+  }
+  if (detail.value?.serviceFeedback) {
+    return detail.value.serviceFeedback.doctorHandleStatus === 1
+      ? '患者已提交服务评价，当前也已登记回看处理结果。'
+      : '患者已提交服务评价，建议及时回看并记录后续处理动作。'
+  }
+  const followState = followUpState(detail.value)
+  if (['pending', 'due_today', 'overdue'].includes(followState)) {
+    return '当前问诊仍处于随访阶段，可重点关注患者是否按计划补充恢复情况。'
+  }
+  return '这里集中展示患者在本次问诊后的关键动作，便于快速判断是否还需要继续跟进。'
+})
+const patientActionTags = computed(() => {
+  if (!detail.value) return []
+  const tags = []
+  if (latestDoctorMessage.value) {
+    tags.push(unreadDoctorMessageCount.value > 0 ? `待患者查看 ${unreadDoctorMessageCount.value} 条` : '患者已读最近回复')
+  }
+  if (latestDoctorGuidanceReferenceTime.value) {
+    tags.push(hasPatientAcknowledgedGuidance.value ? '已确认查看医生建议' : '待确认查看医生建议')
+  }
+  if (latestPatientCheckResultUpdate.value) tags.push('已补充检查结果')
+  if (latestPatientFollowUpUpdate.value) tags.push('已补充恢复更新')
+  else if (followUpState(detail.value) !== 'none') tags.push(followUpTagLabel(detail.value))
+  if (detail.value?.serviceFeedback) tags.push(serviceFeedbackSummaryLabel(detail.value))
+  return [...new Set(tags)].slice(0, 4)
+})
+const patientActionCards = computed(() => {
+  if (!detail.value) return []
+  const record = detail.value
+  const cards = []
+  const latestDoctorPreview = trimText(buildLocalMessagePreview(latestDoctorMessage.value))
+  const followState = followUpState(record)
+  const latestFollowUpRecord = Array.isArray(record.doctorFollowUps) && record.doctorFollowUps.length ? record.doctorFollowUps[0] : null
+  const latestRecoveryDescription = trimText(
+    latestPatientFollowUpUpdate.value?.content
+    || (messageAttachments(latestPatientFollowUpUpdate.value).length ? `患者补充了 ${messageAttachments(latestPatientFollowUpUpdate.value).length} 张恢复相关图片。` : '')
+    || latestFollowUpRecord?.summary
+    || followUpReminderText(record)
+    || '当前还没有新的患者恢复更新，可视情况在沟通区提醒补充。'
+  )
+  const latestCheckResultDescription = trimText(
+    latestPatientCheckResultUpdate.value?.content
+    || (messageAttachments(latestPatientCheckResultUpdate.value).length ? `患者补充了 ${messageAttachments(latestPatientCheckResultUpdate.value).length} 张检查相关图片。` : '')
+    || '如患者已有新的化验、影像或病理结果，可继续在沟通区提醒其补充。'
+  )
+  cards.push({
+    key: 'patient_read',
+    title: '患者查看情况',
+    status: !latestDoctorMessage.value
+      ? '尚未发送回复'
+      : unreadDoctorMessageCount.value > 0
+        ? `待患者查看 ${unreadDoctorMessageCount.value} 条`
+        : '患者已读最近回复',
+    description: !latestDoctorMessage.value
+      ? '当前还没有医生发给患者的沟通消息，可先通过沟通区同步处理意见或继续追问。'
+      : abbreviateText(
+        unreadDoctorMessageCount.value > 0
+          ? `最近医生回复发送于 ${formatDate(latestDoctorMessage.value.createTime)}，患者尚未读完。${latestDoctorPreview ? ` 内容：${latestDoctorPreview}` : ''}`
+          : `最近医生回复已被患者查看。${latestDoctorPreview ? ` 内容：${latestDoctorPreview}` : ''}`,
+        96
+      ),
+    action: 'reply',
+    actionLabel: latestDoctorMessage.value ? '查看沟通' : '去发送回复',
+    tone: !latestDoctorMessage.value ? 'info' : unreadDoctorMessageCount.value > 0 ? 'warning' : 'success'
+  })
+  cards.push({
+    key: 'followup_update',
+    title: '恢复更新',
+    status: latestPatientFollowUpUpdate.value
+      ? '已补充恢复更新'
+      : followState === 'overdue'
+        ? '等待患者反馈'
+        : followState !== 'none'
+          ? followUpTagLabel(record)
+          : '暂无恢复更新',
+    description: abbreviateText(latestRecoveryDescription, 96),
+    action: canSubmitFollowUp.value ? 'followup' : 'reply',
+    actionLabel: canSubmitFollowUp.value
+      ? (latestPatientFollowUpUpdate.value ? '登记随访' : '查看随访')
+      : '查看沟通',
+    tone: latestPatientFollowUpUpdate.value ? 'success' : patientActionToneFromFollowUpState(followState)
+  })
+  cards.push({
+    key: 'check_result',
+    title: '检查结果补充',
+    status: latestPatientCheckResultUpdate.value ? '已补充检查结果' : '暂无结果补充',
+    description: abbreviateText(latestCheckResultDescription, 96),
+    action: 'reply',
+    actionLabel: latestPatientCheckResultUpdate.value ? '查看沟通' : '去提醒补充',
+    tone: latestPatientCheckResultUpdate.value ? 'success' : 'info'
+  })
+  if (latestDoctorGuidanceReferenceTime.value) {
+    cards.push({
+      key: 'guidance_ack',
+      title: '医生建议确认',
+      status: hasPatientAcknowledgedGuidance.value ? '已确认查看' : '待确认查看',
+      description: abbreviateText(
+        hasPatientAcknowledgedGuidance.value
+          ? trimText(latestPatientGuidanceAck.value?.content || `患者已于 ${formatDate(latestPatientGuidanceAck.value?.createTime || latestDoctorGuidanceReferenceTime.value)} 确认查看本轮医生结论或随访建议。`)
+          : `医生已于 ${formatDate(latestDoctorGuidanceReferenceTime.value)} 给出本轮结论或随访建议，可继续关注患者是否完成查看确认。`,
+        96
+      ),
+      action: hasPatientAcknowledgedGuidance.value ? 'reply' : 'patient_action',
+      actionLabel: hasPatientAcknowledgedGuidance.value ? '查看沟通' : '查看看板',
+      tone: hasPatientAcknowledgedGuidance.value ? 'success' : 'warning'
+    })
+  }
+  cards.push({
+    key: 'service_feedback',
+    title: '服务评价',
+    status: record.serviceFeedback
+      ? serviceFeedbackSummaryLabel(record)
+      : record.status === 'completed'
+        ? '等待患者评价'
+        : '尚未进入评价',
+    description: abbreviateText(
+      record.serviceFeedback
+        ? serviceFeedbackSummaryLine(record)
+        : (record.status === 'completed'
+          ? '医生完成处理后，患者可补充服务评价和问题是否解决，后续可在这里集中回看。'
+          : '当前问诊尚未进入服务评价阶段。'),
+      96
+    ),
+    action: 'feedback',
+    actionLabel: record.serviceFeedback ? '回看评价' : '查看评价区',
+    tone: record.serviceFeedback
+      ? normalizeActionTone(serviceFeedbackTagType(record))
+      : record.status === 'completed' ? 'warning' : 'info'
+  })
+  return cards
+})
 const detailFollowUpReminder = computed(() => followUpReminderText(detail.value))
 const canClaimCurrent = computed(() => canClaim(detail.value))
 const canReleaseCurrent = computed(() => canRelease(detail.value))
@@ -1415,7 +1802,7 @@ const messageUploadHeaders = computed(() => authHeader())
 
 function resolveConsultationAction(value) {
   const action = trimText(value)
-  return ['reply', 'followup', 'feedback'].includes(action) ? action : ''
+  return ['reply', 'followup', 'feedback', 'patient_action'].includes(action) ? action : ''
 }
 function clearFocusedDetailSection() {
   focusedDetailSection.value = ''
@@ -1432,6 +1819,8 @@ function focusDetailActionSection(action, detailId = null) {
       ? (messageInputRef.value?.$el || messageInputRef.value?.textarea || messageInputRef.value)
       : targetAction === 'followup'
         ? (followUpActionButtonRef.value?.$el || followUpActionButtonRef.value)
+        : targetAction === 'patient_action'
+          ? (patientActionPanelRef.value?.$el || patientActionPanelRef.value)
         : (serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value)
     if (!target?.scrollIntoView) return
     clearFocusedDetailSection()
@@ -1467,6 +1856,7 @@ function currentListQuery() {
   if (dispatchFilter.value !== 'all') query.dispatchFilter = dispatchFilter.value
   if (followUpFilter.value !== 'all') query.followUpFilter = followUpFilter.value
   if (feedbackFilter.value !== 'all') query.feedbackFilter = feedbackFilter.value
+  if (patientActionFilter.value !== 'all') query.patientActionFilter = patientActionFilter.value
   if (riskFilter.value !== 'all') query.riskFilter = riskFilter.value
   if (sortMode.value !== 'recent') query.sortMode = sortMode.value
   return query
@@ -1479,7 +1869,7 @@ function consultationRouteQuery(detailId = null, action = '') {
   return query
 }
 function isSameConsultationRouteQuery(nextQuery = {}) {
-  return ['id', 'action', 'ownerFilter', 'status', 'messageFilter', 'dispatchFilter', 'followUpFilter', 'feedbackFilter', 'riskFilter', 'sortMode']
+  return ['id', 'action', 'ownerFilter', 'status', 'messageFilter', 'dispatchFilter', 'followUpFilter', 'feedbackFilter', 'patientActionFilter', 'riskFilter', 'sortMode']
     .every(key => trimText(route.query[key]) === trimText(nextQuery[key]))
 }
 function syncListQuery(detailId = null, action = '') {
@@ -1494,6 +1884,7 @@ function applyRouteFilters() {
   const dispatchValue = trimText(route.query.dispatchFilter)
   const followUpValue = trimText(route.query.followUpFilter)
   const feedbackValue = trimText(route.query.feedbackFilter)
+  const patientActionValue = trimText(route.query.patientActionFilter)
   const riskValue = trimText(route.query.riskFilter)
   const sortValue = trimText(route.query.sortMode)
 
@@ -1503,6 +1894,9 @@ function applyRouteFilters() {
   dispatchFilter.value = ['all', 'recommended_to_me', 'waiting_accept', 'claimed_by_other'].includes(dispatchValue) ? dispatchValue : 'all'
   followUpFilter.value = ['all', 'pending', 'due_today', 'overdue'].includes(followUpValue) ? followUpValue : 'all'
   feedbackFilter.value = ['all', 'attention', 'has_feedback', 'low_score', 'unresolved'].includes(feedbackValue) ? feedbackValue : 'all'
+  patientActionFilter.value = ['all', 'unread_reply', 'followup_update', 'check_result_update', 'guidance_ack', 'service_feedback', 'followup_waiting'].includes(patientActionValue)
+    ? patientActionValue
+    : 'all'
   riskFilter.value = ['all', 'high_priority', 'normal'].includes(riskValue) ? riskValue : 'all'
   sortMode.value = ['recent', 'follow_up_due'].includes(sortValue) ? sortValue : 'recent'
 }
@@ -1514,6 +1908,96 @@ function loadReplyTemplates() {
   }, () => {
     templateLoading.value = false
   })
+}
+function resolveMessageBoardElement() {
+  return messageBoardRef.value?.$el || messageBoardRef.value || null
+}
+function isMessageBoardNearBottom(threshold = 96) {
+  const element = resolveMessageBoardElement()
+  if (!element) return true
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+}
+function scrollMessageBoardToBottom(force = false) {
+  nextTick(() => {
+    const element = resolveMessageBoardElement()
+    if (!element) return
+    if (!force && !isMessageBoardNearBottom()) return
+    element.scrollTop = element.scrollHeight
+  })
+}
+function clearMessageNewState() {
+  messagePendingNewCount.value = 0
+  messagePendingNewLabel.value = ''
+}
+function resetMessageSyncState() {
+  messageLastSyncedAt.value = null
+  messageSyncStatus.value = 'idle'
+}
+function recordMessageSyncSuccess() {
+  messageLastSyncedAt.value = new Date()
+  messageSyncStatus.value = 'live'
+}
+function buildMessagePendingNewLabel(message) {
+  if (!message) return ''
+  const patientName = trimText(message?.senderName || detail.value?.patientName) || '患者'
+  if (isDoctorGuidanceAckMessage(message)) return `${patientName}确认已查看医生建议`
+  if (isCheckResultUpdateMessage(message)) return `${patientName}补充了检查结果`
+  if (isFollowUpUpdateMessage(message)) return `${patientName}补充了恢复更新`
+  const preview = trimText(buildLocalMessagePreview(message))
+  if (preview) return `${patientName}发来新消息：${abbreviateText(preview, 22)}`
+  return `${patientName}发来新消息`
+}
+function handleMessageBoardScroll() {
+  if (isMessageBoardNearBottom()) {
+    clearMessageNewState()
+  }
+}
+function jumpMessageBoardToLatest() {
+  clearMessageNewState()
+  scrollMessageBoardToBottom(true)
+}
+function canPollMessages() {
+  return detailVisible.value
+    && !!detail.value?.id
+    && !detailLoading.value
+    && typeof document !== 'undefined'
+    && document.visibilityState === 'visible'
+}
+function stopMessagePolling() {
+  if (messagePollTimer) {
+    clearInterval(messagePollTimer)
+    messagePollTimer = null
+  }
+  messagePollBusy = false
+}
+function pollConsultationMessages() {
+  const recordId = detail.value?.id
+  if (!recordId || !canPollMessages() || messagePollBusy || messageLoading.value || messageSending.value) return
+  messagePollBusy = true
+  loadConsultationMessages(recordId, {
+    silent: true,
+    onFinally: () => {
+      messagePollBusy = false
+    }
+  })
+}
+function startMessagePolling() {
+  stopMessagePolling()
+  if (!detailVisible.value) return
+  messagePollTimer = setInterval(() => {
+    pollConsultationMessages()
+  }, MESSAGE_POLL_INTERVAL)
+}
+function handleMessageVisibilityChange() {
+  if (typeof document === 'undefined') return
+  if (document.visibilityState === 'visible') {
+    if (detailVisible.value) {
+      startMessagePolling()
+      pollConsultationMessages()
+    }
+    return
+  }
+  stopMessagePolling()
 }
 function loadDoctor() {
   get('/api/doctor/workbench/summary', data => {
@@ -1543,6 +2027,9 @@ function openDetail(id, routeAction = '') {
   const detailAction = resolveConsultationAction(routeAction)
   detailVisible.value = true
   detailLoading.value = true
+  stopMessagePolling()
+  clearMessageNewState()
+  resetMessageSyncState()
   clearFocusedDetailSection()
   consultationMessages.value = []
   messageLoading.value = false
@@ -1555,7 +2042,8 @@ function openDetail(id, routeAction = '') {
     detail.value = data ? normalizeDoctorReminderRecord(data) : null
     messageAiScene.value = recommendMessageAiScene(detail.value, [])
     syncForms()
-    loadConsultationMessages(id)
+    loadConsultationMessages(id, { preserveScroll: false })
+    startMessagePolling()
     detailLoading.value = false
     syncListQuery(id, detailAction)
     if (detailAction) focusDetailActionSection(detailAction, id)
@@ -1563,9 +2051,62 @@ function openDetail(id, routeAction = '') {
   }, message => {
     detailLoading.value = false
     detailVisible.value = false
+    stopMessagePolling()
     clearFocusedDetailSection()
     ElMessage.warning(message || '问诊详情加载失败')
   })
+}
+function downloadDetailArchiveSummary() {
+  const recordId = detail.value?.id
+  if (!recordId) {
+    ElMessage.warning('当前缺少可下载的问诊记录')
+    return
+  }
+  download(`/api/doctor/consultation/archive/export?id=${recordId}`, 'doctor-consultation-archive.txt', () => {
+    ElMessage.success('医生端问诊归档摘要已开始下载')
+  })
+}
+async function copyDetailArchiveSummary() {
+  const content = `${detailArchiveSummary.value?.plainText || ''}`.trim()
+  if (!content) {
+    ElMessage.warning('当前暂无可复制的问诊归档摘要')
+    return
+  }
+  const copied = await copyText(content)
+  if (copied) {
+    ElMessage.success('医生端问诊归档摘要已复制')
+  } else {
+    ElMessage.warning('当前环境不支持自动复制，请手动复制摘要内容')
+  }
+}
+async function copyText(value) {
+  const text = `${value || ''}`.trim()
+  if (!text) return false
+  if (navigator?.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fall through to legacy copy below.
+    }
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'readonly')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+  let copied = false
+  try {
+    copied = document.execCommand('copy')
+  } catch {
+    copied = false
+  }
+  document.body.removeChild(textarea)
+  return copied
 }
 function syncForms() {
   const handle = detail.value?.doctorHandle
@@ -1636,6 +2177,48 @@ function applyServiceFeedbackToFollowUp() {
   if (!changed) return ElMessage.info('当前随访表单已包含评价回看信息，可继续人工补充')
   ElMessage.success('已将服务评价带入随访草稿')
 }
+function isFollowUpUpdateMessage(message) {
+  return `${message?.messageType || ''}`.trim().toLowerCase() === 'followup_update'
+}
+
+function isCheckResultUpdateMessage(message) {
+  return `${message?.messageType || ''}`.trim().toLowerCase() === 'check_result_update'
+}
+
+function isDoctorGuidanceAckMessage(message) {
+  return isDoctorGuidanceAckMessageType(message?.messageType)
+}
+
+function applyPatientFollowUpUpdateToFollowUp() {
+  const update = latestPatientFollowUpUpdate.value
+  if (!update) return ElMessage.warning('患者暂未提交结构化恢复更新。')
+  if (!canSubmitFollowUp.value) return ElMessage.warning(followUpHint.value)
+
+  const content = trimText(update.content)
+  if (!content) return ElMessage.warning('最新恢复更新仅包含图片附件。')
+
+  const merged = mergeTextField(followUpForm, 'summary', `患者恢复更新：\n${content}`)
+  followUpAssistState.source = 'patient_followup_update'
+  followUpAssistState.summary = `${formatDate(update.createTime)} 的患者恢复更新已补充到随访摘要。`
+  focusDetailActionSection('followup', detail.value?.id || null)
+
+  if (!merged) return ElMessage.info('当前随访摘要已包含这条患者恢复更新。')
+  ElMessage.success('已将患者恢复更新带入随访摘要。')
+}
+
+function applyPatientCheckResultUpdateToHandle() {
+  const update = latestPatientCheckResultUpdate.value
+  if (!update) return ElMessage.warning('患者暂未提交结构化检查结果补充。')
+  if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
+
+  const content = trimText(update.content)
+  if (!content) return ElMessage.warning('最新检查结果补充仅包含图片附件。')
+
+  const merged = mergeTextField(handleForm, 'summary', `患者检查结果补充：\n${content}`)
+  if (!merged) return ElMessage.info('当前处理摘要已包含这条患者检查结果补充。')
+  ElMessage.success('已将患者检查结果补充带入处理摘要。')
+}
+
 function buildServiceFeedbackFollowUpDraft(feedback) {
   if (!feedback) return null
   const score = Number(feedback.serviceScore || 0)
@@ -1705,19 +2288,46 @@ function plusDaysDateText(value, days = 0) {
   const day = `${date.getDate()}`.padStart(2, '0')
   return `${year}-${month}-${day}`
 }
-function loadConsultationMessages(recordId = detail.value?.id) {
+function loadConsultationMessages(recordId = detail.value?.id, options = {}) {
   if (!recordId) return
-  messageLoading.value = true
+  const {
+    silent = false,
+    preserveScroll = true,
+    onFinally = null
+  } = options
+  const shouldStickToBottom = !preserveScroll || isMessageBoardNearBottom() || !consultationMessages.value.length
+  const previousCount = consultationMessages.value.length
+  const previousLatestId = Number(consultationMessages.value[consultationMessages.value.length - 1]?.id || 0)
+  messageSyncStatus.value = 'syncing'
+  if (!silent) messageLoading.value = true
   get(`/api/doctor/consultation/message/list?recordId=${recordId}`, data => {
     consultationMessages.value = data || []
     if (!hasMessageAiDraft.value) {
       messageAiScene.value = recommendMessageAiScene(detail.value, consultationMessages.value)
     }
     syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
-    messageLoading.value = false
+    recordMessageSyncSuccess()
+    const nextLatestId = Number(consultationMessages.value[consultationMessages.value.length - 1]?.id || 0)
+    if (!silent) messageLoading.value = false
+    if (shouldStickToBottom) {
+      clearMessageNewState()
+      scrollMessageBoardToBottom(true)
+    } else if (nextLatestId > 0 && nextLatestId !== previousLatestId) {
+      const newMessages = consultationMessages.value.filter(item => Number(item?.id || 0) > previousLatestId)
+      const incomingMessages = newMessages.filter(item => item?.senderType === 'user')
+      const deltaCount = Math.max(incomingMessages.length || consultationMessages.value.length - previousCount, 1)
+      messagePendingNewCount.value += deltaCount
+      messagePendingNewLabel.value = buildMessagePendingNewLabel(
+        incomingMessages[incomingMessages.length - 1] || newMessages[newMessages.length - 1] || consultationMessages.value[consultationMessages.value.length - 1]
+      )
+    }
+    onFinally?.()
   }, message => {
-    consultationMessages.value = []
-    messageLoading.value = false
+    if (!silent) consultationMessages.value = []
+    if (!silent) messageLoading.value = false
+    messageSyncStatus.value = 'failed'
+    if (silent) return onFinally?.()
+    onFinally?.()
     ElMessage.warning(message || '问诊沟通消息加载失败')
   })
 }
@@ -1751,6 +2361,18 @@ function matchesFeedbackFilter(record) {
     return score > 0 && score <= 2
   }
   if (feedbackFilter.value === 'unresolved') return isDoctorServiceFeedbackRecord(record, doctor.doctorId) && record?.serviceFeedback?.isResolved !== 1
+  return true
+}
+function matchesPatientActionFilter(record) {
+  const state = patientActionState(record)
+  if (patientActionFilter.value === 'unread_reply') return state === 'doctor_reply_unread_by_patient'
+  if (patientActionFilter.value === 'followup_update') return state === 'patient_followup_update'
+  if (patientActionFilter.value === 'check_result_update') return state === 'patient_check_result_update'
+  if (patientActionFilter.value === 'guidance_ack') return state === 'patient_acknowledged_guidance'
+  if (patientActionFilter.value === 'service_feedback') return state.startsWith('service_feedback_')
+  if (patientActionFilter.value === 'followup_waiting') {
+    return ['followup_waiting_patient', 'followup_due_today', 'followup_pending'].includes(state)
+  }
   return true
 }
 function matchesRiskFilter(record) {
@@ -1817,6 +2439,18 @@ function serviceFeedbackTagType(record) {
   if (record?.serviceFeedback) return 'success'
   return 'info'
 }
+function normalizeActionTone(value) {
+  if (['danger', 'error'].includes(value)) return 'danger'
+  if (value === 'warning') return 'warning'
+  if (value === 'success') return 'success'
+  return 'info'
+}
+function patientActionToneFromFollowUpState(state) {
+  if (state === 'overdue') return 'danger'
+  if (state === 'due_today') return 'warning'
+  if (state === 'done') return 'success'
+  return 'info'
+}
 function recordRowClassName({ row }) {
   const state = followUpState(row)
   if (state === 'overdue') return 'follow-up-row-overdue'
@@ -1837,8 +2471,27 @@ function smartDispatchReason(record) {
 }
 function messagePreview(record) {
   const summary = getMessageSummary(record)
-  return summary.latestMessagePreview || '暂无消息'
+  const decoratePreview = (preview) => {
+    if (!preview) return preview
+    if (isDoctorGuidanceAckMessage({ messageType: summary.latestMessageType })) {
+      return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
+    }
+    if (isCheckResultUpdateMessage({ messageType: summary.latestMessageType })) {
+      return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
+    }
+    if (isFollowUpUpdateMessage({ messageType: summary.latestMessageType })) {
+      return preview.startsWith('[恢复更新]') || preview.startsWith('[Recovery Update]') ? preview : `[恢复更新] ${preview}`
+    }
+    return preview
+  }
+  const preview = summary.latestMessagePreview || '暂无沟通消息'
+  if (isDoctorGuidanceAckMessage({ messageType: summary.latestMessageType })) return decoratePreview(preview)
+  if (isCheckResultUpdateMessage({ messageType: summary.latestMessageType })) return decoratePreview(preview)
+  if (!isFollowUpUpdateMessage({ messageType: summary.latestMessageType })) return preview
+  if (preview.startsWith('[恢复更新]') || preview.startsWith('[Recovery Update]')) return preview
+  return `[恢复更新] ${preview}`
 }
+
 function messageMetaLabel(record) {
   const summary = getMessageSummary(record)
   if (!summary.latestTime) return '还没有沟通记录'
@@ -1863,12 +2516,25 @@ function buildLocalMessageSummary(messages) {
 function buildLocalMessagePreview(message) {
   const content = trimText(message?.content)
   const attachmentCount = messageAttachments(message).length
+  const decoratePreview = (preview) => {
+    if (!preview) return preview
+    if (isDoctorGuidanceAckMessage(message)) {
+      return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
+    }
+    if (isCheckResultUpdateMessage(message)) {
+      return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
+    }
+    if (isFollowUpUpdateMessage(message)) {
+      return preview.startsWith('[恢复更新]') || preview.startsWith('[Recovery Update]') ? preview : `[恢复更新] ${preview}`
+    }
+    return preview
+  }
   const imageSuffix = attachmentCount <= 0
     ? ''
     : attachmentCount === 1 ? '[图片]' : `[图片 x${attachmentCount}]`
-  if (content && imageSuffix) return abbreviateText(`${content} ${imageSuffix}`, 72)
-  if (content) return abbreviateText(content, 72)
-  if (imageSuffix) return imageSuffix
+  if (content && imageSuffix) return decoratePreview(abbreviateText(`${content} ${imageSuffix}`, 72))
+  if (content) return decoratePreview(abbreviateText(content, 72))
+  if (imageSuffix) return decoratePreview(imageSuffix)
   return '暂无消息'
 }
 function syncRecordMessageSummary(recordId, summary) {
@@ -2031,7 +2697,12 @@ function messageAiSceneLabel(value) {
   })[normalizeMessageAiScene(value)] || '首次接诊'
 }
 function recommendMessageAiScene(record = detail.value, messages = consultationMessages.value) {
+  const latestUserMessage = [...(messages || [])]
+    .reverse()
+    .find(item => item?.senderType === 'user')
+  if (latestUserMessage && isCheckResultUpdateMessage(latestUserMessage)) return 'check_result'
   if (record?.status === 'completed') return 'follow_up'
+  if (latestUserMessage && isFollowUpUpdateMessage(latestUserMessage)) return 'follow_up'
   const hasConversation = (messages || []).some(item => item?.senderType === 'user' || item?.senderType === 'doctor')
   return hasConversation ? 'clarify' : 'opening'
 }
@@ -2775,6 +3446,24 @@ function abbreviateText(value, maxLength = 500) {
   if (!text || text.length <= maxLength) return text
   return `${text.slice(0, Math.max(maxLength - 3, 0))}...`
 }
+function formatSyncTime(value) {
+  if (!value) return '--:--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--:--'
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  return new Intl.DateTimeFormat('zh-CN', sameDay
+    ? {
+        hour: '2-digit',
+        minute: '2-digit'
+      }
+    : {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(date)
+}
 function trimText(value) {
   const text = `${value || ''}`.trim()
   return text || ''
@@ -2793,6 +3482,9 @@ function triageActionLabel(value) { return ({ emergency: '立即急诊', offline
 function triageSessionStatusLabel(value) { return ({ completed: '已完成', in_progress: '进行中', closed: '已关闭' })[value] || value || '-' }
 function messageRoleLabel(value) { return ({ user: '患者', assistant: 'AI 导诊', system: '系统', rule_engine: '规则引擎' })[value] || value || '-' }
 function messageTypeLabel(value) {
+  if (value === 'followup_update') return '恢复更新'
+  if (value === 'check_result_update') return '检查结果补充'
+  if (value === 'doctor_guidance_ack') return '已确认查看'
   return ({
     intake_summary: '问诊摘要',
     health_summary: '健康摘要',
@@ -2820,6 +3512,9 @@ function formatConfidence(value) {
 }
 watch(detailVisible, value => {
   if (!value) {
+    stopMessagePolling()
+    clearMessageNewState()
+    resetMessageSyncState()
     detail.value = null
     consultationMessages.value = []
     messageLoading.value = false
@@ -2835,7 +3530,7 @@ watch(detailVisible, value => {
   }
 })
 watch(
-  [ownerFilter, statusFilter, messageFilter, dispatchFilter, followUpFilter, feedbackFilter, riskFilter, sortMode],
+  [ownerFilter, statusFilter, messageFilter, dispatchFilter, followUpFilter, feedbackFilter, patientActionFilter, riskFilter, sortMode],
   () => {
     const detailId = detailVisible.value ? (detail.value?.id || Number(route.query.id || 0) || null) : null
     const detailAction = detailVisible.value ? resolveConsultationAction(route.query.action) : ''
@@ -2852,6 +3547,7 @@ watch(
     route.query.dispatchFilter,
     route.query.followUpFilter,
     route.query.feedbackFilter,
+    route.query.patientActionFilter,
     route.query.riskFilter,
     route.query.sortMode
   ],
@@ -2877,8 +3573,20 @@ watch([messageAiScene, replyTemplates], () => {
 watch(replyTemplates, () => {
   ensureFormTemplateSelections()
 }, { immediate: true })
-onBeforeUnmount(() => { clearFocusedDetailSection() })
-onMounted(() => { refreshAll(); loadReplyTemplates() })
+onBeforeUnmount(() => {
+  stopMessagePolling()
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleMessageVisibilityChange)
+  }
+  clearFocusedDetailSection()
+})
+onMounted(() => {
+  refreshAll()
+  loadReplyTemplates()
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleMessageVisibilityChange)
+  }
+})
 </script>
 
 <style scoped>
@@ -2998,6 +3706,170 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   padding: 16px 18px;
   border-radius: 18px;
   background: rgba(19, 73, 80, 0.05);
+}
+
+.archive-panel {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.94));
+}
+
+.patient-action-panel {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.1), rgba(255, 255, 255, 0.95));
+}
+
+.patient-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.patient-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.patient-action-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.patient-action-card-head strong {
+  color: #31474d;
+}
+
+.patient-action-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.patient-action-status.is-success {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.patient-action-status.is-warning {
+  background: rgba(210, 155, 47, 0.14);
+  color: #8f6514;
+}
+
+.patient-action-status.is-danger {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
+}
+
+.patient-action-actions {
+  padding-top: 4px;
+}
+
+.archive-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.archive-updated {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.archive-metrics {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.archive-metrics span,
+.archive-tags span {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 12px;
+}
+
+.archive-lead {
+  margin-bottom: 14px;
+  color: #31474d;
+}
+
+.archive-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.archive-card,
+.archive-next-item {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.archive-card strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.archive-card p,
+.archive-next-item p {
+  margin: 0;
+  line-height: 1.8;
+  color: #48656d;
+}
+
+.archive-tags,
+.archive-next-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.archive-tags.danger span {
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+}
+
+.archive-next-list {
+  display: grid;
+}
+
+.archive-next-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.archive-next-item span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.12);
+  color: #0f6665;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .ai-draft-card {
@@ -3373,6 +4245,16 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   color: #27646d;
 }
 
+.chips span.message-sync-text {
+  background: rgba(15, 102, 101, 0.12);
+  color: #0f6665;
+}
+
+.chips span.message-sync-text.is-failed {
+  background: rgba(214, 95, 80, 0.12);
+  color: #9f4336;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3407,11 +4289,25 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   gap: 6px;
 }
 
+.patient-action-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .message-summary-cell span,
-.message-brief span {
+.message-brief span,
+.patient-action-cell span {
   color: var(--app-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.patient-action-cell span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .message-brief strong {
@@ -3425,6 +4321,12 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 
 .message-board {
   margin-bottom: 16px;
+}
+
+.message-jump-bar {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: center;
 }
 
 .message-list {
@@ -3528,6 +4430,8 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 @media (max-width: 1100px) {
   .stats,
   .grid,
+  .patient-action-grid,
+  .archive-grid,
   .triage-doctor-list,
   .conclusion-compare-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3537,6 +4441,8 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
 @media (max-width: 760px) {
   .stats,
   .grid,
+  .patient-action-grid,
+  .archive-grid,
   .triage-doctor-list,
   .conclusion-compare-grid {
     grid-template-columns: 1fr;
@@ -3545,7 +4451,9 @@ onMounted(() => { refreshAll(); loadReplyTemplates() })
   .head,
   .toolbar,
   .actions,
+  .archive-toolbar,
   .head-actions,
+  .patient-action-card-head,
   .conclusion-compare-head,
   .message-toolbar,
   .message-meta,

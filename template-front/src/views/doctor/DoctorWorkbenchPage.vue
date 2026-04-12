@@ -187,10 +187,11 @@
                   <strong>{{ item.patientName || '未命名就诊人' }}</strong>
                   <span>{{ formatDate(item.messageSummary?.latestTime || item.updateTime) }}</span>
                 </div>
-                <p>{{ item.messageSummary?.latestMessagePreview || item.chiefComplaint || '暂无更多沟通内容' }}</p>
+                <p>{{ consultationMessagePreview(item) || item.chiefComplaint || '暂无更多沟通内容' }}</p>
                 <div class="todo-item-meta">
                   <span>{{ item.categoryName || '未分类' }}</span>
                   <span>未读 {{ item.messageSummary?.unreadCount || 0 }} 条</span>
+                  <span v-if="hasPatientActionInsight(item)" :class="patientActionBadgeClass(item)">{{ patientActionLabel(item) }}</span>
                 </div>
               </button>
             </div>
@@ -220,10 +221,11 @@
                   <strong>{{ item.patientName || '未命名就诊人' }}</strong>
                   <span>{{ formatDate(item.messageSummary?.latestTime || item.updateTime) }}</span>
                 </div>
-                <p>{{ item.messageSummary?.latestMessagePreview || item.chiefComplaint || '暂无更多沟通内容' }}</p>
+                <p>{{ consultationMessagePreview(item) || item.chiefComplaint || '暂无更多沟通内容' }}</p>
                 <div class="todo-item-meta">
                   <span>{{ item.categoryName || '未分类' }}</span>
                   <span>{{ assignmentOwnerText(item) }}</span>
+                  <span v-if="hasPatientActionInsight(item)" :class="patientActionBadgeClass(item)">{{ patientActionLabel(item) }}</span>
                 </div>
               </button>
             </div>
@@ -261,6 +263,7 @@
                 <div class="todo-item-meta">
                   <span>{{ item.categoryName || '未分类' }}</span>
                   <span>{{ followUpPlanText(item) }}</span>
+                  <span v-if="hasPatientActionInsight(item)" :class="patientActionBadgeClass(item)">{{ patientActionLabel(item) }}</span>
                 </div>
               </button>
             </div>
@@ -417,7 +420,15 @@
             <template #default="{ row }">
               <div class="recent-message-cell">
                 <strong>{{ consultationMessageStatus(row) }}</strong>
-                <span>{{ row.messageSummary?.latestMessagePreview || '暂无沟通消息' }}</span>
+                <span>{{ consultationMessagePreview(row) || '暂无沟通消息' }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="患者后续动作" min-width="220">
+            <template #default="{ row }">
+              <div class="recent-message-cell">
+                <strong>{{ patientActionLabel(row) }}</strong>
+                <span>{{ patientActionSummary(row) }}</span>
               </div>
             </template>
           </el-table-column>
@@ -447,6 +458,10 @@ import { ElMessage } from 'element-plus'
 import { computed, inject, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { get, resolveImagePath } from '@/net'
+import {
+  doctorMessagePreview, followUpDueDate as reminderFollowUpDueDate, followUpState as reminderFollowUpState,
+  messageProgressLabel, ownerType, patientActionLabel, patientActionState, patientActionSummary, patientActionTagType
+} from '@/doctor/reminder'
 import { smartDispatchHintText, smartDispatchStatusLabel } from '@/triage/dispatch'
 
 const router = useRouter()
@@ -559,18 +574,18 @@ function claimTodoItemClass(item) {
 }
 
 function assignmentOwnerText(item) {
-  const assignment = item?.doctorAssignment
-  if (!assignment || assignment.status !== 'claimed') return '待认领'
-  return assignment.doctorId === summary.doctorId ? '我已认领' : `由 ${assignment.doctorName || '其他医生'} 认领`
+  const type = ownerType(item, summary.doctorId)
+  if (type === 'mine') return '我已认领'
+  if (type === 'others') return `由 ${item?.doctorAssignment?.doctorName || '其他医生'} 认领`
+  return '待认领'
 }
 
 function consultationMessageStatus(item) {
-  const summaryInfo = item?.messageSummary
-  if (!summaryInfo?.totalCount) return '暂无沟通'
-  if ((summaryInfo.unreadCount || 0) > 0) return `患者新消息 ${summaryInfo.unreadCount} 条`
-  if (summaryInfo.latestSenderType === 'user') return '待医生回复'
-  if (summaryInfo.latestSenderType === 'doctor') return '已回复患者'
-  return '沟通中'
+  return messageProgressLabel(item)
+}
+
+function consultationMessagePreview(item) {
+  return doctorMessagePreview(item)
 }
 
 function latestFollowUp(item) {
@@ -580,35 +595,20 @@ function latestFollowUp(item) {
 }
 
 function followUpDueDate(item) {
-  const latest = latestFollowUp(item)
-  if (latest?.nextFollowUpDate) return latest.nextFollowUpDate
-  const days = Number(item?.doctorConclusion?.followUpWithinDays || 0)
-  if (!Number.isFinite(days) || days <= 0) return null
-  const baseTime = item?.doctorConclusion?.updateTime || item?.doctorHandle?.completeTime || item?.updateTime
-  if (!baseTime) return null
-  const dueDate = new Date(baseTime)
-  dueDate.setHours(0, 0, 0, 0)
-  dueDate.setDate(dueDate.getDate() + days)
-  return dueDate
+  return reminderFollowUpDueDate(item)
 }
 
 function followUpState(item) {
-  const dueValue = followUpDueDate(item)
-  if (!dueValue) return 'pending'
-  const dueDate = new Date(dueValue)
-  dueDate.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  if (dueDate.getTime() < today.getTime()) return 'overdue'
-  if (dueDate.getTime() === today.getTime()) return 'due_today'
-  return 'pending'
+  return reminderFollowUpState(item)
 }
 
 function followUpDueText(item) {
+  const latest = latestFollowUp(item)
   const dueDate = followUpDueDate(item)
   const state = followUpState(item)
   if (state === 'overdue') return `已逾期 ${formatDate(dueDate, true)}`
   if (state === 'due_today') return `今日到期 ${formatDate(dueDate, true)}`
+  if (state === 'done') return latest?.createTime ? `最近随访 ${formatDate(latest.createTime)}` : '本轮随访已完成'
   if (dueDate) return `下次随访 ${formatDate(dueDate, true)}`
   const days = Number(item?.doctorConclusion?.followUpWithinDays || 0)
   if (days > 0) return `${days} 天内随访`
@@ -630,6 +630,19 @@ function followUpTodoItemClass(item) {
   if (state === 'overdue') return 'is-overdue'
   if (state === 'due_today') return 'is-due-today'
   return ''
+}
+
+function patientActionBadgeClass(item) {
+  const type = patientActionTagType(item)
+  if (type === 'danger') return 'todo-meta-chip is-danger'
+  if (type === 'warning') return 'todo-meta-chip is-warning'
+  if (type === 'success') return 'todo-meta-chip is-success'
+  if (type === 'primary') return 'todo-meta-chip is-primary'
+  return 'todo-meta-chip is-info'
+}
+
+function hasPatientActionInsight(item) {
+  return patientActionState(item) !== 'none'
 }
 
 function serviceFeedbackResolvedLabel(value) {
@@ -966,6 +979,36 @@ onMounted(() => loadSummary())
 .todo-item-meta {
   margin-top: 10px;
   flex-wrap: wrap;
+}
+
+.todo-meta-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.todo-meta-chip.is-info {
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+}
+
+.todo-meta-chip.is-primary {
+  background: rgba(49, 93, 196, 0.12);
+  color: #315dc4;
+}
+
+.todo-meta-chip.is-success {
+  background: rgba(31, 143, 89, 0.12);
+  color: #1f8f59;
+}
+
+.todo-meta-chip.is-warning {
+  background: rgba(210, 155, 47, 0.14);
+  color: #9a6a16;
+}
+
+.todo-meta-chip.is-danger {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
 }
 
 .todo-foot {

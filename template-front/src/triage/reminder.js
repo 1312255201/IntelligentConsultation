@@ -123,7 +123,9 @@ export function followUpDueDate(record) {
 }
 
 export function followUpState(record) {
-  if (record?.doctorConclusion?.needFollowUp !== 1 && !latestFollowUp(record)?.nextFollowUpDate) return 'none'
+  const latest = latestFollowUp(record)
+  if (record?.doctorConclusion?.needFollowUp !== 1 && !latest?.nextFollowUpDate) return 'none'
+  if (latest?.needRevisit === 0) return 'done'
   const dueValue = followUpDueDate(record)
   if (!dueValue) return 'pending'
   const dueDate = new Date(dueValue)
@@ -144,6 +146,7 @@ export function followUpTagLabel(record) {
     overdue: '已逾期随访',
     due_today: '今日到期随访',
     pending: '待随访',
+    done: '本轮已完成',
     none: '无需随访'
   })[followUpState(record)] || '待随访'
 }
@@ -166,11 +169,13 @@ export function formatReminderDate(value, onlyDate = false) {
 }
 
 export function followUpLine(record) {
+  const latest = latestFollowUp(record)
   const dueValue = followUpDueDate(record)
   const state = followUpState(record)
   if (state === 'overdue') return `已逾期 ${formatReminderDate(dueValue, true)}`
   if (state === 'due_today') return `今日到期 ${formatReminderDate(dueValue, true)}`
   if (state === 'pending') return dueValue ? `计划于 ${formatReminderDate(dueValue, true)} 跟进` : '已标记后续继续跟进'
+  if (state === 'done') return latest?.createTime ? `最近随访 ${formatReminderDate(latest.createTime)}` : '本轮随访已完成'
   return '当前暂无随访计划'
 }
 
@@ -186,6 +191,9 @@ export function followUpReminderText(record) {
     const dueText = followUpDueDate(record) ? `，计划时间：${formatReminderDate(followUpDueDate(record), true)}` : ''
     return `当前问诊仍处于待随访状态${dueText}`
   }
+  if (state === 'done') {
+    return '本轮随访已完成，如恢复情况又有变化，仍可继续补充给医生。'
+  }
   return '当前暂无随访提醒'
 }
 
@@ -199,7 +207,7 @@ export function serviceFeedbackReminderText(record) {
 
 export function primaryReminderLabel(record) {
   const state = followUpState(record)
-  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
+  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
   if (state === 'overdue') return '逾期随访'
   if (state === 'due_today') return '今日到期'
   if (recordHasUnreadDoctorReply(record)) return '医生新回复'
@@ -209,7 +217,7 @@ export function primaryReminderLabel(record) {
 
 export function reminderQuery(record) {
   const state = followUpState(record)
-  if (state === 'none' && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) {
+  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) {
     return { progress: 'pending_feedback', action: 'feedback' }
   }
   if (state === 'overdue') return { followUp: 'overdue' }

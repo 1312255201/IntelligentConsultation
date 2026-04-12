@@ -64,6 +64,7 @@ import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
 import cn.gugufish.utils.ConsultationAiComparisonUtils;
+import cn.gugufish.utils.ConsultationArchiveSummaryUtils;
 import cn.gugufish.utils.ConsultationAiMismatchReasonUtils;
 import cn.gugufish.utils.ConsultationSmartDispatchUtils;
 import com.alibaba.fastjson2.JSON;
@@ -451,6 +452,16 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                     triageResult == null ? null : triageResult.getReasonText()
             ));
             vo.setMessageSummary(messageSummary);
+            vo.setArchiveSummary(ConsultationArchiveSummaryUtils.buildDoctorSummary(
+                    record,
+                    messageSummary,
+                    doctorAssignment,
+                    doctorHandle,
+                    doctorConclusion,
+                    doctorFollowUps,
+                    triageResult,
+                    serviceFeedback
+            ));
             vo.setAiComparison(ConsultationAiComparisonUtils.build(doctorConclusion, triageSession, triageResult));
             vo.setDoctorFollowUps(doctorFollowUps);
             vo.setTriageSession(triageSession);
