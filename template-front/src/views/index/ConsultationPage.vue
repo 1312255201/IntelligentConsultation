@@ -1405,6 +1405,7 @@
             </article>
           </div>
         </template>
+        <el-empty v-else-if="!detailLoading" description="问诊详情暂未加载成功，请刷新后重试" />
       </div>
     </el-dialog>
   </div>
@@ -1524,7 +1525,7 @@ const visibleFields = computed(() => {
   const fields = template.value?.fields || []
   return fields.filter(field => isFieldVisible(field))
 })
-const detailTriageMessages = computed(() => (detailRecord.value?.triageSession?.messages || []).map(message => ({
+const detailTriageMessages = computed(() => ensureArray(detailRecord.value?.triageSession?.messages).map(message => ({
   ...message,
   insight: resolveTriageMessageInsight(message)
 })))
@@ -2024,24 +2025,44 @@ function focusDetailActionSection(action, recordId = null) {
 
 function loadPatients() {
   get('/api/user/patient/list', (data) => {
-    patients.value = data || []
-    if (!selectedPatientId.value && patients.value.length) {
-      selectedPatientId.value = patients.value.find(item => item.isDefault === 1)?.id || patients.value[0].id
+    try {
+      patients.value = ensureArray(data)
+      if (!selectedPatientId.value && patients.value.length) {
+        selectedPatientId.value = patients.value.find(item => item.isDefault === 1)?.id || patients.value[0].id
+      }
+    } catch (error) {
+      console.error(error)
+      patients.value = []
+      selectedPatientId.value = null
+      ElMessage.warning('就诊人数据处理失败，请刷新后重试')
     }
   })
 }
 
 function loadHistories() {
   get('/api/user/medical-history/list', (data) => {
-    histories.value = data || []
+    try {
+      histories.value = ensureArray(data)
+    } catch (error) {
+      console.error(error)
+      histories.value = []
+      ElMessage.warning('健康档案数据处理失败，请刷新后重试')
+    }
   })
 }
 
 function loadCategories() {
   get('/api/user/consultation/category/list', (data) => {
-    categories.value = data || []
-    if (!activeCategoryId.value && categories.value.length) {
-      activeCategoryId.value = categories.value[0].id
+    try {
+      categories.value = ensureArray(data)
+      if (!activeCategoryId.value && categories.value.length) {
+        activeCategoryId.value = categories.value[0].id
+      }
+    } catch (error) {
+      console.error(error)
+      categories.value = []
+      activeCategoryId.value = null
+      ElMessage.warning('问诊分类数据处理失败，请刷新后重试')
     }
   })
 }
@@ -2049,9 +2070,17 @@ function loadCategories() {
 function loadTemplate(categoryId) {
   templateLoading.value = true
   get(`/api/user/consultation/template/default?categoryId=${categoryId}`, (data) => {
-    template.value = data
-    resetForm()
-    templateLoading.value = false
+    try {
+      template.value = ensureObject(data)
+      resetForm()
+    } catch (error) {
+      console.error(error)
+      template.value = null
+      clearFormData()
+      ElMessage.warning('问诊模板处理失败，请刷新后重试')
+    } finally {
+      templateLoading.value = false
+    }
   }, (message) => {
     template.value = null
     clearFormData()
@@ -2063,14 +2092,19 @@ function loadTemplate(categoryId) {
 function loadRecords(callback) {
   historyLoading.value = true
   get('/api/user/consultation/record/list', (data) => {
-    records.value = (data || []).map(item => ({
-      ...item,
-      smartDispatch: normalizeSmartDispatch(item?.smartDispatch),
-      messageSummary: normalizeMessageSummary(item?.messageSummary)
-    }))
-    historyLoading.value = false
-    callback?.(records.value)
-    autoOpenRecordDetail()
+    try {
+      records.value = ensureArray(data)
+        .map(item => normalizeConsultationRecord(item))
+        .filter(Boolean)
+      callback?.(records.value)
+      autoOpenRecordDetail()
+    } catch (error) {
+      console.error(error)
+      records.value = []
+      ElMessage.warning('问诊记录处理失败，请刷新后重试')
+    } finally {
+      historyLoading.value = false
+    }
   }, () => {
     historyLoading.value = false
   })
@@ -2078,7 +2112,17 @@ function loadRecords(callback) {
 
 function loadFeedbackOptions() {
   get('/api/user/consultation/feedback/options', (data) => {
-    feedbackOptions.value = data || { departments: [], doctors: [] }
+    try {
+      const nextOptions = ensureObject(data) || {}
+      feedbackOptions.value = {
+        departments: ensureArray(nextOptions.departments),
+        doctors: ensureArray(nextOptions.doctors)
+      }
+    } catch (error) {
+      console.error(error)
+      feedbackOptions.value = { departments: [], doctors: [] }
+      ElMessage.warning('反馈选项处理失败，请刷新后重试')
+    }
   })
 }
 
@@ -2486,6 +2530,14 @@ function autoOpenRecordDetail() {
   openRecordDetail(record, { syncRoute: false, action })
 }
 
+function applyDetailRecordPayload(data) {
+  const nextRecord = normalizeConsultationRecord(data, { detail: true })
+  detailRecord.value = nextRecord
+  syncRecordSnapshot(nextRecord)
+  applyServiceFeedbackForm(nextRecord?.serviceFeedback)
+  applyFeedbackForm(nextRecord?.triageFeedback)
+}
+
 function openRecordDetailById(recordId, options = {}) {
   const { action = '' } = options
   if (!recordId) return
@@ -2509,14 +2561,7 @@ function openRecordDetailById(recordId, options = {}) {
 
   get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
     try {
-      detailRecord.value = data ? {
-        ...data,
-        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
-        messageSummary: normalizeMessageSummary(data?.messageSummary)
-      } : null
-      syncRecordSnapshot(detailRecord.value)
-      applyServiceFeedbackForm(data?.serviceFeedback)
-      applyFeedbackForm(data?.triageFeedback)
+      applyDetailRecordPayload(data)
       loadConsultationMessages(recordId, { preserveScroll: false })
       startConversationPolling()
       const focusAction = resolveConsultationAction(action || route.query.action)
@@ -2566,14 +2611,7 @@ function openRecordDetail(row, options = {}) {
   resetCheckResultUpdateForm()
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
     try {
-      detailRecord.value = data ? {
-        ...data,
-        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
-        messageSummary: normalizeMessageSummary(data?.messageSummary)
-      } : null
-      syncRecordSnapshot(detailRecord.value)
-      applyServiceFeedbackForm(data?.serviceFeedback)
-      applyFeedbackForm(data?.triageFeedback)
+      applyDetailRecordPayload(data)
       loadConsultationMessages(row.id, { preserveScroll: false })
       startConversationPolling()
       const focusAction = actionValue || resolveConsultationAction(route.query.action)
@@ -2607,14 +2645,7 @@ function refreshRecordDetail(recordId = detailRecord.value?.id, options = {}) {
   const { reloadConversation = false } = options
   get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
     try {
-      detailRecord.value = data ? {
-        ...data,
-        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
-        messageSummary: normalizeMessageSummary(data?.messageSummary)
-      } : null
-      syncRecordSnapshot(detailRecord.value)
-      applyServiceFeedbackForm(data?.serviceFeedback)
-      applyFeedbackForm(data?.triageFeedback)
+      applyDetailRecordPayload(data)
       if (reloadConversation) loadConsultationMessages(recordId)
     } catch (error) {
       console.error(error)
@@ -2667,7 +2698,7 @@ function loadConsultationMessages(recordId = detailRecord.value?.id, options = {
   if (!silent) messageLoading.value = true
   get(`/api/user/consultation/message/list?recordId=${recordId}`, (data) => {
     try {
-      consultationMessages.value = data || []
+      consultationMessages.value = ensureArray(data)
       syncRecordMessageSummary(recordId, buildLocalMessageSummary(consultationMessages.value))
       recordConversationSyncSuccess()
       const nextLatestId = Number(consultationMessages.value[consultationMessages.value.length - 1]?.id || 0)
@@ -2713,6 +2744,55 @@ function normalizeMessageSummary(summary) {
     latestMessagePreview: summary?.latestMessagePreview || '',
     latestTime: summary?.latestTime || null
   }
+}
+
+function ensureArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
+function ensureObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null
+}
+
+function normalizeConsultationRecord(record, options = {}) {
+  const { detail = false } = options
+  const nextRecord = ensureObject(record)
+  if (!nextRecord) return null
+
+  const normalizedRecord = {
+    ...nextRecord,
+    smartDispatch: normalizeSmartDispatch(nextRecord.smartDispatch),
+    messageSummary: normalizeMessageSummary(nextRecord.messageSummary)
+  }
+
+  if (!detail) return normalizedRecord
+
+  normalizedRecord.answers = ensureArray(nextRecord.answers)
+  normalizedRecord.recommendedDoctors = ensureArray(nextRecord.recommendedDoctors)
+  normalizedRecord.doctorFollowUps = ensureArray(nextRecord.doctorFollowUps)
+  normalizedRecord.aiComparison = ensureObject(nextRecord.aiComparison)
+    ? {
+        ...nextRecord.aiComparison,
+        aiRecommendedDoctors: ensureArray(nextRecord.aiComparison.aiRecommendedDoctors),
+        aiRiskFlags: ensureArray(nextRecord.aiComparison.aiRiskFlags)
+      }
+    : null
+  normalizedRecord.archiveSummary = ensureObject(nextRecord.archiveSummary)
+    ? {
+        ...nextRecord.archiveSummary,
+        riskFlags: ensureArray(nextRecord.archiveSummary.riskFlags),
+        conclusionTags: ensureArray(nextRecord.archiveSummary.conclusionTags),
+        nextActions: ensureArray(nextRecord.archiveSummary.nextActions)
+      }
+    : null
+  normalizedRecord.triageSession = ensureObject(nextRecord.triageSession)
+    ? {
+        ...nextRecord.triageSession,
+        messages: ensureArray(nextRecord.triageSession.messages)
+      }
+    : null
+
+  return normalizedRecord
 }
 
 function getMessageSummary(record) {
@@ -2959,7 +3039,7 @@ function smartDispatchReason(record) {
 
 function buildLocalMessageSummary(messages) {
   const summary = normalizeMessageSummary(null)
-  ;(messages || []).forEach(item => {
+  ensureArray(messages).forEach(item => {
     summary.totalCount += 1
     if (item?.senderType === 'user') summary.userMessageCount += 1
     if (item?.senderType === 'doctor') summary.doctorMessageCount += 1
@@ -3413,14 +3493,7 @@ function submitFeedback() {
     feedbackSubmitting.value = false
     ElMessage.success('导诊反馈已保存')
     get(`/api/user/consultation/record/detail?recordId=${detailRecord.value.id}`, (data) => {
-      detailRecord.value = data ? {
-        ...data,
-        smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
-        messageSummary: normalizeMessageSummary(data?.messageSummary)
-      } : null
-      syncRecordSnapshot(detailRecord.value)
-      applyServiceFeedbackForm(data?.serviceFeedback)
-      applyFeedbackForm(data?.triageFeedback)
+      applyDetailRecordPayload(data)
     })
   }, (message) => {
     feedbackSubmitting.value = false
@@ -3609,8 +3682,14 @@ function abbreviateText(value, maxLength = 80) {
   return `${text.slice(0, Math.max(maxLength - 3, 0))}...`
 }
 
+function trimText(value) {
+  return `${value ?? ''}`.trim()
+}
+
 function formatDate(value, onlyDate = false) {
   if (!value) return '-'
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
   return new Intl.DateTimeFormat('zh-CN', onlyDate
     ? {
         year: 'numeric',
@@ -3623,7 +3702,7 @@ function formatDate(value, onlyDate = false) {
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit'
-      }).format(new Date(value))
+      }).format(date)
 }
 
 watch(detailVisible, (value) => {

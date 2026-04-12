@@ -99,9 +99,22 @@ function deleteAccessToken(redirect = false) {
   }
 }
 
-function handleResponse(url, data, success, failure) {
+function handleSuccessProcessingError(url, err, failure, error = defaultError) {
+  console.error(`Error while processing successful response from ${url}`, err)
+  if (typeof failure === 'function') {
+    failure('页面处理响应数据时发生异常，请刷新后重试', 500, url)
+    return
+  }
+  error(err)
+}
+
+function handleResponse(url, data, success, failure, error = defaultError) {
   if (data.code === 200) {
-    success(data.data)
+    try {
+      success(data.data)
+    } catch (err) {
+      handleSuccessProcessingError(url, err, failure, error)
+    }
   } else if (data.code === 401) {
     failure('登录状态已过期，请重新登录', data.code, url)
     deleteAccessToken(true)
@@ -130,13 +143,13 @@ function handleRequestError(url, err, failure, error = defaultError) {
 
 function internalPost(url, data, headers, success, failure, error = defaultError) {
   axios.post(url, data, { headers }).then(({ data }) => {
-    handleResponse(url, data, success, failure)
+    handleResponse(url, data, success, failure, error)
   }).catch(err => handleRequestError(url, err, failure, error))
 }
 
 function internalGet(url, headers, success, failure, error = defaultError) {
   axios.get(url, { headers }).then(({ data }) => {
-    handleResponse(url, data, success, failure)
+    handleResponse(url, data, success, failure, error)
   }).catch(err => handleRequestError(url, err, failure, error))
 }
 
