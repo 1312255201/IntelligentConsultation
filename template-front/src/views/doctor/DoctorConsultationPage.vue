@@ -169,7 +169,10 @@
     <el-drawer v-model="detailVisible" title="问诊详情" size="70%" destroy-on-close>
       <div v-loading="detailLoading" class="drawer-body">
         <template v-if="detail">
-          <section class="card panel">
+          <section
+            ref="detailBasicPanelRef"
+            :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'basic' }]"
+          >
             <h3>基本信息</h3>
             <el-descriptions :column="2" border>
               <el-descriptions-item label="问诊单号">{{ detail.consultationNo || '-' }}</el-descriptions-item>
@@ -183,7 +186,57 @@
             </el-descriptions>
           </section>
 
-          <section v-if="detailArchiveSummary" class="card panel archive-panel">
+          <section class="card panel detail-nav-panel">
+            <div class="head">
+              <div>
+                <h3>连续处理导航</h3>
+                <p>按当前筛选结果连续查看问诊，并快速跳到常用处理区，不用关闭详情抽屉。</p>
+              </div>
+              <div class="chips">
+                <span v-if="detailRecordPositionLabel">{{ detailRecordPositionLabel }}</span>
+                <span v-if="filteredRecords.length">当前筛选 {{ filteredRecords.length }} 条</span>
+                <span v-if="filteredRecords.length > 1">快捷键 Alt + 左右方向键</span>
+              </div>
+            </div>
+            <div class="detail-nav-toolbar">
+              <el-button plain :disabled="!previousDetailRecord || detailLoading" @click="openAdjacentDetail(-1)">上一条</el-button>
+              <el-button plain :disabled="!nextDetailRecord || detailLoading" @click="openAdjacentDetail(1)">下一条</el-button>
+              <span class="detail-nav-meta">{{ detailRecordPositionLabel || '当前问诊不在当前筛选结果中，暂时无法使用相邻切换。' }}</span>
+            </div>
+            <div v-if="detailNavigationSectionItems.length" class="detail-nav-chip-list">
+              <button
+                v-for="item in detailNavigationSectionItems"
+                :key="item.key"
+                type="button"
+                :class="['detail-nav-chip', { 'is-active': focusedDetailSection === item.key }]"
+                @click="scrollToDetailSection(item.key)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </section>
+
+          <section v-if="detailDraftNoticeText" class="card panel draft-recovery-panel">
+            <div class="head">
+              <div>
+                <h3>本地草稿</h3>
+                <p>{{ detailDraftNoticeText }}</p>
+              </div>
+              <div class="chips">
+                <span v-if="doctorLocalDraftSavedAt">最近暂存 {{ formatSyncTime(doctorLocalDraftSavedAt) }}</span>
+                <span v-if="doctorLocalDraftRestoredAt">已恢复草稿</span>
+              </div>
+            </div>
+            <div class="actions">
+              <el-button text @click="discardDoctorLocalDraft">放弃本地草稿</el-button>
+            </div>
+          </section>
+
+          <section
+            v-if="detailArchiveSummary"
+            ref="detailArchivePanelRef"
+            :class="['card', 'panel', 'archive-panel', { 'focus-detail-panel': focusedDetailSection === 'archive' }]"
+          >
             <div class="head">
               <div>
                 <h3>问诊归档摘要</h3>
@@ -254,7 +307,11 @@
             </div>
           </section>
 
-          <section v-if="patientActionCards.length" ref="patientActionPanelRef" class="card panel patient-action-panel">
+          <section
+            v-if="patientActionCards.length"
+            ref="patientActionPanelRef"
+            :class="['card', 'panel', 'patient-action-panel', { 'focus-detail-panel': focusedDetailSection === 'patient_action' }]"
+          >
             <div class="head">
               <div>
                 <h3>患者后续动作</h3>
@@ -272,7 +329,69 @@
                 </div>
                 <p class="copy">{{ item.description }}</p>
                 <div class="actions patient-action-actions">
+                  <el-button
+                    v-if="item.quickAction"
+                    plain
+                    type="primary"
+                    @click="handlePatientActionQuickAction(item.quickAction)"
+                  >
+                    {{ item.quickActionLabel }}
+                  </el-button>
                   <el-button text type="primary" @click="focusDetailActionSection(item.action, detail.id)">{{ item.actionLabel }}</el-button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section
+            v-if="workflowAssistantItems.length"
+            ref="workflowAssistantPanelRef"
+            :class="['card', 'panel', 'workflow-assistant-panel', { 'focus-detail-panel': focusedDetailSection === 'assistant' }]"
+          >
+            <div class="head">
+              <div>
+                <h3>下一步处理助手</h3>
+                <p>{{ workflowAssistantLeadText }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ workflowAssistantCompletionText }}</span>
+                <span v-if="workflowAssistantPrimarySectionLabel">推荐定位 {{ workflowAssistantPrimarySectionLabel }}</span>
+                <span v-for="item in workflowAssistantTags" :key="`workflow-tag-${item}`">{{ item }}</span>
+              </div>
+            </div>
+            <article v-if="workflowAssistantPrimaryAction" class="workflow-assistant-primary">
+              <div>
+                <strong>{{ workflowAssistantPrimaryAction.title }}</strong>
+                <p class="copy">{{ workflowAssistantPrimaryAction.description }}</p>
+              </div>
+              <div class="actions">
+                <el-button
+                  :type="workflowAssistantPrimaryAction.buttonType || 'primary'"
+                  :plain="workflowAssistantPrimaryAction.buttonType !== 'primary'"
+                  :disabled="workflowAssistantPrimaryAction.disabled"
+                  @click="runWorkflowAssistantAction(workflowAssistantPrimaryAction.action)"
+                >
+                  {{ workflowAssistantPrimaryAction.buttonLabel }}
+                </el-button>
+              </div>
+            </article>
+            <div class="workflow-assistant-grid">
+              <article v-for="item in workflowAssistantItems" :key="item.key" class="workflow-assistant-card">
+                <div class="workflow-assistant-card-head">
+                  <strong>{{ item.title }}</strong>
+                  <span :class="['workflow-assistant-status', `is-${item.tone}`]">{{ item.status }}</span>
+                </div>
+                <p class="copy">{{ item.description }}</p>
+                <div class="actions workflow-assistant-actions">
+                  <el-button
+                    v-if="item.actionLabel && item.action"
+                    text
+                    type="primary"
+                    :disabled="item.disabled"
+                    @click="runWorkflowAssistantAction(item.action)"
+                  >
+                    {{ item.actionLabel }}
+                  </el-button>
                 </div>
               </article>
             </div>
@@ -292,9 +411,10 @@
               </div>
             </div>
             <div class="actions">
-              <el-button v-if="canClaimCurrent" type="primary" plain :loading="assignLoading && assignType==='claim'" @click="submitAssignment('claim', detail.id)">认领问诊单</el-button>
+              <el-button v-if="canClaimCurrent" type="primary" plain :loading="assignLoading && assignType==='claim'" @click="submitAssignment('claim', detail.id)">{{ claimActionButtonLabel }}</el-button>
               <el-button v-if="canReleaseCurrent" type="warning" plain :loading="assignLoading && assignType==='release'" @click="submitAssignment('release', detail.id)">释放问诊单</el-button>
             </div>
+            <p v-if="claimContinuationHint" class="copy">{{ claimContinuationHint }}</p>
           </section>
 
           <section class="card panel">
@@ -340,7 +460,7 @@
             <el-empty v-else description="暂无问诊答案" />
           </section>
 
-          <section class="card panel">
+          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'reply' }]">
             <div class="head">
               <div>
                 <h3>医患沟通</h3>
@@ -495,6 +615,36 @@
                   <span>快捷沟通模板</span>
                 </div>
               </div>
+              <div v-if="workflowMessageDraftOptions.length" class="template-banner ai-message-banner ai-message-template-banner">
+                <div>
+                  <strong>处理结果快捷同步</strong>
+                  <p>{{ selectedWorkflowMessageDraft?.hint }}</p>
+                </div>
+                <div class="template-tools">
+                  <el-select
+                    v-model="workflowMessageDraftType"
+                    :disabled="!canSendMessage"
+                    style="width: 180px"
+                  >
+                    <el-option
+                      v-for="item in workflowMessageDraftOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                  <el-button text :disabled="!canSendMessage || !selectedWorkflowMessageDraft" @click="applyWorkflowMessageDraft('replace')">覆盖带入</el-button>
+                  <el-button text :disabled="!canSendMessage || !selectedWorkflowMessageDraft" @click="applyWorkflowMessageDraft('append')">追加带入</el-button>
+                </div>
+              </div>
+              <div v-if="selectedWorkflowMessageDraft" class="subcard ai-message-draft-card ai-message-template-card">
+                <p class="copy"><strong>{{ selectedWorkflowMessageDraft.label }}</strong></p>
+                <p class="copy">{{ selectedWorkflowMessageDraft.content }}</p>
+                <div class="chips">
+                  <span>{{ selectedWorkflowMessageDraft.label }}</span>
+                  <span>{{ selectedWorkflowMessageDraft.source }}</span>
+                </div>
+              </div>
               <el-input
                 ref="messageInputRef"
                 :class="{ 'focus-action-input': focusedDetailSection === 'reply' }"
@@ -528,8 +678,9 @@
                   <el-button plain :disabled="!canSendMessage || messageDraft.attachments.length >= 6">上传沟通图片</el-button>
                 </el-upload>
                 <span class="message-tip">支持文字和图片，单次最多 6 张。</span>
+                <span v-if="messageContinuationHint" class="message-tip">{{ messageContinuationHint }}</span>
                 <el-button type="primary" :loading="messageSending" :disabled="!canSendMessage" @click="sendConsultationMessage">
-                  {{ detail.doctorAssignment?.status === 'claimed' && detail.doctorAssignment?.doctorId === doctor.doctorId ? '发送消息' : '发送并认领' }}
+                  {{ messagePrimaryButtonLabel }}
                 </el-button>
               </div>
             </div>
@@ -562,13 +713,14 @@
             </div>
           </section>
 
-          <section class="card panel">
+          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'handle' }]">
             <div class="head">
               <div>
                 <h3>医生处理</h3>
                 <p>记录判断摘要、处理建议和随访计划。</p>
               </div>
               <div class="head-actions">
+                <div ref="detailHandlePanelRef" class="detail-section-anchor"></div>
                 <div v-if="detail.doctorHandle" class="chips">
                   <span>{{ handleStatusLabel(detail.doctorHandle.status) }}</span>
                   <span>接手 {{ formatDate(detail.doctorHandle.receiveTime) }}</span>
@@ -687,12 +839,13 @@
             </el-form>
           </section>
 
-          <section class="card panel">
+          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'conclusion' }]">
             <div class="head">
               <div>
                 <h3>结构化结论</h3>
                 <p>作为后续 AI 对比分析和统计复盘的标准化数据。</p>
               </div>
+              <div ref="detailConclusionPanelRef" class="detail-section-anchor"></div>
               <div v-if="detail.doctorConclusion" class="chips">
                 <span>{{ conditionLevelLabel(detail.doctorConclusion.conditionLevel) }}</span>
                 <span>{{ dispositionLabel(detail.doctorConclusion.disposition) }}</span>
@@ -810,11 +963,27 @@
             </el-form>
             <div class="actions">
               <el-button type="warning" plain :disabled="!canEdit || detail.status === 'completed'" :loading="submitLoading && submitStatus==='processing'" @click="submitHandle('processing')">标记处理中</el-button>
-              <el-button type="primary" :disabled="!canEdit" :loading="submitLoading && submitStatus==='completed'" @click="submitHandle('completed')">完成处理</el-button>
+              <el-button
+                type="primary"
+                :disabled="!canEdit"
+                :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='stay'"
+                @click="submitHandle('completed')"
+              >
+                完成处理
+              </el-button>
+              <el-button
+                plain
+                type="success"
+                :disabled="!canEdit || !nextDetailRecord"
+                :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='next'"
+                @click="submitHandle('completed', { openNext: true })"
+              >
+                完成并看下一条
+              </el-button>
             </div>
           </section>
 
-          <section class="card panel">
+          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'followup' }]">
             <div class="head">
               <div>
                 <h3>随访记录</h3>
@@ -979,7 +1148,23 @@
               </el-form-item>
             </el-form>
             <div ref="followUpActionButtonRef" :class="['actions', { 'focus-action-button': focusedDetailSection === 'followup' }]">
-              <el-button type="primary" :disabled="!canSubmitFollowUp" :loading="followUpSubmitting" @click="submitFollowUp">追加随访记录</el-button>
+              <el-button
+                type="primary"
+                :disabled="!canSubmitFollowUp"
+                :loading="followUpSubmitting && followUpSubmitMode==='stay'"
+                @click="submitFollowUp"
+              >
+                追加随访记录
+              </el-button>
+              <el-button
+                plain
+                type="success"
+                :disabled="!canSubmitFollowUp || !nextDetailRecord"
+                :loading="followUpSubmitting && followUpSubmitMode==='next'"
+                @click="submitFollowUp({ openNext: true })"
+              >
+                记录并看下一条
+              </el-button>
             </div>
           </section>
 
@@ -1271,12 +1456,17 @@ const messageTemplateSceneMetaMap = {
     emptyText: '当前还没有复诊随访模板，可先沉淀随访问候和风险提醒话术。'
   }
 }
+const DOCTOR_CONSULTATION_DRAFT_PREFIX = 'doctor-consultation-draft:'
+const DOCTOR_CONSULTATION_DRAFT_VERSION = 1
+const DOCTOR_CONSULTATION_DRAFT_SAVE_DELAY = 500
 const loading = ref(false)
 const detailLoading = ref(false)
 const detailVisible = ref(false)
 const submitLoading = ref(false)
+const handleSubmitMode = ref('stay')
 const assignLoading = ref(false)
 const followUpSubmitting = ref(false)
+const followUpSubmitMode = ref('stay')
 const serviceFeedbackHandleSubmitting = ref(false)
 const templateLoading = ref(false)
 const submitStatus = ref('')
@@ -1328,7 +1518,13 @@ const followUpAiDraft = reactive(createEmptyFollowUpAiDraft())
 const handleAiUsage = reactive(createEmptyFormAiUsage())
 const followUpAiUsage = reactive(createEmptyFormAiUsage())
 const messageAiScene = ref('opening')
+const workflowMessageDraftType = ref('doctor_plan')
 const messageAiUsage = reactive(createEmptyMessageAiUsage())
+const detailBasicPanelRef = ref(null)
+const detailArchivePanelRef = ref(null)
+const workflowAssistantPanelRef = ref(null)
+const detailHandlePanelRef = ref(null)
+const detailConclusionPanelRef = ref(null)
 const messageInputRef = ref(null)
 const messageBoardRef = ref(null)
 const messagePendingNewCount = ref(0)
@@ -1339,9 +1535,15 @@ const patientActionPanelRef = ref(null)
 const followUpActionButtonRef = ref(null)
 const serviceFeedbackPanelRef = ref(null)
 const focusedDetailSection = ref('')
+const doctorLocalDraftSavedAt = ref('')
+const doctorLocalDraftRestoredAt = ref('')
+const detailDraftBaseline = ref('')
 let detailSectionFocusTimer = null
 let messagePollTimer = null
 let messagePollBusy = false
+let doctorLocalDraftTimer = null
+let applyingDoctorLocalDraft = false
+let skipNextDoctorLocalDraftPersist = false
 const MESSAGE_POLL_INTERVAL = 12000
 const templateSelection = reactive({
   handle_summary: null,
@@ -1418,6 +1620,36 @@ const messagePendingNewText = computed(() => {
   return label ? `${label}，跳到最新` : '收到新消息，跳到最新'
 })
 const detailArchiveSummary = computed(() => detail.value?.archiveSummary || null)
+const detailDraftNoticeText = computed(() => {
+  if (!detail.value?.id || !doctorLocalDraftSavedAt.value) return ''
+  if (doctorLocalDraftRestoredAt.value) {
+    return `已自动恢复你在 ${formatSyncTime(doctorLocalDraftRestoredAt.value)} 暂存的本地草稿，继续编辑时会自动更新。`
+  }
+  return `当前问诊的编辑内容会自动暂存到本地，最近保存于 ${formatSyncTime(doctorLocalDraftSavedAt.value)}。`
+})
+const detailRecordIndex = computed(() => filteredRecords.value.findIndex(item => item.id === detail.value?.id))
+const previousDetailRecord = computed(() => detailRecordIndex.value > 0 ? filteredRecords.value[detailRecordIndex.value - 1] : null)
+const nextDetailRecord = computed(() => (
+  detailRecordIndex.value >= 0 && detailRecordIndex.value < filteredRecords.value.length - 1
+    ? filteredRecords.value[detailRecordIndex.value + 1]
+    : null
+))
+const detailRecordPositionLabel = computed(() => {
+  if (detailRecordIndex.value < 0 || !filteredRecords.value.length) return ''
+  return `当前位于筛选结果第 ${detailRecordIndex.value + 1} / ${filteredRecords.value.length} 条`
+})
+const detailNavigationSectionItems = computed(() => {
+  const sections = [{ key: 'basic', label: '基本信息' }]
+  if (detailArchiveSummary.value) sections.push({ key: 'archive', label: '归档摘要' })
+  if (patientActionCards.value.length) sections.push({ key: 'patient_action', label: '患者动作' })
+  if (workflowAssistantItems.value.length) sections.push({ key: 'assistant', label: '处理助手' })
+  sections.push({ key: 'reply', label: '医患沟通' })
+  sections.push({ key: 'handle', label: '医生处理' })
+  sections.push({ key: 'conclusion', label: '结构化结论' })
+  sections.push({ key: 'followup', label: '随访处理' })
+  if (detail.value?.serviceFeedback) sections.push({ key: 'feedback', label: '服务评价' })
+  return sections
+})
 const latestDoctorMessage = computed(() => [...consultationMessages.value]
   .reverse()
   .find(item => item?.senderType === 'doctor') || null)
@@ -1492,15 +1724,13 @@ const patientActionCards = computed(() => {
   const followState = followUpState(record)
   const latestFollowUpRecord = Array.isArray(record.doctorFollowUps) && record.doctorFollowUps.length ? record.doctorFollowUps[0] : null
   const latestRecoveryDescription = trimText(
-    latestPatientFollowUpUpdate.value?.content
-    || (messageAttachments(latestPatientFollowUpUpdate.value).length ? `患者补充了 ${messageAttachments(latestPatientFollowUpUpdate.value).length} 张恢复相关图片。` : '')
+    buildPatientFollowUpUpdateContent(latestPatientFollowUpUpdate.value)
     || latestFollowUpRecord?.summary
     || followUpReminderText(record)
     || '当前还没有新的患者恢复更新，可视情况在沟通区提醒补充。'
   )
   const latestCheckResultDescription = trimText(
-    latestPatientCheckResultUpdate.value?.content
-    || (messageAttachments(latestPatientCheckResultUpdate.value).length ? `患者补充了 ${messageAttachments(latestPatientCheckResultUpdate.value).length} 张检查相关图片。` : '')
+    buildPatientCheckResultUpdateContent(latestPatientCheckResultUpdate.value)
     || '如患者已有新的化验、影像或病理结果，可继续在沟通区提醒其补充。'
   )
   cards.push({
@@ -1536,8 +1766,10 @@ const patientActionCards = computed(() => {
     description: abbreviateText(latestRecoveryDescription, 96),
     action: canSubmitFollowUp.value ? 'followup' : 'reply',
     actionLabel: canSubmitFollowUp.value
-      ? (latestPatientFollowUpUpdate.value ? '登记随访' : '查看随访')
+      ? '查看随访'
       : '查看沟通',
+    quickAction: latestPatientFollowUpUpdate.value && canSubmitFollowUp.value ? 'apply_followup_update' : '',
+    quickActionLabel: '带入随访摘要',
     tone: latestPatientFollowUpUpdate.value ? 'success' : patientActionToneFromFollowUpState(followState)
   })
   cards.push({
@@ -1547,6 +1779,8 @@ const patientActionCards = computed(() => {
     description: abbreviateText(latestCheckResultDescription, 96),
     action: 'reply',
     actionLabel: latestPatientCheckResultUpdate.value ? '查看沟通' : '去提醒补充',
+    quickAction: latestPatientCheckResultUpdate.value && canEdit.value ? 'apply_check_result_update' : '',
+    quickActionLabel: '带入处理摘要',
     tone: latestPatientCheckResultUpdate.value ? 'success' : 'info'
   })
   if (latestDoctorGuidanceReferenceTime.value) {
@@ -1560,8 +1794,10 @@ const patientActionCards = computed(() => {
           : `医生已于 ${formatDate(latestDoctorGuidanceReferenceTime.value)} 给出本轮结论或随访建议，可继续关注患者是否完成查看确认。`,
         96
       ),
-      action: hasPatientAcknowledgedGuidance.value ? 'reply' : 'patient_action',
-      actionLabel: hasPatientAcknowledgedGuidance.value ? '查看沟通' : '查看看板',
+      action: 'reply',
+      actionLabel: hasPatientAcknowledgedGuidance.value ? '查看沟通' : '去沟通区',
+      quickAction: !hasPatientAcknowledgedGuidance.value && canSendMessage.value ? 'apply_guidance_reminder' : '',
+      quickActionLabel: '带入提醒话术',
       tone: hasPatientAcknowledgedGuidance.value ? 'success' : 'warning'
     })
   }
@@ -1583,6 +1819,8 @@ const patientActionCards = computed(() => {
     ),
     action: 'feedback',
     actionLabel: record.serviceFeedback ? '回看评价' : '查看评价区',
+    quickAction: record.serviceFeedback && canSubmitFollowUp.value ? 'apply_service_feedback_followup' : '',
+    quickActionLabel: '带入随访草稿',
     tone: record.serviceFeedback
       ? normalizeActionTone(serviceFeedbackTagType(record))
       : record.status === 'completed' ? 'warning' : 'info'
@@ -1648,6 +1886,105 @@ const selectedMessageTemplate = computed(() => {
   const templateId = currentMessageTemplateId.value
   return currentMessageTemplates.value.find(item => item.id === templateId) || null
 })
+const hasCurrentFollowUpFormContent = computed(() => !!(
+  trimText(followUpForm.summary)
+  || trimText(followUpForm.advice)
+  || trimText(followUpForm.nextStep)
+  || followUpForm.followUpType !== 'platform'
+  || followUpForm.patientStatus !== 'stable'
+  || followUpForm.needRevisit === 1
+  || trimText(followUpForm.nextFollowUpDate)
+))
+const latestSavedDoctorFollowUp = computed(() => (Array.isArray(detail.value?.doctorFollowUps) && detail.value.doctorFollowUps.length
+  ? detail.value.doctorFollowUps[0]
+  : null))
+const workflowMessageDraftOptions = computed(() => {
+  const options = []
+  const doctorPlanContent = buildDoctorPlanWorkflowMessage()
+  if (doctorPlanContent) {
+    options.push({
+      value: 'doctor_plan',
+      label: '处理意见同步',
+      hint: '把当前处理表单里的判断、建议和安排整理成一段可直接发送给患者的话术。',
+      content: doctorPlanContent,
+      source: '来自当前处理表单',
+      sceneType: workflowMessageSceneType('doctor_plan')
+    })
+  }
+
+  const patientInstructionContent = buildPatientInstructionWorkflowMessage()
+  if (patientInstructionContent) {
+    options.push({
+      value: 'patient_instruction',
+      label: '患者指导同步',
+      hint: '优先使用结构化结论里的患者指导内容，适合把关键注意事项同步给患者。',
+      content: patientInstructionContent,
+      source: '来自当前结构化结论',
+      sceneType: workflowMessageSceneType('patient_instruction')
+    })
+  }
+
+  const followUpContent = buildFollowUpWorkflowMessage()
+  if (followUpContent) {
+    options.push({
+      value: 'follow_up',
+      label: '随访安排同步',
+      hint: '把当前随访表单或最近一次随访记录整理成一段可直接发送的随访提醒。',
+      content: followUpContent,
+      source: hasCurrentFollowUpFormContent.value ? '来自当前随访表单' : '来自最近一次已保存随访记录',
+      sceneType: 'follow_up'
+    })
+  }
+
+  return options
+})
+const selectedWorkflowMessageDraft = computed(() => workflowMessageDraftOptions.value.find(item => item.value === workflowMessageDraftType.value)
+  || workflowMessageDraftOptions.value[0]
+  || null)
+/*
+const options = []
+  const doctorPlanContent = buildDoctorPlanWorkflowMessage()
+  if (doctorPlanContent) {
+    options.push({
+      value: 'doctor_plan',
+      label: '处理意见同步',
+      hint: '把当前处理表单里的判断、建议和后续安排整理成一段可直接发送给患者的话术。',
+      content: doctorPlanContent,
+      source: '来自当前处理表单',
+      sceneType: workflowMessageSceneType('doctor_plan')
+    })
+  }
+
+  const patientInstructionContent = buildPatientInstructionWorkflowMessage()
+  if (patientInstructionContent) {
+    options.push({
+      value: 'patient_instruction',
+      label: '患者指导同步',
+      hint: '优先使用结构化结论里的患者指导内容，适合把关键注意事项同步给患者。',
+      content: patientInstructionContent,
+      source: '来自当前结构化结论',
+      sceneType: workflowMessageSceneType('patient_instruction')
+    })
+  }
+
+  const followUpContent = buildFollowUpWorkflowMessage()
+  if (followUpContent) {
+    options.push({
+      value: 'follow_up',
+      label: '随访安排同步',
+      hint: '把当前随访表单或最近一次随访记录整理成一段可直接发送的随访提醒。',
+      content: followUpContent,
+      source: hasCurrentFollowUpFormContent.value ? '来自当前随访表单' : '来自最近一次已保存随访记录',
+      sceneType: 'follow_up'
+    })
+  }
+
+  return options
+})
+const selectedWorkflowMessageDraft = computed(() => workflowMessageDraftOptions.value.find(item => item.value === workflowMessageDraftType.value)
+  || workflowMessageDraftOptions.value[0]
+  || null)
+*/
 const messageAiSceneHint = computed(() => ({
   opening: '适合发送第一条接诊消息，先说明已接手，再提示患者下一步补充或处理建议。',
   clarify: '适合回应患者刚补充的内容，继续追问关键症状变化和缺失信息。',
@@ -1797,12 +2134,321 @@ const messageSendHint = computed(() => {
   if (!assignment || assignment.status !== 'claimed') return '发送首条消息时会自动认领当前问诊单，并同步进入处理中，适合先和患者确认补充信息。'
   return '可继续与患者沟通病情变化、检查资料和随访安排。'
 })
+function detailSectionLabel(sectionKey) {
+  return detailNavigationSectionItems.value.find(item => item.key === sectionKey)?.label || ''
+}
+function claimContinuationButtonLabel(sectionKey, label) {
+  if (sectionKey === 'reply') return '认领并去沟通'
+  if (sectionKey === 'handle') return '认领并去处理'
+  if (sectionKey === 'conclusion') return '认领并去结论'
+  return label ? `认领并前往${label}` : '认领问诊单'
+}
+function messageContinuationButtonLabel(sectionKey, label, autoClaim) {
+  if (sectionKey === 'handle') return autoClaim ? '发送并认领，进入处理' : '发送并进入处理'
+  if (sectionKey === 'conclusion') return autoClaim ? '发送并认领，去结论' : '发送并去结论'
+  if (sectionKey && sectionKey !== 'reply' && label) return autoClaim ? `发送并认领，前往${label}` : `发送并前往${label}`
+  return autoClaim ? '发送并认领' : '发送消息'
+}
+const hasDoctorReplyInDetail = computed(() => detailMessageSummary.value.doctorMessageCount > 0 || !!latestDoctorMessage.value)
+const claimContinuationAction = computed(() => {
+  if (!detail.value) return ''
+  if (!hasDoctorReplyInDetail.value) return 'reply'
+  if (!detail.value.doctorHandle) return 'handle'
+  if (!detail.value.doctorConclusion) return 'conclusion'
+  return 'assistant'
+})
+const claimContinuationLabel = computed(() => detailSectionLabel(claimContinuationAction.value))
+const claimActionButtonLabel = computed(() => claimContinuationButtonLabel(
+  claimContinuationAction.value,
+  claimContinuationLabel.value
+))
+const claimContinuationHint = computed(() => {
+  if (!canClaimCurrent.value || !claimContinuationLabel.value) return ''
+  return `认领成功后将自动跳转到${claimContinuationLabel.value}。`
+})
+const isSendingFirstDoctorReply = computed(() => !hasDoctorReplyInDetail.value)
+const messageContinuationAction = computed(() => {
+  if (!detail.value) return ''
+  if (isSendingFirstDoctorReply.value) {
+    if (!detail.value.doctorHandle || !['processing', 'completed'].includes(`${detail.value.doctorHandle?.status || ''}`)) return 'handle'
+    if (!detail.value.doctorConclusion && canEdit.value) return 'conclusion'
+    return 'assistant'
+  }
+  return 'reply'
+})
+const messageContinuationLabel = computed(() => detailSectionLabel(messageContinuationAction.value))
+const messagePrimaryButtonLabel = computed(() => messageContinuationButtonLabel(
+  messageContinuationAction.value,
+  messageContinuationLabel.value,
+  detail.value?.doctorAssignment?.status !== 'claimed'
+))
+const messageContinuationHint = computed(() => {
+  if (!canSendMessage.value || !isSendingFirstDoctorReply.value || !messageContinuationLabel.value) return ''
+  const prefix = detail.value?.doctorAssignment?.status !== 'claimed'
+    ? '发送首条回复后会自动认领，并跳转到'
+    : '发送首条回复后将自动跳转到'
+  return `${prefix}${messageContinuationLabel.value}。`
+})
 const messageUploadAction = computed(() => `${backendBaseUrl()}/api/image/cache`)
 const messageUploadHeaders = computed(() => authHeader())
+const workflowAssistantItems = computed(() => {
+  if (!detail.value) return []
+  const record = detail.value
+  const assignment = record.doctorAssignment
+  const claimedByMe = assignment?.status === 'claimed' && Number(assignment?.doctorId || 0) === Number(doctor.doctorId || 0)
+  const claimedByAnotherDoctor = claimedByOther(assignment)
+  const hasDoctorReply = detailMessageSummary.value.doctorMessageCount > 0 || !!latestDoctorMessage.value
+  const latestDoctorReplyPreview = trimText(buildLocalMessagePreview(latestDoctorMessage.value))
+  const handleStarted = !!record.doctorHandle
+  const handleCompleted = record.doctorHandle?.status === 'completed'
+  const conclusionSaved = !!record.doctorConclusion
+  const conclusionDrafted = hasDoctorConclusionContent.value
+  const followState = followUpState(record)
+  const followUpWaiting = ['pending', 'due_today', 'overdue'].includes(followState)
+  const hasFollowUpRecord = !!latestSavedDoctorFollowUp.value
+  const needsFollowUp = record.status === 'completed'
+    && (followUpWaiting || record.doctorConclusion?.needFollowUp === 1 || hasFollowUpRecord)
+  const items = []
+
+  items.push({
+    key: 'claim',
+    title: '认领问诊',
+    status: claimedByMe ? '已认领' : claimedByAnotherDoctor ? '他人处理中' : record.status === 'completed' ? '已结束' : '待认领',
+    description: claimedByMe
+      ? '当前问诊已由你接手，可继续沟通、处理和归档。'
+      : claimedByAnotherDoctor
+        ? `当前由 ${assignment?.doctorName || '其他医生'} 认领，你现在以查看为主。`
+        : record.status === 'completed'
+          ? '当前问诊已完成处理，不再需要手动认领。'
+          : '认领后可锁定归属并进入你的后续处理流程。',
+    tone: claimedByMe ? 'success' : claimedByAnotherDoctor ? 'danger' : record.status === 'completed' ? 'info' : 'warning',
+    action: canClaimCurrent.value ? 'claim' : '',
+    actionLabel: canClaimCurrent.value ? claimActionButtonLabel.value : '',
+    disabled: !canClaimCurrent.value,
+    done: claimedByMe || claimedByAnotherDoctor || record.status === 'completed'
+  })
+
+  items.push({
+    key: 'reply',
+    title: '医患沟通',
+    status: hasDoctorReply
+      ? (unreadDoctorMessageCount.value > 0 ? `已回复，待患者查看 ${unreadDoctorMessageCount.value} 条` : '已发送回复')
+      : canSendMessage.value
+        ? '待发送首条回复'
+        : '暂不可回复',
+    description: hasDoctorReply
+      ? abbreviateText(
+        latestDoctorReplyPreview
+          ? `最近一条医生回复已发送。${unreadDoctorMessageCount.value > 0 ? '患者尚未完全查看。' : '患者已查看或暂无未读。'}内容：${latestDoctorReplyPreview}`
+          : '当前已存在医生回复记录，可继续在沟通区补充追问或同步处理建议。',
+        96
+      )
+      : messageSendHint.value,
+    tone: hasDoctorReply ? (unreadDoctorMessageCount.value > 0 ? 'warning' : 'success') : canSendMessage.value ? 'warning' : 'danger',
+    action: detail.value?.id ? 'reply' : '',
+    actionLabel: hasDoctorReply ? '查看沟通' : '去发送回复',
+    disabled: !detail.value?.id,
+    done: hasDoctorReply || claimedByAnotherDoctor
+  })
+
+  items.push({
+    key: 'handle',
+    title: '医生处理',
+    status: handleCompleted ? '已完成处理' : handleStarted ? '处理中' : canEdit.value ? '待补充处理' : '暂不可处理',
+    description: handleCompleted
+      ? '当前问诊已保存医生处理结果，可继续回看结论、随访或患者反馈。'
+      : handleStarted
+        ? '当前已进入处理中状态，建议继续完善处理摘要、建议和随访计划。'
+        : canEdit.value
+          ? '这里会沉淀医生摘要、处理建议和内部备注，是后续归档和复盘的核心内容。'
+          : assignmentHint.value,
+    tone: handleCompleted ? 'success' : handleStarted ? 'warning' : canEdit.value ? 'warning' : 'danger',
+    action: detail.value?.id ? 'handle' : '',
+    actionLabel: handleStarted ? '继续处理' : '去处理',
+    disabled: !detail.value?.id,
+    done: handleCompleted || (!canEdit.value && claimedByAnotherDoctor)
+  })
+
+  items.push({
+    key: 'conclusion',
+    title: '结构化结论',
+    status: conclusionSaved ? '已保存结论' : conclusionDrafted ? '草稿待提交' : canEdit.value ? '待完善结论' : '暂不可填写',
+    description: conclusionSaved
+      ? '已保存病情等级、处理去向和患者指导，可用于归档和后续分析。'
+      : conclusionDrafted
+        ? '当前已有未提交的结论草稿，建议在完成处理前补齐并确认。'
+        : canEdit.value
+          ? '建议补齐病情等级、处理去向、患者指导和 AI 一致性说明。'
+          : assignmentHint.value,
+    tone: conclusionSaved ? 'success' : conclusionDrafted ? 'warning' : canEdit.value ? 'warning' : 'danger',
+    action: detail.value?.id ? 'conclusion' : '',
+    actionLabel: conclusionSaved ? '查看结论' : '去完善结论',
+    disabled: !detail.value?.id,
+    done: conclusionSaved || (!canEdit.value && claimedByAnotherDoctor)
+  })
+
+  items.push({
+    key: 'followup',
+    title: '随访处理',
+    status: hasFollowUpRecord
+      ? (followUpWaiting ? followUpTagLabel(record) : '已记录随访')
+      : canSubmitFollowUp.value
+        ? (followUpWaiting ? followUpTagLabel(record) : '可补记随访')
+        : record.status === 'completed'
+          ? '待满足随访条件'
+          : '处理完成后开启',
+    description: canSubmitFollowUp.value
+      ? (detailFollowUpReminder.value || '可根据患者后续反馈继续记录随访摘要和下一步安排。')
+      : followUpHint.value,
+    tone: hasFollowUpRecord ? (followUpWaiting ? 'warning' : 'success') : canSubmitFollowUp.value ? 'warning' : 'info',
+    action: detail.value?.id ? 'followup' : '',
+    actionLabel: hasFollowUpRecord ? '查看随访' : '去随访',
+    disabled: !detail.value?.id,
+    done: !needsFollowUp || !followUpWaiting
+  })
+
+  if (record.serviceFeedback) {
+    const feedbackHandled = record.serviceFeedback.doctorHandleStatus === 1
+    items.push({
+      key: 'feedback',
+      title: '服务评价',
+      status: feedbackHandled ? '已登记处理' : '待回看评价',
+      description: feedbackHandled ? '本次服务评价已登记为已处理，可继续补充备注或准备后续回访。' : serviceFeedbackHandleHint.value,
+      tone: feedbackHandled ? 'success' : canHandleServiceFeedback.value ? 'warning' : 'info',
+      action: detail.value?.id ? 'feedback' : '',
+      actionLabel: feedbackHandled ? '查看评价' : '去回看评价',
+      disabled: !detail.value?.id,
+      done: feedbackHandled || !canHandleServiceFeedback.value
+    })
+  }
+
+  return items
+})
+const workflowAssistantCompletionText = computed(() => {
+  const total = workflowAssistantItems.value.length
+  if (!total) return '暂无待处理步骤'
+  const done = workflowAssistantItems.value.filter(item => item.done).length
+  return `当前流程完成 ${done} / ${total}`
+})
+const workflowAssistantTags = computed(() => {
+  if (!detail.value) return []
+  const tags = []
+  tags.push(statusLabel(detail.value.status))
+  const patientAction = patientActionLabel(detail.value)
+  if (patientAction) tags.push(patientAction)
+  if (detailMessageSummary.value.unreadCount) tags.push(`未读 ${detailMessageSummary.value.unreadCount} 条`)
+  if (detail.value?.serviceFeedback) tags.push(serviceFeedbackSummaryLabel(detail.value))
+  return [...new Set(tags.filter(Boolean))].slice(0, 4)
+})
+const workflowAssistantPrimaryAction = computed(() => {
+  if (!detail.value) return null
+  const followState = followUpState(detail.value)
+  if (canClaimCurrent.value) {
+    return {
+      title: '先认领当前问诊',
+      description: '认领后即可锁定归属，后续发送消息、提交处理和完成归档都会更顺畅。',
+      buttonLabel: claimActionButtonLabel.value,
+      action: 'claim'
+    }
+  }
+  if (latestPatientCheckResultUpdate.value && canEdit.value) {
+    return {
+      title: '患者刚补充了检查结果',
+      description: '可以先把这次检查结果带入医生处理摘要，再补充判断和建议。',
+      buttonLabel: '带入处理摘要',
+      action: 'apply_check_result_update'
+    }
+  }
+  if (latestPatientFollowUpUpdate.value && canSubmitFollowUp.value) {
+    return {
+      title: '患者刚补充了恢复更新',
+      description: '建议先带入随访摘要，再补记本次随访记录和下一步安排。',
+      buttonLabel: '带入随访摘要',
+      action: 'apply_followup_update'
+    }
+  }
+  if (!latestDoctorMessage.value && canSendMessage.value) {
+    return {
+      title: '建议先发送首条接诊消息',
+      description: '先和患者建立沟通，再继续补充追问、处理建议或资料提醒。',
+      buttonLabel: '去发送回复',
+      action: 'reply'
+    }
+  }
+  if (!detail.value?.doctorHandle && canEdit.value) {
+    return {
+      title: '补充医生处理内容',
+      description: '当前还没有保存医生处理结果，建议先完善摘要、处理建议和随访计划。',
+      buttonLabel: '去处理',
+      action: 'handle'
+    }
+  }
+  if (!detail.value?.doctorConclusion && canEdit.value) {
+    return {
+      title: '完善结构化结论',
+      description: '补齐病情等级、处理去向和患者指导后，问诊归档会更完整。',
+      buttonLabel: '去完善结论',
+      action: 'conclusion'
+    }
+  }
+  if (canSubmitFollowUp.value && ['pending', 'due_today', 'overdue'].includes(followState)) {
+    return {
+      title: '当前问诊仍需随访',
+      description: detailFollowUpReminder.value || '建议根据最新恢复情况补录随访摘要和下一步安排。',
+      buttonLabel: '去追加随访',
+      action: 'followup'
+    }
+  }
+  if (canHandleServiceFeedback.value && detail.value?.serviceFeedback?.doctorHandleStatus !== 1) {
+    return {
+      title: '回看本次服务评价',
+      description: serviceFeedbackHandleHint.value,
+      buttonLabel: '去处理评价',
+      action: 'feedback'
+    }
+  }
+  if (nextDetailRecord.value?.id) {
+    return {
+      title: '继续处理下一条问诊',
+      description: '当前问诊关键环节已基本补齐，可以顺手切到下一条保持处理节奏。',
+      buttonLabel: '打开下一条',
+      action: 'next_record',
+      buttonType: 'success'
+    }
+  }
+  return null
+})
+const workflowAssistantPrimarySectionKey = computed(() => {
+  const action = trimText(workflowAssistantPrimaryAction.value?.action)
+  return ({
+    claim: 'assistant',
+    reply: 'reply',
+    patient_action: 'patient_action',
+    feedback: 'feedback',
+    handle: 'handle',
+    conclusion: 'conclusion',
+    followup: 'followup',
+    basic: 'basic',
+    archive: 'archive',
+    apply_followup_update: 'followup',
+    apply_check_result_update: 'handle',
+    apply_service_feedback_followup: 'followup',
+    apply_guidance_reminder: 'reply'
+  })[action] || ''
+})
+const workflowAssistantPrimarySectionLabel = computed(() => {
+  const sectionKey = workflowAssistantPrimarySectionKey.value
+  if (!sectionKey) return ''
+  return detailNavigationSectionItems.value.find(item => item.key === sectionKey)?.label || ''
+})
+const workflowAssistantLeadText = computed(() => {
+  if (workflowAssistantPrimaryAction.value?.description) return workflowAssistantPrimaryAction.value.description
+  return '这里会根据当前问诊状态、患者最新动作和医生处理进度，提示你下一步最值得优先完成的动作。'
+})
 
 function resolveConsultationAction(value) {
   const action = trimText(value)
-  return ['reply', 'followup', 'feedback', 'patient_action'].includes(action) ? action : ''
+  return ['basic', 'archive', 'patient_action', 'assistant', 'reply', 'handle', 'conclusion', 'followup', 'feedback'].includes(action) ? action : ''
 }
 function clearFocusedDetailSection() {
   focusedDetailSection.value = ''
@@ -1811,9 +2457,21 @@ function clearFocusedDetailSection() {
     detailSectionFocusTimer = null
   }
 }
-function focusDetailActionSection(action, detailId = null) {
+function markFocusedDetailSection(sectionKey) {
+  clearFocusedDetailSection()
+  focusedDetailSection.value = sectionKey
+  detailSectionFocusTimer = setTimeout(() => {
+    if (focusedDetailSection.value === sectionKey) focusedDetailSection.value = ''
+    detailSectionFocusTimer = null
+  }, 2400)
+}
+function focusDetailActionSection(action, detailId = null, options = {}) {
   const targetAction = resolveConsultationAction(action)
-  if (!targetAction) return
+  if (!['reply', 'followup', 'patient_action', 'feedback'].includes(targetAction)) return
+  const {
+    behavior = 'smooth',
+    syncQuery = true
+  } = options
   nextTick(() => {
     const target = targetAction === 'reply'
       ? (messageInputRef.value?.$el || messageInputRef.value?.textarea || messageInputRef.value)
@@ -1823,9 +2481,8 @@ function focusDetailActionSection(action, detailId = null) {
           ? (patientActionPanelRef.value?.$el || patientActionPanelRef.value)
         : (serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value)
     if (!target?.scrollIntoView) return
-    clearFocusedDetailSection()
-    focusedDetailSection.value = targetAction
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    markFocusedDetailSection(targetAction)
+    target.scrollIntoView({ behavior, block: 'center' })
     if (targetAction === 'reply' && canSendMessage.value) setTimeout(() => messageInputRef.value?.focus?.(), 180)
     if (targetAction === 'followup' && canSubmitFollowUp.value) {
       setTimeout(() => {
@@ -1836,12 +2493,149 @@ function focusDetailActionSection(action, detailId = null) {
         button?.focus?.()
       }, 180)
     }
-    detailSectionFocusTimer = setTimeout(() => {
-      if (focusedDetailSection.value === targetAction) focusedDetailSection.value = ''
-      detailSectionFocusTimer = null
-    }, 2400)
-    syncListQuery(detailId || detail.value?.id || Number(route.query.id || 0) || null, '')
+    if (syncQuery) {
+      syncListQuery(detailId || detail.value?.id || Number(route.query.id || 0) || null, targetAction)
+    }
   })
+}
+
+function resolveDetailSectionElement(sectionKey) {
+  if (sectionKey === 'basic') return detailBasicPanelRef.value?.$el || detailBasicPanelRef.value
+  if (sectionKey === 'archive') return detailArchivePanelRef.value?.$el || detailArchivePanelRef.value
+  if (sectionKey === 'assistant') return workflowAssistantPanelRef.value?.$el || workflowAssistantPanelRef.value
+  if (sectionKey === 'handle') return detailHandlePanelRef.value?.$el || detailHandlePanelRef.value
+  if (sectionKey === 'conclusion') return detailConclusionPanelRef.value?.$el || detailConclusionPanelRef.value
+  return null
+}
+
+function focusDetailPanelSection(sectionKey, detailId = null, options = {}) {
+  const targetSection = resolveConsultationAction(sectionKey)
+  if (!['basic', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetSection)) return
+  const {
+    behavior = 'smooth',
+    block = 'start',
+    syncQuery = true
+  } = options
+  nextTick(() => {
+    const target = resolveDetailSectionElement(targetSection)
+    if (!target?.scrollIntoView) return
+    markFocusedDetailSection(targetSection)
+    target.scrollIntoView({ behavior, block })
+    if (syncQuery) {
+      syncListQuery(detailId || detail.value?.id || Number(route.query.id || 0) || null, targetSection)
+    }
+  })
+}
+
+function jumpToDetailSection(sectionKey, detailId = null, options = {}) {
+  const targetSection = resolveConsultationAction(sectionKey)
+  if (!targetSection) return
+  if (['reply', 'followup', 'patient_action', 'feedback'].includes(targetSection)) {
+    focusDetailActionSection(targetSection, detailId, options)
+    return
+  }
+  focusDetailPanelSection(targetSection, detailId, options)
+}
+
+function scrollToDetailSection(sectionKey) {
+  if (!detail.value?.id) return
+  jumpToDetailSection(sectionKey, detail.value.id)
+}
+
+function openAdjacentDetail(step = 1) {
+  const currentIndex = detailRecordIndex.value
+  if (currentIndex < 0) return
+  const nextRecord = filteredRecords.value[currentIndex + step]
+  if (!nextRecord?.id) return
+  openDetail(nextRecord.id, resolveConsultationAction(route.query.action))
+}
+
+function buildAdjacentDetailPlan(step = 1) {
+  const ids = filteredRecords.value
+    .map(item => Number(item?.id || 0))
+    .filter(Boolean)
+  const currentId = Number(detail.value?.id || 0)
+  const currentIndex = ids.findIndex(id => id === currentId)
+  const targetId = ids[currentIndex + step] || 0
+  if (!currentId || currentIndex < 0 || !targetId) return null
+  return {
+    currentId,
+    currentIndex,
+    targetId,
+    step
+  }
+}
+
+function resolveAdjacentDetailIdFromPlan(plan) {
+  if (!plan) return null
+  const ids = filteredRecords.value
+    .map(item => Number(item?.id || 0))
+    .filter(Boolean)
+  if (plan.targetId && ids.includes(plan.targetId)) return plan.targetId
+  const fallbackIndex = plan.step > 0 ? plan.currentIndex : plan.currentIndex - 1
+  const fallbackId = ids[fallbackIndex] || 0
+  if (fallbackId && fallbackId !== plan.currentId) return fallbackId
+  return null
+}
+
+function reopenDetailAfterMutation(options = {}) {
+  const {
+    reopenId = Number(detail.value?.id || 0),
+    reopenAction = '',
+    nextPlan = null
+  } = options
+  loadRecords(() => {
+    const nextId = resolveAdjacentDetailIdFromPlan(nextPlan)
+    if (nextId) {
+      openDetail(nextId)
+      return
+    }
+    if (reopenId) openDetail(reopenId, reopenAction)
+  })
+}
+
+function runWorkflowAssistantAction(action) {
+  if (!detail.value?.id || !action) return
+  if (action === 'claim') {
+    if (!canClaimCurrent.value) return
+    submitAssignment('claim', detail.value.id)
+    return
+  }
+  if (action === 'next_record') {
+    openAdjacentDetail(1)
+    return
+  }
+  if (['apply_followup_update', 'apply_check_result_update', 'apply_service_feedback_followup'].includes(action)) {
+    handlePatientActionQuickAction(action)
+    return
+  }
+  if (['basic', 'archive', 'assistant', 'reply', 'handle', 'conclusion', 'followup', 'feedback', 'patient_action'].includes(action)) {
+    jumpToDetailSection(action, detail.value.id)
+  }
+}
+
+function isEditableShortcutTarget(target) {
+  const element = target && typeof target === 'object' && target.nodeType === 1 ? target : null
+  if (!element) return false
+  const tagName = `${element.tagName || ''}`.toLowerCase()
+  return element.isContentEditable
+    || ['input', 'textarea', 'select'].includes(tagName)
+    || !!element.closest?.('.el-input, .el-textarea, .el-select, [contenteditable="true"]')
+}
+
+function handleDetailDrawerKeydown(event) {
+  if (!detailVisible.value || !detail.value?.id || detailLoading.value) return
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+  if (isEditableShortcutTarget(event.target)) return
+  if (event.key === 'ArrowLeft' && previousDetailRecord.value?.id) {
+    event.preventDefault()
+    openAdjacentDetail(-1)
+    return
+  }
+  if (event.key === 'ArrowRight' && nextDetailRecord.value?.id) {
+    event.preventDefault()
+    openAdjacentDetail(1)
+  }
 }
 
 function refreshAll() { loadDoctor(); loadRecords() }
@@ -2001,16 +2795,17 @@ function handleMessageVisibilityChange() {
 }
 function loadDoctor() {
   get('/api/doctor/workbench/summary', data => {
-    doctor.bound = data?.bound ?? 0
-    doctor.bindingMessage = data?.bindingMessage || ''
-    doctor.doctorId = data?.doctorId ?? null
-    doctor.doctorName = data?.doctorName || ''
+    const summary = data && typeof data === 'object' ? data : {}
+    doctor.bound = summary?.bound ?? 0
+    doctor.bindingMessage = summary?.bindingMessage || ''
+    doctor.doctorId = summary?.doctorId ?? null
+    doctor.doctorName = summary?.doctorName || ''
   }, message => ElMessage.warning(message || '医生工作台信息加载失败'))
 }
 function loadRecords(callback) {
   loading.value = true
   get('/api/doctor/consultation/list', data => {
-    records.value = (data || []).map(item => normalizeDoctorReminderRecord(item))
+    records.value = Array.isArray(data) ? data.map(item => normalizeDoctorReminderRecord(item)) : []
     loading.value = false
     callback?.()
     autoOpen()
@@ -2025,6 +2820,7 @@ function autoOpen() {
 }
 function openDetail(id, routeAction = '') {
   const detailAction = resolveConsultationAction(routeAction)
+  flushDoctorLocalDraftBeforeReset()
   detailVisible.value = true
   detailLoading.value = true
   stopMessagePolling()
@@ -2038,21 +2834,33 @@ function openDetail(id, routeAction = '') {
   resetMessageAiDraft()
   resetHandleAiDraft()
   resetFollowUpAiDraft()
+  resetDoctorLocalDraftState()
   get(`/api/doctor/consultation/detail?id=${id}`, data => {
-    detail.value = data ? normalizeDoctorReminderRecord(data) : null
+    detail.value = data && typeof data === 'object' ? normalizeDoctorReminderRecord(data) : null
     messageAiScene.value = recommendMessageAiScene(detail.value, [])
     syncForms()
+    captureDoctorLocalDraftBaseline()
+    restoreDoctorLocalDraft(id)
     loadConsultationMessages(id, { preserveScroll: false })
     startMessagePolling()
     detailLoading.value = false
-    syncListQuery(id, detailAction)
-    if (detailAction) focusDetailActionSection(detailAction, id)
-    else clearFocusedDetailSection()
+    if (detailAction) {
+      syncListQuery(id, detailAction)
+      jumpToDetailSection(detailAction, id, { behavior: 'auto' })
+      return
+    }
+    syncListQuery(id, '')
+    if (workflowAssistantPrimarySectionKey.value) {
+      jumpToDetailSection(workflowAssistantPrimarySectionKey.value, id, { behavior: 'auto', syncQuery: false })
+      return
+    }
+    clearFocusedDetailSection()
   }, message => {
     detailLoading.value = false
     detailVisible.value = false
     stopMessagePolling()
     clearFocusedDetailSection()
+    resetDoctorLocalDraftState()
     ElMessage.warning(message || '问诊详情加载失败')
   })
 }
@@ -2177,6 +2985,245 @@ function applyServiceFeedbackToFollowUp() {
   if (!changed) return ElMessage.info('当前随访表单已包含评价回看信息，可继续人工补充')
   ElMessage.success('已将服务评价带入随访草稿')
 }
+function buildPatientFollowUpUpdateContent(message = latestPatientFollowUpUpdate.value) {
+  const content = trimText(message?.content)
+  if (content) return content
+  const attachmentCount = messageAttachments(message).length
+  if (attachmentCount <= 0) return ''
+  return attachmentCount === 1
+    ? '患者补充了 1 张恢复相关图片，请结合附件查看当前恢复情况。'
+    : `患者补充了 ${attachmentCount} 张恢复相关图片，请结合附件查看当前恢复情况。`
+}
+
+function buildPatientCheckResultUpdateContent(message = latestPatientCheckResultUpdate.value) {
+  const content = trimText(message?.content)
+  if (content) return content
+  const attachmentCount = messageAttachments(message).length
+  if (attachmentCount <= 0) return ''
+  return attachmentCount === 1
+    ? '患者补充了 1 张检查相关图片，请结合附件查看最新结果。'
+    : `患者补充了 ${attachmentCount} 张检查相关图片，请结合附件查看最新结果。`
+}
+
+function buildGuidanceReminderMessage() {
+  if (!detail.value) return ''
+  const patientName = trimText(detail.value?.patientName)
+  const greeting = patientName ? `${patientName}您好，` : '您好，'
+  const followHint = followUpState(detail.value) !== 'none'
+    ? '如果已经有恢复变化，也欢迎直接回复当前情况，方便我继续跟进。'
+    : '如果症状有变化、已完成检查或还有疑问，也可以继续在这里补充说明。'
+  return `${greeting}想提醒您查看我刚刚给出的处理建议。${followHint}`
+}
+
+function prependPatientGreeting(content) {
+  const next = trimText(content)
+  if (!next) return ''
+  const patientName = trimText(detail.value?.patientName)
+  const compactText = next.replace(/[\s，。！？；：,.!?;:]/g, '')
+  if ((patientName && compactText.startsWith(`${patientName}您好`))
+    || compactText.startsWith('您好')
+    || compactText.startsWith('你好')) {
+    return next
+  }
+  return `${patientName ? `${patientName}您好，` : '您好，'}${next}`
+}
+
+function workflowMessageSceneType(type = 'doctor_plan') {
+  if (type === 'follow_up') return 'follow_up'
+  if (detail.value?.status === 'completed' || detail.value?.doctorHandle?.status === 'completed') return 'follow_up'
+  const hasConversation = (consultationMessages.value || []).some(item => item?.senderType === 'user' || item?.senderType === 'doctor')
+  return hasConversation ? 'clarify' : 'opening'
+}
+
+function buildPatientInstructionWorkflowMessage() {
+  const patientInstruction = trimText(conclusionForm.patientInstruction || detail.value?.doctorConclusion?.patientInstruction)
+  if (!patientInstruction) return ''
+
+  const segments = [patientInstruction]
+  const followUpText = buildFollowUpCompareLabel(
+    conclusionForm.needFollowUp,
+    conclusionForm.followUpWithinDays,
+    hasDoctorConclusionContent.value || conclusionForm.needFollowUp === 1
+  )
+  if (followUpText) {
+    segments.push(followUpText === '暂不需要随访'
+      ? '目前暂不需要额外随访，如症状有变化请及时留言。'
+      : `建议按${followUpText}的节奏继续复诊或线上沟通。`)
+  }
+
+  const disposition = conclusionForm.disposition || detail.value?.doctorConclusion?.disposition || ''
+  if (disposition === 'offline_visit') segments.push('如仍有不适或症状加重，请尽快线下就医。')
+  if (disposition === 'emergency') segments.push('如症状持续或加重，请立即前往急诊就诊。')
+
+  return prependPatientGreeting(joinUniqueSegments(segments))
+}
+
+function buildDoctorPlanWorkflowMessage() {
+  const summary = trimText(handleForm.summary)
+  const medicalAdvice = trimText(handleForm.medicalAdvice)
+  const followUpPlan = trimText(handleForm.followUpPlan)
+  const diagnosisDirection = trimText(conclusionForm.diagnosisDirection || detail.value?.doctorConclusion?.diagnosisDirection)
+  const conditionLevel = conclusionForm.conditionLevel || detail.value?.doctorConclusion?.conditionLevel || ''
+  const disposition = conclusionForm.disposition || detail.value?.doctorConclusion?.disposition || ''
+
+  if (!(summary || medicalAdvice || followUpPlan || diagnosisDirection || conditionLevel || disposition)) return ''
+
+  const segments = ['我先同步一下目前的处理意见：']
+  if (summary) segments.push(`当前判断：${summary}`)
+  if (diagnosisDirection && !summary.includes(diagnosisDirection)) segments.push(`初步考虑：${diagnosisDirection}`)
+  if (conditionLevel) segments.push(`当前评估：${conditionLevelLabel(conditionLevel)}`)
+  if (medicalAdvice) segments.push(`处理建议：${medicalAdvice}`)
+  if (followUpPlan) segments.push(`后续安排：${followUpPlan}`)
+  if (disposition) segments.push(`建议方式：${dispositionLabel(disposition)}`)
+  segments.push('如近期症状有新变化，或已经完成检查，也请继续在这里补充说明。')
+
+  return prependPatientGreeting(joinUniqueSegments(segments))
+}
+
+function buildFollowUpWorkflowMessage() {
+  const followUpSource = hasCurrentFollowUpFormContent.value ? followUpForm : latestSavedDoctorFollowUp.value
+  if (!followUpSource) return ''
+
+  const summary = trimText(followUpSource.summary)
+  const advice = trimText(followUpSource.advice)
+  const nextStep = trimText(followUpSource.nextStep)
+  const patientStatus = trimText(followUpSource.patientStatus)
+  const needRevisit = Number(followUpSource.needRevisit || 0) === 1 ? 1 : 0
+  const nextFollowUpDate = trimText(followUpSource.nextFollowUpDate)
+
+  if (!(summary || advice || nextStep || patientStatus || needRevisit === 1 || nextFollowUpDate)) return ''
+
+  const segments = ['我同步一下后续随访安排：']
+  if (summary) segments.push(`随访摘要：${summary}`)
+  else if (patientStatus) segments.push(`当前恢复情况：${patientStatusLabel(patientStatus)}`)
+  if (advice) segments.push(`随访建议：${advice}`)
+  if (nextStep) segments.push(`下一步安排：${nextStep}`)
+  if (needRevisit === 1 && nextFollowUpDate) {
+    segments.push(`建议在${nextFollowUpDate}前后继续复诊或完成下一次随访。`)
+  } else if (needRevisit === 1) {
+    segments.push('后续还需要继续随访，请留意平台通知。')
+  } else {
+    segments.push('目前暂不需要再次随访，如有新的不适变化请及时留言。')
+  }
+
+  return prependPatientGreeting(joinUniqueSegments(segments))
+}
+
+/*
+function prependPatientGreeting(content) {
+  const next = trimText(content)
+  if (!next) return ''
+  const patientName = trimText(detail.value?.patientName)
+  const compactText = next.replace(/[\s，。！？；：,.!?;:]/g, '')
+  if ((patientName && compactText.startsWith(`${patientName}您好`))
+    || compactText.startsWith('您好')
+    || compactText.startsWith('你好')) {
+    return next
+  }
+  return `${patientName ? `${patientName}您好，` : '您好，'}${next}`
+}
+
+function workflowMessageSceneType(type = 'doctor_plan') {
+  if (type === 'follow_up') return 'follow_up'
+  if (detail.value?.status === 'completed' || detail.value?.doctorHandle?.status === 'completed') return 'follow_up'
+  const hasConversation = (consultationMessages.value || []).some(item => item?.senderType === 'user' || item?.senderType === 'doctor')
+  return hasConversation ? 'clarify' : 'opening'
+}
+
+function buildPatientInstructionWorkflowMessage() {
+  const patientInstruction = trimText(conclusionForm.patientInstruction || detail.value?.doctorConclusion?.patientInstruction)
+  if (!patientInstruction) return ''
+
+  const segments = [patientInstruction]
+  const followUpText = buildFollowUpCompareLabel(
+    conclusionForm.needFollowUp,
+    conclusionForm.followUpWithinDays,
+    hasDoctorConclusionContent.value || conclusionForm.needFollowUp === 1
+  )
+  if (followUpText) {
+    segments.push(followUpText === '暂不需要随访'
+      ? '目前暂不需要额外随访，如症状有变化请及时留言。'
+      : `建议按${followUpText}的节奏继续复诊或线上沟通。`)
+  }
+
+  const disposition = conclusionForm.disposition || detail.value?.doctorConclusion?.disposition || ''
+  if (disposition === 'offline_visit') segments.push('如仍有不适或症状加重，请尽快线下就医。')
+  if (disposition === 'emergency') segments.push('如症状持续或加重，请立即前往急诊就诊。')
+
+  return prependPatientGreeting(joinUniqueSegments(segments))
+}
+
+function buildDoctorPlanWorkflowMessage() {
+  const summary = trimText(handleForm.summary)
+  const medicalAdvice = trimText(handleForm.medicalAdvice)
+  const followUpPlan = trimText(handleForm.followUpPlan)
+  const diagnosisDirection = trimText(conclusionForm.diagnosisDirection || detail.value?.doctorConclusion?.diagnosisDirection)
+  const conditionLevel = conclusionForm.conditionLevel || detail.value?.doctorConclusion?.conditionLevel || ''
+  const disposition = conclusionForm.disposition || detail.value?.doctorConclusion?.disposition || ''
+
+  if (!(summary || medicalAdvice || followUpPlan || diagnosisDirection || conditionLevel || disposition)) return ''
+
+  const segments = ['我先同步一下目前的处理意见：']
+  if (summary) segments.push(`当前判断：${summary}`)
+  if (diagnosisDirection && !summary.includes(diagnosisDirection)) segments.push(`初步考虑：${diagnosisDirection}`)
+  if (conditionLevel) segments.push(`当前评估：${conditionLevelLabel(conditionLevel)}`)
+  if (medicalAdvice) segments.push(`处理建议：${medicalAdvice}`)
+  if (followUpPlan) segments.push(`后续安排：${followUpPlan}`)
+  if (disposition) segments.push(`建议方式：${dispositionLabel(disposition)}`)
+  segments.push('如近期症状有新变化，或已经完成检查，也请继续在这里补充说明。')
+
+  return prependPatientGreeting(joinUniqueSegments(segments))
+}
+
+function buildFollowUpWorkflowMessage() {
+  const followUpSource = hasCurrentFollowUpFormContent.value ? followUpForm : latestSavedDoctorFollowUp.value
+  if (!followUpSource) return ''
+
+  const summary = trimText(followUpSource.summary)
+  const advice = trimText(followUpSource.advice)
+  const nextStep = trimText(followUpSource.nextStep)
+  const patientStatus = trimText(followUpSource.patientStatus)
+  const needRevisit = Number(followUpSource.needRevisit || 0) === 1 ? 1 : 0
+  const nextFollowUpDate = trimText(followUpSource.nextFollowUpDate)
+
+  if (!(summary || advice || nextStep || patientStatus || needRevisit === 1 || nextFollowUpDate)) return ''
+
+  const segments = ['我同步一下后续随访安排：']
+  if (summary) segments.push(`随访摘要：${summary}`)
+  else if (patientStatus) segments.push(`当前恢复情况：${patientStatusLabel(patientStatus)}`)
+  if (advice) segments.push(`随访建议：${advice}`)
+  if (nextStep) segments.push(`下一步安排：${nextStep}`)
+  if (needRevisit === 1 && nextFollowUpDate) {
+    segments.push(`建议在${nextFollowUpDate}前后继续复诊或完成下一次随访。`)
+  } else if (needRevisit === 1) {
+    segments.push('后续还需要继续随访，请留意平台通知。')
+  } else {
+    segments.push('目前暂不需要再次随访，如有新的不适变化请及时留言。')
+  }
+
+  return prependPatientGreeting(joinUniqueSegments(segments))
+}
+
+*/
+function applyGuidanceReminderToMessage() {
+  if (!latestDoctorGuidanceReferenceTime.value) return ElMessage.warning('当前还没有可提醒患者查看的医生建议。')
+  if (hasPatientAcknowledgedGuidance.value) return ElMessage.info('患者已确认查看当前医生建议，可继续关注后续反馈。')
+  if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂无发送权限')
+
+  const content = trimText(buildGuidanceReminderMessage())
+  if (!content) return ElMessage.warning('当前没有可带入的提醒话术。')
+
+  const current = trimText(messageDraft.content)
+  if (current.includes(content)) {
+    focusDetailActionSection('reply', detail.value?.id || null)
+    return ElMessage.info('当前消息输入框已包含相同提醒，可继续编辑后发送。')
+  }
+
+  messageDraft.content = current ? `${current}\n${content}` : content
+  focusDetailActionSection('reply', detail.value?.id || null)
+  ElMessage.success('已将查看提醒带入消息输入框。')
+}
+
 function isFollowUpUpdateMessage(message) {
   return `${message?.messageType || ''}`.trim().toLowerCase() === 'followup_update'
 }
@@ -2194,8 +3241,8 @@ function applyPatientFollowUpUpdateToFollowUp() {
   if (!update) return ElMessage.warning('患者暂未提交结构化恢复更新。')
   if (!canSubmitFollowUp.value) return ElMessage.warning(followUpHint.value)
 
-  const content = trimText(update.content)
-  if (!content) return ElMessage.warning('最新恢复更新仅包含图片附件。')
+  const content = buildPatientFollowUpUpdateContent(update)
+  if (!content) return ElMessage.warning('当前恢复更新缺少可带入的文字或图片说明。')
 
   const merged = mergeTextField(followUpForm, 'summary', `患者恢复更新：\n${content}`)
   followUpAssistState.source = 'patient_followup_update'
@@ -2211,12 +3258,19 @@ function applyPatientCheckResultUpdateToHandle() {
   if (!update) return ElMessage.warning('患者暂未提交结构化检查结果补充。')
   if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
 
-  const content = trimText(update.content)
-  if (!content) return ElMessage.warning('最新检查结果补充仅包含图片附件。')
+  const content = buildPatientCheckResultUpdateContent(update)
+  if (!content) return ElMessage.warning('当前检查结果补充缺少可带入的文字或图片说明。')
 
   const merged = mergeTextField(handleForm, 'summary', `患者检查结果补充：\n${content}`)
   if (!merged) return ElMessage.info('当前处理摘要已包含这条患者检查结果补充。')
   ElMessage.success('已将患者检查结果补充带入处理摘要。')
+}
+
+function handlePatientActionQuickAction(action) {
+  if (action === 'apply_followup_update') return applyPatientFollowUpUpdateToFollowUp()
+  if (action === 'apply_check_result_update') return applyPatientCheckResultUpdateToHandle()
+  if (action === 'apply_service_feedback_followup') return applyServiceFeedbackToFollowUp()
+  if (action === 'apply_guidance_reminder') return applyGuidanceReminderToMessage()
 }
 
 function buildServiceFeedbackFollowUpDraft(feedback) {
@@ -2301,7 +3355,7 @@ function loadConsultationMessages(recordId = detail.value?.id, options = {}) {
   messageSyncStatus.value = 'syncing'
   if (!silent) messageLoading.value = true
   get(`/api/doctor/consultation/message/list?recordId=${recordId}`, data => {
-    consultationMessages.value = data || []
+    consultationMessages.value = Array.isArray(data) ? data : []
     if (!hasMessageAiDraft.value) {
       messageAiScene.value = recommendMessageAiScene(detail.value, consultationMessages.value)
     }
@@ -2874,6 +3928,53 @@ function applyMessageTemplate(mode = 'replace') {
   }
   ElMessage.success(mode === 'append' ? '已将沟通模板追加到消息输入框' : '已将沟通模板带入消息输入框')
 }
+function applyWorkflowMessageDraft(mode = 'replace') {
+  if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂不可发送消息')
+  const workflowDraft = selectedWorkflowMessageDraft.value
+  const content = trimText(workflowDraft?.content)
+  if (!content) return ElMessage.warning('当前没有可同步到患者沟通的处理内容')
+
+  const current = trimText(messageDraft.content)
+  const nextContent = mode === 'append' && current
+    ? joinUniqueSegments([current, content])
+    : content
+
+  if (nextContent === current) {
+    focusDetailActionSection('reply', detail.value?.id || null)
+    return ElMessage.info('当前消息输入框已包含相同内容，可继续补充后发送')
+  }
+
+  messageDraft.content = nextContent
+  messageAiScene.value = normalizeMessageAiScene(workflowDraft?.sceneType || messageAiScene.value)
+  if (mode === 'replace') resetMessageAiUsage()
+  focusDetailActionSection('reply', detail.value?.id || null)
+  ElMessage.success(mode === 'append' ? '已将处理结果追加到患者沟通输入框' : '已将处理结果带入患者沟通输入框')
+}
+
+/*
+function applyWorkflowMessageDraft(mode = 'replace') {
+  if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '褰撳墠鏆傛棤鍙戦€佹潈闄?)
+  const workflowDraft = selectedWorkflowMessageDraft.value
+  const content = trimText(workflowDraft?.content)
+  if (!content) return ElMessage.warning('褰撳墠杩樻病鏈夊彲鍚屾鍒版偅鑰呮矡閫氱殑澶勭悊鍐呭')
+
+  const current = trimText(messageDraft.content)
+  const nextContent = mode === 'append' && current
+    ? joinUniqueSegments([current, content])
+    : content
+
+  if (nextContent === current) {
+    focusDetailActionSection('reply', detail.value?.id || null)
+    return ElMessage.info('褰撳墠娑堟伅杈撳叆妗嗗凡鍖呭惈鐩稿悓鍐呭锛屽彲缁х画缂栬緫鍚庡彂閫?)
+  }
+
+  messageDraft.content = nextContent
+  messageAiScene.value = normalizeMessageAiScene(workflowDraft?.sceneType || messageAiScene.value)
+  if (mode === 'replace') resetMessageAiUsage()
+  focusDetailActionSection('reply', detail.value?.id || null)
+  ElMessage.success(mode === 'append' ? '宸插皢澶勭悊缁撴灉杩藉姞鍒版偅鑰呮矡閫氳緭鍏ユ' : '宸插皢澶勭悊缁撴灉甯﹀叆鎮ｈ€呮矡閫氳緭鍏ユ')
+}
+*/
 function composeMessageAiWithTemplate() {
   if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂无发送权限')
   const aiContent = trimText(messageAiDraft.content)
@@ -2883,6 +3984,214 @@ function composeMessageAiWithTemplate() {
   messageDraft.content = joinUniqueSegments([aiContent, templateContent])
   applyMessageAiUsage(messageAiDraft.logId, 'compose', currentMessageTemplateTrackingMeta())
   ElMessage.success('已将 AI 建议与沟通模板拼装后带入消息输入框')
+}
+function normalizeTextArray(values) {
+  return Array.isArray(values) ? values.map(item => trimText(item)).filter(Boolean) : []
+}
+function buildDoctorLocalDraftSnapshot() {
+  const needFollowUp = conclusionForm.needFollowUp === 1 ? 1 : 0
+  const needRevisit = followUpForm.needRevisit === 1 ? 1 : 0
+  return {
+    messageDraft: {
+      content: trimText(messageDraft.content),
+      attachments: Array.isArray(messageDraft.attachments) ? [...new Set(messageDraft.attachments.filter(Boolean))] : []
+    },
+    handleForm: {
+      summary: trimText(handleForm.summary),
+      medicalAdvice: trimText(handleForm.medicalAdvice),
+      followUpPlan: trimText(handleForm.followUpPlan),
+      internalRemark: trimText(handleForm.internalRemark)
+    },
+    conclusionForm: {
+      conditionLevel: conclusionForm.conditionLevel || '',
+      disposition: conclusionForm.disposition || '',
+      diagnosisDirection: trimText(conclusionForm.diagnosisDirection),
+      conclusionTags: normalizeTextArray(conclusionForm.conclusionTags),
+      needFollowUp,
+      followUpWithinDays: needFollowUp === 1 ? Number(conclusionForm.followUpWithinDays || 0) || null : null,
+      isConsistentWithAi: conclusionForm.isConsistentWithAi === 0 ? 0 : conclusionForm.isConsistentWithAi === 1 ? 1 : null,
+      aiMismatchReasons: normalizeTextArray(conclusionForm.aiMismatchReasons),
+      aiMismatchRemark: trimText(conclusionForm.aiMismatchRemark),
+      patientInstruction: trimText(conclusionForm.patientInstruction)
+    },
+    followUpForm: {
+      followUpType: followUpForm.followUpType || 'platform',
+      patientStatus: followUpForm.patientStatus || 'stable',
+      summary: trimText(followUpForm.summary),
+      advice: trimText(followUpForm.advice),
+      nextStep: trimText(followUpForm.nextStep),
+      needRevisit,
+      nextFollowUpDate: needRevisit === 1 ? trimText(followUpForm.nextFollowUpDate) : ''
+    },
+    serviceFeedbackHandleForm: {
+      doctorHandleStatus: serviceFeedbackHandleForm.doctorHandleStatus === 1 ? 1 : 0,
+      handleRemark: trimText(serviceFeedbackHandleForm.handleRemark)
+    },
+    handleAiRewriteRequirement: trimText(handleAiRewriteRequirement.value),
+    followUpAiRewriteRequirement: trimText(followUpAiRewriteRequirement.value)
+  }
+}
+function buildDoctorLocalDraftSignature(snapshot = buildDoctorLocalDraftSnapshot()) {
+  return JSON.stringify(snapshot)
+}
+function doctorLocalDraftStorageKey(recordId = detail.value?.id) {
+  const id = Number(recordId || 0)
+  return id > 0 ? `${DOCTOR_CONSULTATION_DRAFT_PREFIX}${id}` : ''
+}
+function clearDoctorLocalDraftTimer() {
+  if (!doctorLocalDraftTimer) return
+  clearTimeout(doctorLocalDraftTimer)
+  doctorLocalDraftTimer = null
+}
+function resetDoctorLocalDraftState() {
+  clearDoctorLocalDraftTimer()
+  doctorLocalDraftSavedAt.value = ''
+  doctorLocalDraftRestoredAt.value = ''
+  detailDraftBaseline.value = ''
+}
+function removeDoctorLocalDraft(recordId = detail.value?.id) {
+  const key = doctorLocalDraftStorageKey(recordId)
+  if (!key || typeof localStorage === 'undefined') return
+  localStorage.removeItem(key)
+}
+function persistDoctorLocalDraft(options = {}) {
+  const {
+    immediate = false,
+    showToast = false
+  } = options
+  const run = () => {
+    clearDoctorLocalDraftTimer()
+    if (!detailVisible.value || !detail.value?.id || applyingDoctorLocalDraft) return
+    const key = doctorLocalDraftStorageKey(detail.value.id)
+    if (!key || typeof localStorage === 'undefined') return
+
+    const snapshot = buildDoctorLocalDraftSnapshot()
+    const signature = buildDoctorLocalDraftSignature(snapshot)
+    if (!detailDraftBaseline.value) {
+      detailDraftBaseline.value = signature
+    }
+    if (signature === detailDraftBaseline.value) {
+      removeDoctorLocalDraft(detail.value.id)
+      doctorLocalDraftSavedAt.value = ''
+      doctorLocalDraftRestoredAt.value = ''
+      if (showToast) ElMessage.success('当前问诊已恢复到已保存状态，本地草稿已清空')
+      return
+    }
+
+    const payload = {
+      version: DOCTOR_CONSULTATION_DRAFT_VERSION,
+      recordId: Number(detail.value.id),
+      savedAt: new Date().toISOString(),
+      signature,
+      snapshot
+    }
+    try {
+      localStorage.setItem(key, JSON.stringify(payload))
+      doctorLocalDraftSavedAt.value = payload.savedAt
+      if (showToast) ElMessage.success('已暂存到本地草稿')
+    } catch (error) {
+      console.error('Failed to persist doctor consultation draft', error)
+      if (showToast) ElMessage.warning('本地草稿暂存失败，请检查浏览器存储空间')
+    }
+  }
+
+  if (immediate) {
+    run()
+    return
+  }
+  clearDoctorLocalDraftTimer()
+  doctorLocalDraftTimer = setTimeout(run, DOCTOR_CONSULTATION_DRAFT_SAVE_DELAY)
+}
+function captureDoctorLocalDraftBaseline() {
+  detailDraftBaseline.value = buildDoctorLocalDraftSignature()
+  doctorLocalDraftRestoredAt.value = ''
+}
+function restoreDoctorLocalDraft(recordId = detail.value?.id) {
+  const key = doctorLocalDraftStorageKey(recordId)
+  if (!key || typeof localStorage === 'undefined') {
+    doctorLocalDraftSavedAt.value = ''
+    doctorLocalDraftRestoredAt.value = ''
+    return false
+  }
+
+  let payload = null
+  try {
+    payload = JSON.parse(localStorage.getItem(key) || 'null')
+  } catch {
+    payload = null
+  }
+  if (!payload || payload.version !== DOCTOR_CONSULTATION_DRAFT_VERSION || Number(payload.recordId || 0) !== Number(recordId || 0) || !payload.snapshot) {
+    doctorLocalDraftSavedAt.value = ''
+    doctorLocalDraftRestoredAt.value = ''
+    removeDoctorLocalDraft(recordId)
+    return false
+  }
+  if (payload.signature === detailDraftBaseline.value) {
+    doctorLocalDraftSavedAt.value = ''
+    doctorLocalDraftRestoredAt.value = ''
+    removeDoctorLocalDraft(recordId)
+    return false
+  }
+
+  const snapshot = payload.snapshot
+  applyingDoctorLocalDraft = true
+  messageDraft.content = snapshot.messageDraft?.content || ''
+  messageDraft.attachments = Array.isArray(snapshot.messageDraft?.attachments) ? [...snapshot.messageDraft.attachments] : []
+  handleForm.summary = snapshot.handleForm?.summary || ''
+  handleForm.medicalAdvice = snapshot.handleForm?.medicalAdvice || ''
+  handleForm.followUpPlan = snapshot.handleForm?.followUpPlan || ''
+  handleForm.internalRemark = snapshot.handleForm?.internalRemark || ''
+  conclusionForm.conditionLevel = snapshot.conclusionForm?.conditionLevel || ''
+  conclusionForm.disposition = snapshot.conclusionForm?.disposition || ''
+  conclusionForm.diagnosisDirection = snapshot.conclusionForm?.diagnosisDirection || ''
+  conclusionForm.conclusionTags = normalizeTextArray(snapshot.conclusionForm?.conclusionTags)
+  conclusionForm.needFollowUp = snapshot.conclusionForm?.needFollowUp === 1 ? 1 : 0
+  conclusionForm.followUpWithinDays = conclusionForm.needFollowUp === 1
+    ? Number(snapshot.conclusionForm?.followUpWithinDays || 0) || null
+    : null
+  conclusionForm.isConsistentWithAi = snapshot.conclusionForm?.isConsistentWithAi === 0
+    ? 0
+    : snapshot.conclusionForm?.isConsistentWithAi === 1 ? 1 : null
+  conclusionForm.aiMismatchReasons = normalizeTextArray(snapshot.conclusionForm?.aiMismatchReasons)
+  conclusionForm.aiMismatchRemark = snapshot.conclusionForm?.aiMismatchRemark || ''
+  conclusionForm.patientInstruction = snapshot.conclusionForm?.patientInstruction || ''
+  followUpForm.followUpType = snapshot.followUpForm?.followUpType || 'platform'
+  followUpForm.patientStatus = snapshot.followUpForm?.patientStatus || 'stable'
+  followUpForm.summary = snapshot.followUpForm?.summary || ''
+  followUpForm.advice = snapshot.followUpForm?.advice || ''
+  followUpForm.nextStep = snapshot.followUpForm?.nextStep || ''
+  followUpForm.needRevisit = snapshot.followUpForm?.needRevisit === 1 ? 1 : 0
+  followUpForm.nextFollowUpDate = followUpForm.needRevisit === 1 ? (snapshot.followUpForm?.nextFollowUpDate || '') : ''
+  serviceFeedbackHandleForm.doctorHandleStatus = snapshot.serviceFeedbackHandleForm?.doctorHandleStatus === 1 ? 1 : 0
+  serviceFeedbackHandleForm.handleRemark = snapshot.serviceFeedbackHandleForm?.handleRemark || ''
+  handleAiRewriteRequirement.value = snapshot.handleAiRewriteRequirement || ''
+  followUpAiRewriteRequirement.value = snapshot.followUpAiRewriteRequirement || ''
+  applyingDoctorLocalDraft = false
+
+  doctorLocalDraftSavedAt.value = payload.savedAt || ''
+  doctorLocalDraftRestoredAt.value = payload.savedAt || ''
+  return true
+}
+function flushDoctorLocalDraftBeforeReset() {
+  if (skipNextDoctorLocalDraftPersist) {
+    skipNextDoctorLocalDraftPersist = false
+    clearDoctorLocalDraftTimer()
+    return
+  }
+  persistDoctorLocalDraft({ immediate: true })
+}
+function discardDoctorLocalDraft() {
+  const recordId = detail.value?.id
+  if (!recordId) return
+  skipNextDoctorLocalDraftPersist = true
+  removeDoctorLocalDraft(recordId)
+  doctorLocalDraftSavedAt.value = ''
+  doctorLocalDraftRestoredAt.value = ''
+  ElMessage.success('已放弃本地草稿，正在恢复已保存内容')
+  openDetail(recordId, route.query.action)
+}
+function handleDoctorDraftBeforeUnload() {
+  persistDoctorLocalDraft({ immediate: true })
 }
 function appendDraftSnapshotText(target, key, value) {
   const text = trimText(value)
@@ -3117,6 +4426,7 @@ function sendConsultationMessage() {
   const content = `${messageDraft.content || ''}`.trim()
   if (!content && !messageDraft.attachments.length) return ElMessage.warning('请先输入消息内容或上传图片')
   const shouldAutoClaim = detail.value?.doctorAssignment?.status !== 'claimed'
+  const continuationAction = messageContinuationAction.value
   const willEnterProcessing = !['processing', 'completed'].includes(`${detail.value?.status || ''}`)
     && !['processing', 'completed'].includes(`${detail.value?.doctorHandle?.status || ''}`)
   messageSending.value = true
@@ -3139,7 +4449,10 @@ function sendConsultationMessage() {
             : '消息已发送'
     )
     refreshDoctorWorkspaceContext()
-    loadRecords(() => openDetail(recordId))
+    reopenDetailAfterMutation({
+      reopenId: recordId,
+      reopenAction: continuationAction
+    })
   }, message => {
     messageSending.value = false
     ElMessage.warning(message || '问诊消息发送失败')
@@ -3299,6 +4612,9 @@ function assignField(form, fieldKey, value) {
   return 1
 }
 function submitAssignment(type, id) {
+  const continuationAction = type === 'claim' && detailVisible.value && detail.value?.id === id
+    ? claimContinuationAction.value
+    : ''
   assignLoading.value = true
   assignType.value = type
   post(`/api/doctor/consultation/${type}`, { consultationId: id }, () => {
@@ -3307,7 +4623,7 @@ function submitAssignment(type, id) {
     ElMessage.success(type === 'claim' ? '问诊单认领成功' : '问诊单已释放')
     refreshDoctorWorkspaceContext()
     loadRecords(() => {
-      if (detailVisible.value && detail.value?.id === id) openDetail(id)
+      if (detailVisible.value && detail.value?.id === id) openDetail(id, continuationAction)
     })
   }, message => {
     assignLoading.value = false
@@ -3315,7 +4631,7 @@ function submitAssignment(type, id) {
     ElMessage.warning(message || (type === 'claim' ? '问诊单认领失败' : '问诊单释放失败'))
   })
 }
-function submitHandle(status) {
+function submitHandle(status, options = {}) {
   if (!detail.value?.id) return
   if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
   if (!`${handleForm.summary || ''}`.trim()) return ElMessage.warning('请先填写医生判断摘要')
@@ -3327,8 +4643,11 @@ function submitHandle(status) {
   if (status === 'completed' && conclusionForm.isConsistentWithAi === 0 && !conclusionForm.aiMismatchReasons.length && !`${conclusionForm.aiMismatchRemark || ''}`.trim()) {
     return ElMessage.warning('与 AI 不一致时请至少选择一个差异原因或填写补充说明')
   }
+  const openNext = options.openNext === true
+  const nextPlan = openNext ? buildAdjacentDetailPlan(1) : null
   submitLoading.value = true
   submitStatus.value = status
+  handleSubmitMode.value = openNext ? 'next' : 'stay'
   post('/api/doctor/consultation/handle', {
     consultationId: detail.value.id,
     status,
@@ -3350,21 +4669,29 @@ function submitHandle(status) {
   }, () => {
     submitLoading.value = false
     submitStatus.value = ''
+    handleSubmitMode.value = 'stay'
     ElMessage.success(status === 'completed' ? '医生处理结果已保存' : '已标记为处理中')
     refreshDoctorWorkspaceContext()
-    loadRecords(() => openDetail(detail.value.id))
+    reopenDetailAfterMutation({
+      reopenId: detail.value.id,
+      nextPlan
+    })
   }, message => {
     submitLoading.value = false
     submitStatus.value = ''
+    handleSubmitMode.value = 'stay'
     ElMessage.warning(message || '医生处理结果保存失败')
   })
 }
-function submitFollowUp() {
+function submitFollowUp(options = {}) {
   if (!detail.value?.id) return
   if (!canSubmitFollowUp.value) return ElMessage.warning(followUpHint.value)
   if (!`${followUpForm.summary || ''}`.trim()) return ElMessage.warning('请先填写随访摘要')
   if (followUpForm.needRevisit === 1 && !followUpForm.nextFollowUpDate) return ElMessage.warning('需要再次随访时请填写下次随访日期')
+  const openNext = options.openNext === true
+  const nextPlan = openNext ? buildAdjacentDetailPlan(1) : null
   followUpSubmitting.value = true
+  followUpSubmitMode.value = openNext ? 'next' : 'stay'
   post('/api/doctor/consultation/follow-up', {
     consultationId: detail.value.id,
     followUpType: followUpForm.followUpType,
@@ -3377,11 +4704,16 @@ function submitFollowUp() {
     aiLogId: followUpAiUsage.applied === 1 && followUpAiUsage.recordId === detail.value.id ? followUpAiUsage.logId : null
   }, () => {
     followUpSubmitting.value = false
+    followUpSubmitMode.value = 'stay'
     ElMessage.success('随访记录已保存')
     refreshDoctorWorkspaceContext()
-    loadRecords(() => openDetail(detail.value.id))
+    reopenDetailAfterMutation({
+      reopenId: detail.value.id,
+      nextPlan
+    })
   }, message => {
     followUpSubmitting.value = false
+    followUpSubmitMode.value = 'stay'
     ElMessage.warning(message || '随访记录保存失败')
   })
 }
@@ -3512,6 +4844,7 @@ function formatConfidence(value) {
 }
 watch(detailVisible, value => {
   if (!value) {
+    flushDoctorLocalDraftBeforeReset()
     stopMessagePolling()
     clearMessageNewState()
     resetMessageSyncState()
@@ -3526,6 +4859,7 @@ watch(detailVisible, value => {
     resetHandleAiDraft()
     resetFollowUpAiDraft()
     syncForms()
+    resetDoctorLocalDraftState()
     if (route.query.id || route.query.action) syncListQuery(null, '')
   }
 })
@@ -3551,15 +4885,25 @@ watch(
     route.query.riskFilter,
     route.query.sortMode
   ],
-  () => {
+  (values, oldValues = []) => {
     applyRouteFilters()
-    const routeId = Number(route.query.id || 0)
+    const routeId = Number(values[0] || 0)
+    const routeAction = resolveConsultationAction(values[1])
+    const previousRouteId = Number(oldValues[0] || 0)
+    const previousRouteAction = resolveConsultationAction(oldValues[1])
     if (!routeId) {
       if (detailVisible.value) detailVisible.value = false
       return
     }
+    if (!detailLoading.value && detailVisible.value && detail.value?.id === routeId) {
+      if (routeId === previousRouteId && routeAction !== previousRouteAction) {
+        if (routeAction) jumpToDetailSection(routeAction, routeId, { behavior: 'auto', syncQuery: false })
+        else clearFocusedDetailSection()
+      }
+      return
+    }
     if (!detailLoading.value && records.value.some(item => item.id === routeId) && (!detailVisible.value || detail.value?.id !== routeId)) {
-      openDetail(routeId, route.query.action)
+      openDetail(routeId, routeAction)
     }
   },
   { immediate: true }
@@ -3567,24 +4911,60 @@ watch(
 watch(() => conclusionForm.isConsistentWithAi, value => { if (value !== 0) clearAiMismatchReview() })
 watch(() => conclusionForm.needFollowUp, value => { if (value !== 1) conclusionForm.followUpWithinDays = null })
 watch(() => followUpForm.needRevisit, value => { if (value !== 1) followUpForm.nextFollowUpDate = '' })
+watch(
+  [
+    detailVisible,
+    () => detail.value?.id,
+    messageDraft,
+    handleForm,
+    conclusionForm,
+    followUpForm,
+    serviceFeedbackHandleForm,
+    handleAiRewriteRequirement,
+    followUpAiRewriteRequirement
+  ],
+  () => {
+    if (applyingDoctorLocalDraft) return
+    persistDoctorLocalDraft()
+  },
+  { deep: true }
+)
 watch([messageAiScene, replyTemplates], () => {
   ensureTemplateSelection(currentMessageTemplateMeta.value.sceneType)
+}, { immediate: true })
+watch(workflowMessageDraftOptions, options => {
+  if (!options.length) {
+    workflowMessageDraftType.value = 'doctor_plan'
+    return
+  }
+  if (options.some(item => item.value === workflowMessageDraftType.value)) return
+  workflowMessageDraftType.value = options[0].value
 }, { immediate: true })
 watch(replyTemplates, () => {
   ensureFormTemplateSelections()
 }, { immediate: true })
 onBeforeUnmount(() => {
+  persistDoctorLocalDraft({ immediate: true })
   stopMessagePolling()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', handleDoctorDraftBeforeUnload)
+  }
   if (typeof document !== 'undefined') {
     document.removeEventListener('visibilitychange', handleMessageVisibilityChange)
+    document.removeEventListener('keydown', handleDetailDrawerKeydown)
   }
   clearFocusedDetailSection()
+  resetDoctorLocalDraftState()
 })
 onMounted(() => {
   refreshAll()
   loadReplyTemplates()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', handleDoctorDraftBeforeUnload)
+  }
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', handleMessageVisibilityChange)
+    document.addEventListener('keydown', handleDetailDrawerKeydown)
   }
 })
 </script>
@@ -3712,14 +5092,152 @@ onMounted(() => {
   background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.94));
 }
 
+.draft-recovery-panel {
+  background: linear-gradient(180deg, rgba(225, 179, 63, 0.12), rgba(255, 255, 255, 0.96));
+}
+
+.detail-nav-panel {
+  background: linear-gradient(180deg, rgba(19, 73, 80, 0.08), rgba(255, 255, 255, 0.96));
+}
+
 .patient-action-panel {
   background: linear-gradient(180deg, rgba(15, 102, 101, 0.1), rgba(255, 255, 255, 0.95));
+}
+
+.workflow-assistant-panel {
+  background: linear-gradient(180deg, rgba(30, 106, 134, 0.08), rgba(255, 255, 255, 0.97));
+}
+
+.detail-nav-toolbar,
+.detail-nav-chip-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.detail-nav-toolbar {
+  margin-bottom: 12px;
+}
+
+.detail-nav-meta {
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.detail-nav-chip {
+  border: 0;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease, color 0.2s ease;
+}
+
+.detail-nav-chip:hover {
+  background: rgba(15, 102, 101, 0.16);
+  color: #0f6665;
+  transform: translateY(-1px);
+}
+
+.detail-nav-chip.is-active {
+  background: rgba(15, 102, 101, 0.18);
+  color: #0f6665;
+  box-shadow: inset 0 0 0 1px rgba(15, 102, 101, 0.12);
 }
 
 .patient-action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.workflow-assistant-primary {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(30, 106, 134, 0.1);
+  margin-bottom: 14px;
+}
+
+.workflow-assistant-primary strong {
+  color: #264952;
+}
+
+.workflow-assistant-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.workflow-assistant-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.workflow-assistant-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.workflow-assistant-card-head strong {
+  color: #31474d;
+}
+
+.workflow-assistant-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.workflow-assistant-status.is-success {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.workflow-assistant-status.is-warning {
+  background: rgba(210, 155, 47, 0.14);
+  color: #8f6514;
+}
+
+.workflow-assistant-status.is-danger {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
+}
+
+.workflow-assistant-status.is-info {
+  background: rgba(30, 106, 134, 0.12);
+  color: #1d627a;
+}
+
+.workflow-assistant-actions {
+  margin-top: auto;
+}
+
+.detail-section-anchor {
+  width: 100%;
+  height: 0;
+  overflow: hidden;
 }
 
 .patient-action-card {
@@ -3772,6 +5290,9 @@ onMounted(() => {
 }
 
 .patient-action-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
   padding-top: 4px;
 }
 
@@ -4431,6 +5952,7 @@ onMounted(() => {
   .stats,
   .grid,
   .patient-action-grid,
+  .workflow-assistant-grid,
   .archive-grid,
   .triage-doctor-list,
   .conclusion-compare-grid {
@@ -4442,6 +5964,7 @@ onMounted(() => {
   .stats,
   .grid,
   .patient-action-grid,
+  .workflow-assistant-grid,
   .archive-grid,
   .triage-doctor-list,
   .conclusion-compare-grid {

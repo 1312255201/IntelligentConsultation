@@ -1,5 +1,49 @@
 import { isRecommendedToDoctor, normalizeSmartDispatch } from '@/triage/dispatch'
 
+function ensureArray(value) {
+  return Array.isArray(value) ? value.filter(item => item != null) : []
+}
+
+function ensureObject(value) {
+  return value && typeof value === 'object' ? value : null
+}
+
+function sortByCreateTimeDesc(records = []) {
+  return ensureArray(records).slice().sort((left, right) => {
+    const timeDiff = compareDateDesc(left?.createTime || left?.updateTime, right?.createTime || right?.updateTime)
+    if (timeDiff !== 0) return timeDiff
+    return compareNumber(Number(right?.id || 0), Number(left?.id || 0))
+  })
+}
+
+function sortBySortAsc(records = []) {
+  return ensureArray(records).slice().sort((left, right) => {
+    const sortDiff = compareNumber(Number(left?.sort || 0), Number(right?.sort || 0))
+    if (sortDiff !== 0) return sortDiff
+    return compareNumber(Number(left?.id || 0), Number(right?.id || 0))
+  })
+}
+
+function normalizeArchiveSummary(summary) {
+  const record = ensureObject(summary)
+  if (!record) return null
+  return {
+    ...record,
+    riskFlags: ensureArray(record.riskFlags).filter(Boolean),
+    conclusionTags: ensureArray(record.conclusionTags).filter(Boolean),
+    nextActions: ensureArray(record.nextActions).filter(Boolean)
+  }
+}
+
+function normalizeTriageSession(session) {
+  const record = ensureObject(session)
+  if (!record) return null
+  return {
+    ...record,
+    messages: ensureArray(record.messages)
+  }
+}
+
 export function normalizeDoctorMessageSummary(summary) {
   return {
     totalCount: Number(summary?.totalCount || 0),
@@ -17,28 +61,42 @@ export function normalizeDoctorMessageSummary(summary) {
 }
 
 export function normalizeDoctorServiceFeedback(feedback) {
-  if (!feedback) return null
+  const record = ensureObject(feedback)
+  if (!record) return null
   return {
-    ...feedback,
-    serviceScore: feedback?.serviceScore == null ? null : Number(feedback.serviceScore),
-    isResolved: feedback?.isResolved == null ? null : Number(feedback.isResolved),
-    doctorHandleStatus: feedback?.doctorHandleStatus == null ? null : Number(feedback.doctorHandleStatus),
-    doctorHandleAccountId: feedback?.doctorHandleAccountId == null ? null : Number(feedback.doctorHandleAccountId),
-    doctorHandleDoctorId: feedback?.doctorHandleDoctorId == null ? null : Number(feedback.doctorHandleDoctorId)
+    ...record,
+    serviceScore: record?.serviceScore == null ? null : Number(record.serviceScore),
+    isResolved: record?.isResolved == null ? null : Number(record.isResolved),
+    doctorHandleStatus: record?.doctorHandleStatus == null ? null : Number(record.doctorHandleStatus),
+    doctorHandleAccountId: record?.doctorHandleAccountId == null ? null : Number(record.doctorHandleAccountId),
+    doctorHandleDoctorId: record?.doctorHandleDoctorId == null ? null : Number(record.doctorHandleDoctorId)
   }
 }
 
 export function normalizeDoctorReminderRecord(record = {}) {
+  const source = ensureObject(record) || {}
   return {
-    ...record,
-    smartDispatch: normalizeSmartDispatch(record?.smartDispatch),
-    messageSummary: normalizeDoctorMessageSummary(record?.messageSummary),
-    serviceFeedback: normalizeDoctorServiceFeedback(record?.serviceFeedback)
+    ...source,
+    answers: sortBySortAsc(source?.answers),
+    recommendedDoctors: ensureArray(source?.recommendedDoctors),
+    doctorAssignment: ensureObject(source?.doctorAssignment),
+    doctorHandle: ensureObject(source?.doctorHandle),
+    doctorConclusion: ensureObject(source?.doctorConclusion),
+    doctorFollowUps: sortByCreateTimeDesc(source?.doctorFollowUps),
+    smartDispatch: normalizeSmartDispatch(source?.smartDispatch),
+    messageSummary: normalizeDoctorMessageSummary(source?.messageSummary),
+    archiveSummary: normalizeArchiveSummary(source?.archiveSummary),
+    aiComparison: ensureObject(source?.aiComparison),
+    triageSession: normalizeTriageSession(source?.triageSession),
+    triageResult: ensureObject(source?.triageResult),
+    triageFeedback: ensureObject(source?.triageFeedback),
+    ruleHits: ensureArray(source?.ruleHits),
+    serviceFeedback: normalizeDoctorServiceFeedback(source?.serviceFeedback)
   }
 }
 
 export function normalizeDoctorReminderRecords(records = []) {
-  return (records || []).map(item => normalizeDoctorReminderRecord(item))
+  return ensureArray(records).map(item => normalizeDoctorReminderRecord(item))
 }
 
 export function getDoctorMessageSummary(record) {
