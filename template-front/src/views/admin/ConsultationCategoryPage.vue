@@ -37,6 +37,11 @@
             {{ departmentName(row.departmentId) }}
           </template>
         </el-table-column>
+        <el-table-column label="收费标准" width="120" align="center">
+          <template #default="{ row }">
+            {{ formatAmount(row.priceAmount) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="sort" label="排序" width="90" align="center" />
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
@@ -86,6 +91,15 @@
           </el-form-item>
           <el-form-item label="排序" prop="sort">
             <el-input-number v-model="form.sort" :min="0" :max="999" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="收费金额" prop="priceAmount">
+            <el-input-number
+              v-model="form.priceAmount"
+              :min="0"
+              :step="0.01"
+              :precision="2"
+              style="width: 100%"
+            />
           </el-form-item>
           <el-form-item label="状态" prop="status">
             <el-select v-model="form.status" style="width: 100%">
@@ -145,6 +159,9 @@ const rules = {
   sort: [
     { required: true, message: '请输入排序值', trigger: 'change' }
   ],
+  priceAmount: [
+    { required: true, message: '请输入收费金额', trigger: 'change' }
+  ],
   status: [
     { required: true, message: '请选择状态', trigger: 'change' }
   ]
@@ -177,6 +194,7 @@ function createEmptyForm() {
     name: '',
     code: '',
     description: '',
+    priceAmount: 0,
     sort: 0,
     status: 1
   }
@@ -226,6 +244,7 @@ function submitCategory() {
       name: form.name,
       code: form.code,
       description: form.description,
+      priceAmount: form.priceAmount,
       sort: form.sort,
       status: form.status
     }
@@ -270,6 +289,12 @@ function formatDate(value) {
     hour: '2-digit',
     minute: '2-digit'
   }).format(new Date(value))
+}
+
+function formatAmount(value) {
+  const amount = Number(value || 0)
+  if (Number.isNaN(amount)) return '¥0.00'
+  return `¥${amount.toFixed(2)}`
 }
 
 onMounted(() => loadData())

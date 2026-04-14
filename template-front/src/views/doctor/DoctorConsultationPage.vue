@@ -183,6 +183,10 @@
               <el-descriptions-item label="建议动作">{{ triageActionLabel(detail.triageActionType) }}</el-descriptions-item>
               <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
               <el-descriptions-item label="提交时间">{{ formatDate(detail.createTime) }}</el-descriptions-item>
+              <el-descriptions-item label="收费金额">{{ formatAmount(detail.payment?.amount) }}</el-descriptions-item>
+              <el-descriptions-item label="收费状态">{{ paymentStatusLabel(detail.payment) }}</el-descriptions-item>
+              <el-descriptions-item label="支付方式">{{ paymentChannelLabel(detail.payment?.paymentChannel) }}</el-descriptions-item>
+              <el-descriptions-item label="支付时间">{{ formatDate(detail.payment?.paidTime) }}</el-descriptions-item>
             </el-descriptions>
           </section>
 
@@ -832,6 +836,111 @@
                   <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('follow_up_plan') || !trimText(handleAiDraft.followUpPlan)" @click="composeAiFieldWithTemplate('follow_up_plan', 'followUpPlan', handleAiDraft.followUpPlan, { label: '随访计划', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.followUpPlan" maxlength="500" show-word-limit placeholder="例如：建议 3 天后复诊，如加重请线下就医。" />
+              </el-form-item>
+              <el-form-item label="医生处方">
+                <div class="prescription-editor">
+                  <div class="prescription-editor-head">
+                    <div class="chips">
+                      <span>已配置 {{ effectivePrescriptionCount }} 项</span>
+                      <span v-if="prescriptionPreview.overallWarnings.length">提醒 {{ prescriptionPreview.overallWarnings.length }} 条</span>
+                      <span v-if="prescriptionConflictDetected">存在联用冲突</span>
+                    </div>
+                    <div class="actions">
+                      <el-button
+                        plain
+                        :loading="prescriptionPreviewLoading"
+                        :disabled="!detail?.id || !handleForm.prescriptions.length"
+                        @click="refreshPrescriptionPreview"
+                      >
+                        检测禁忌
+                      </el-button>
+                      <el-button plain :disabled="!canEdit || medicineLoading" @click="addPrescriptionRow()">
+                        添加药品
+                      </el-button>
+                    </div>
+                  </div>
+                  <el-alert
+                    v-if="!medicineLoading && !medicineOptions.length"
+                    title="当前还没有可用药品目录，请先由管理员维护药品与禁忌规则。"
+                    type="info"
+                    :closable="false"
+                    class="notice"
+                  />
+                  <el-alert
+                    v-if="prescriptionConflictDetected"
+                    title="系统已识别到不可同时用药，请先调整处方。"
+                    :description="prescriptionConflictWarningText"
+                    type="error"
+                    :closable="false"
+                    class="notice"
+                  />
+                  <el-alert
+                    v-if="prescriptionPreview.validationWarnings.length"
+                    title="当前处方内容还不完整。"
+                    :description="prescriptionValidationWarningText"
+                    type="warning"
+                    :closable="false"
+                    class="notice"
+                  />
+                  <el-alert
+                    v-if="!prescriptionConflictDetected && prescriptionPreview.overallWarnings.length"
+                    title="系统已生成用药禁忌提醒。"
+                    :description="prescriptionOverallWarningText"
+                    type="info"
+                    :closable="false"
+                    class="notice"
+                  />
+                  <div v-if="handleForm.prescriptions.length" class="prescription-list">
+                    <article
+                      v-for="(item, index) in handleForm.prescriptions"
+                      :key="item.clientKey"
+                      class="prescription-card"
+                    >
+                      <div class="prescription-card-head">
+                        <div>
+                          <strong>{{ prescriptionMedicineLabel(item) || `药品 ${index + 1}` }}</strong>
+                          <p class="copy" v-if="prescriptionMedicineMeta(item)">{{ prescriptionMedicineMeta(item) }}</p>
+                        </div>
+                        <el-button v-if="canEdit" link type="danger" @click="removePrescriptionRow(index)">移除</el-button>
+                      </div>
+                      <div class="prescription-grid">
+                        <el-select
+                          v-model="item.medicineId"
+                          filterable
+                          clearable
+                          placeholder="选择药品"
+                          @change="handlePrescriptionMedicineChange(item)"
+                        >
+                          <el-option
+                            v-for="option in medicineOptions"
+                            :key="option.id"
+                            :label="medicineOptionLabel(option)"
+                            :value="option.id"
+                          />
+                        </el-select>
+                        <el-input v-model="item.dosage" maxlength="100" placeholder="单次剂量，例如 1 片 / 0.5g" />
+                        <el-input v-model="item.frequency" maxlength="100" placeholder="用药频次，例如 每日 3 次" />
+                        <el-input-number v-model="item.durationDays" :min="1" :max="365" style="width:100%" />
+                        <el-input
+                          v-model="item.medicationInstruction"
+                          maxlength="255"
+                          placeholder="服药说明，例如 饭后服用、多喝水"
+                        />
+                      </div>
+                      <div v-if="prescriptionRowWarnings(item).length" class="prescription-warning-list">
+                        <p
+                          v-for="(warning, warningIndex) in prescriptionRowWarnings(item)"
+                          :key="`${item.clientKey}-warning-${warningIndex}`"
+                        >
+                          {{ warning }}
+                        </p>
+                      </div>
+                    </article>
+                  </div>
+                  <div v-else class="prescription-empty">
+                    <p class="copy">{{ canEdit ? '当前未开具处方，可按需添加药品并自动检测禁忌与联用冲突。' : '当前未开具处方。' }}</p>
+                  </div>
+                </div>
               </el-form-item>
               <el-form-item label="内部备注">
                 <el-input v-model="handleForm.internalRemark" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="仅医生和管理员可见。" />
@@ -1495,7 +1604,10 @@ const followUpAiRegeneratingField = ref('')
 const handleAiRewriteRequirement = ref('')
 const followUpAiRewriteRequirement = ref('')
 const doctor = reactive({ bound: 1, bindingMessage: '', doctorId: null, doctorName: '' })
-const handleForm = reactive({ summary: '', medicalAdvice: '', followUpPlan: '', internalRemark: '' })
+const medicineLoading = ref(false)
+const prescriptionPreviewLoading = ref(false)
+const medicineOptions = ref([])
+const handleForm = reactive({ summary: '', medicalAdvice: '', followUpPlan: '', internalRemark: '', prescriptions: [] })
 const conclusionForm = reactive({
   conditionLevel: '',
   disposition: '',
@@ -1515,6 +1627,7 @@ const messageDraft = reactive({ content: '', attachments: [] })
 const messageAiDraft = reactive(createEmptyMessageAiDraft())
 const handleAiDraft = reactive(createEmptyHandleAiDraft())
 const followUpAiDraft = reactive(createEmptyFollowUpAiDraft())
+const prescriptionPreview = reactive(createEmptyPrescriptionPreview())
 const handleAiUsage = reactive(createEmptyFormAiUsage())
 const followUpAiUsage = reactive(createEmptyFormAiUsage())
 const messageAiScene = ref('opening')
@@ -1542,8 +1655,11 @@ let detailSectionFocusTimer = null
 let messagePollTimer = null
 let messagePollBusy = false
 let doctorLocalDraftTimer = null
+let prescriptionPreviewTimer = null
 let applyingDoctorLocalDraft = false
 let skipNextDoctorLocalDraftPersist = false
+let prescriptionItemSeed = 0
+let prescriptionPreviewRequestId = 0
 const MESSAGE_POLL_INTERVAL = 12000
 const templateSelection = reactive({
   handle_summary: null,
@@ -1886,6 +2002,26 @@ const selectedMessageTemplate = computed(() => {
   const templateId = currentMessageTemplateId.value
   return currentMessageTemplates.value.find(item => item.id === templateId) || null
 })
+const medicineOptionMap = computed(() => {
+  const map = new Map()
+  medicineOptions.value.forEach(item => {
+    if (item?.id) map.set(Number(item.id), item)
+  })
+  return map
+})
+const prescriptionPreviewItemMap = computed(() => {
+  const map = new Map()
+  ensureArray(prescriptionPreview.items).forEach(item => {
+    const medicineId = normalizePositiveInteger(item?.medicineId)
+    if (medicineId) map.set(medicineId, item)
+  })
+  return map
+})
+const effectivePrescriptionCount = computed(() => buildPrescriptionSubmitPayload().length)
+const prescriptionConflictDetected = computed(() => prescriptionPreview.conflictDetected === 1)
+const prescriptionOverallWarningText = computed(() => ensureArray(prescriptionPreview.overallWarnings).filter(Boolean).join('；'))
+const prescriptionConflictWarningText = computed(() => ensureArray(prescriptionPreview.conflictWarnings).filter(Boolean).join('；') || '当前处方存在不可同时用药，请调整后再提交。')
+const prescriptionValidationWarningText = computed(() => ensureArray(prescriptionPreview.validationWarnings).filter(Boolean).join('；'))
 const hasCurrentFollowUpFormContent = computed(() => !!(
   trimText(followUpForm.summary)
   || trimText(followUpForm.advice)
@@ -2638,7 +2774,11 @@ function handleDetailDrawerKeydown(event) {
   }
 }
 
-function refreshAll() { loadDoctor(); loadRecords() }
+function refreshAll() {
+  loadDoctor()
+  loadRecords()
+  loadMedicineOptions(true)
+}
 function refreshDoctorWorkspaceContext(showLoading = false) {
   accountContext?.refreshDoctorWorkspaceSummary?.(showLoading)
 }
@@ -2823,10 +2963,12 @@ function openDetail(id, routeAction = '') {
   flushDoctorLocalDraftBeforeReset()
   detailVisible.value = true
   detailLoading.value = true
+  if (!medicineOptions.value.length && !medicineLoading.value) loadMedicineOptions(true)
   stopMessagePolling()
   clearMessageNewState()
   resetMessageSyncState()
   clearFocusedDetailSection()
+  resetPrescriptionPreviewState()
   consultationMessages.value = []
   messageLoading.value = false
   messageSending.value = false
@@ -2922,6 +3064,8 @@ function syncForms() {
   handleForm.medicalAdvice = handle?.medicalAdvice || ''
   handleForm.followUpPlan = handle?.followUpPlan || ''
   handleForm.internalRemark = handle?.internalRemark || ''
+  replacePrescriptionRows(detail.value?.prescriptions)
+  resetPrescriptionPreview()
   const conclusion = detail.value?.doctorConclusion
   conclusionForm.conditionLevel = conclusion?.conditionLevel || ''
   conclusionForm.disposition = conclusion?.disposition || ''
@@ -3739,6 +3883,258 @@ function normalizeMessageAiDraft(data) {
     riskFlags: Array.isArray(data?.riskFlags) ? data.riskFlags.filter(Boolean) : []
   }
 }
+function ensureArray(value) {
+  return Array.isArray(value) ? value.filter(item => item != null) : []
+}
+function normalizePositiveInteger(value) {
+  const number = Number(value)
+  return Number.isInteger(number) && number > 0 ? number : null
+}
+function nullableTrimText(value) {
+  const text = trimText(value)
+  return text || null
+}
+function createEmptyPrescriptionPreview() {
+  return {
+    conflictDetected: 0,
+    overallWarnings: [],
+    conflictWarnings: [],
+    validationWarnings: [],
+    items: []
+  }
+}
+function resetPrescriptionPreview() {
+  Object.assign(prescriptionPreview, createEmptyPrescriptionPreview())
+}
+function resetPrescriptionPreviewState() {
+  clearPrescriptionPreviewTimer()
+  prescriptionPreviewRequestId += 1
+  prescriptionPreviewLoading.value = false
+  resetPrescriptionPreview()
+}
+function clearPrescriptionPreviewTimer() {
+  if (!prescriptionPreviewTimer) return
+  clearTimeout(prescriptionPreviewTimer)
+  prescriptionPreviewTimer = null
+}
+function nextPrescriptionClientKey() {
+  prescriptionItemSeed += 1
+  return `prescription-${Date.now()}-${prescriptionItemSeed}`
+}
+function medicineOptionLabel(item) {
+  return [item?.name, item?.specification].filter(Boolean).join(' / ') || '未命名药品'
+}
+function normalizeMedicineOption(item) {
+  return {
+    ...(item || {}),
+    id: normalizePositiveInteger(item?.id),
+    name: trimText(item?.name),
+    genericName: trimText(item?.genericName),
+    categoryName: trimText(item?.categoryName),
+    specification: trimText(item?.specification),
+    warningTexts: ensureArray(item?.warningTexts).map(value => trimText(value)).filter(Boolean),
+    conflictMedicineIds: ensureArray(item?.conflictMedicineIds).map(value => normalizePositiveInteger(value)).filter(Boolean),
+    status: Number(item?.status || 0) === 1 ? 1 : 0
+  }
+}
+function loadMedicineOptions(silent = false) {
+  medicineLoading.value = true
+  get('/api/doctor/medicine/options', data => {
+    medicineOptions.value = ensureArray(data).map(item => normalizeMedicineOption(item)).filter(item => item.id)
+    medicineLoading.value = false
+  }, message => {
+    medicineLoading.value = false
+    medicineOptions.value = []
+    if (!silent) ElMessage.warning(message || '药品目录加载失败')
+  })
+}
+function createPrescriptionFormItem(item = {}) {
+  return {
+    clientKey: item?.clientKey || nextPrescriptionClientKey(),
+    medicineId: normalizePositiveInteger(item?.medicineId),
+    medicineName: trimText(item?.medicineName),
+    specification: trimText(item?.specification),
+    genericName: trimText(item?.genericName),
+    categoryName: trimText(item?.categoryName),
+    dosage: trimText(item?.dosage),
+    frequency: trimText(item?.frequency),
+    durationDays: normalizePositiveInteger(item?.durationDays),
+    medicationInstruction: trimText(item?.medicationInstruction)
+  }
+}
+function normalizePrescriptionFormList(items) {
+  return ensureArray(items).map(item => createPrescriptionFormItem(item))
+}
+function replacePrescriptionRows(items) {
+  handleForm.prescriptions.splice(0, handleForm.prescriptions.length, ...normalizePrescriptionFormList(items))
+}
+function addPrescriptionRow(seed = {}) {
+  handleForm.prescriptions.push(createPrescriptionFormItem(seed))
+}
+function removePrescriptionRow(index) {
+  handleForm.prescriptions.splice(index, 1)
+  if (!handleForm.prescriptions.length) resetPrescriptionPreview()
+}
+function findMedicineOption(medicineId) {
+  const id = normalizePositiveInteger(medicineId)
+  return id ? medicineOptionMap.value.get(id) || null : null
+}
+function handlePrescriptionMedicineChange(item) {
+  if (!item) return
+  const option = findMedicineOption(item.medicineId)
+  item.medicineName = option?.name || ''
+  item.specification = option?.specification || ''
+  item.genericName = option?.genericName || ''
+  item.categoryName = option?.categoryName || ''
+}
+function prescriptionMedicineLabel(item) {
+  const option = findMedicineOption(item?.medicineId)
+  return medicineOptionLabel(option || item)
+}
+function prescriptionMedicineMeta(item) {
+  const option = findMedicineOption(item?.medicineId) || item
+  return [option?.genericName, option?.categoryName].filter(Boolean).join(' · ')
+}
+function hasPrescriptionInput(item) {
+  return !!(
+    normalizePositiveInteger(item?.medicineId)
+    || trimText(item?.dosage)
+    || trimText(item?.frequency)
+    || normalizePositiveInteger(item?.durationDays)
+    || trimText(item?.medicationInstruction)
+  )
+}
+function effectivePrescriptionRows() {
+  return ensureArray(handleForm.prescriptions).filter(item => hasPrescriptionInput(item))
+}
+function buildPrescriptionSubmitPayload() {
+  return effectivePrescriptionRows().map(item => ({
+    medicineId: normalizePositiveInteger(item?.medicineId),
+    dosage: nullableTrimText(item?.dosage),
+    frequency: nullableTrimText(item?.frequency),
+    durationDays: normalizePositiveInteger(item?.durationDays),
+    medicationInstruction: nullableTrimText(item?.medicationInstruction)
+  }))
+}
+function buildPrescriptionDraftSnapshot() {
+  return effectivePrescriptionRows().map(item => ({
+    medicineId: normalizePositiveInteger(item?.medicineId),
+    medicineName: trimText(item?.medicineName),
+    specification: trimText(item?.specification),
+    genericName: trimText(item?.genericName),
+    categoryName: trimText(item?.categoryName),
+    dosage: trimText(item?.dosage),
+    frequency: trimText(item?.frequency),
+    durationDays: normalizePositiveInteger(item?.durationDays),
+    medicationInstruction: trimText(item?.medicationInstruction)
+  }))
+}
+function normalizePrescriptionPreviewItem(item) {
+  return {
+    medicineId: normalizePositiveInteger(item?.medicineId),
+    medicineName: trimText(item?.medicineName),
+    specification: trimText(item?.specification),
+    warningSummary: trimText(item?.warningSummary),
+    warningDetails: ensureArray(item?.warningDetails).map(value => trimText(value)).filter(Boolean)
+  }
+}
+function applyPrescriptionPreview(data) {
+  const normalized = {
+    ...createEmptyPrescriptionPreview(),
+    ...(data || {}),
+    conflictDetected: Number(data?.conflictDetected || 0) === 1 ? 1 : 0,
+    overallWarnings: ensureArray(data?.overallWarnings).map(value => trimText(value)).filter(Boolean),
+    conflictWarnings: ensureArray(data?.conflictWarnings).map(value => trimText(value)).filter(Boolean),
+    validationWarnings: ensureArray(data?.validationWarnings).map(value => trimText(value)).filter(Boolean),
+    items: ensureArray(data?.items).map(item => normalizePrescriptionPreviewItem(item)).filter(item => item.medicineId)
+  }
+  Object.assign(prescriptionPreview, createEmptyPrescriptionPreview(), normalized)
+}
+function prescriptionRowWarnings(item) {
+  const medicineId = normalizePositiveInteger(item?.medicineId)
+  const optionWarnings = ensureArray(findMedicineOption(medicineId)?.warningTexts).map(value => trimText(value)).filter(Boolean)
+  const previewWarnings = ensureArray(prescriptionPreviewItemMap.value.get(medicineId)?.warningDetails).map(value => trimText(value)).filter(Boolean)
+  return [...new Set([...previewWarnings, ...optionWarnings])]
+}
+function requestPrescriptionPreview(prescriptions = buildPrescriptionSubmitPayload(), options = {}) {
+  const {
+    showLoading = false,
+    silent = false,
+    onSuccess = null
+  } = options
+  const consultationId = normalizePositiveInteger(detail.value?.id)
+  if (!consultationId) {
+    resetPrescriptionPreview()
+    return
+  }
+  const normalizedPrescriptions = ensureArray(prescriptions)
+  if (!normalizedPrescriptions.length) {
+    resetPrescriptionPreview()
+    return
+  }
+  const requestId = ++prescriptionPreviewRequestId
+  if (showLoading) prescriptionPreviewLoading.value = true
+  post('/api/doctor/consultation/prescription/preview', {
+    consultationId,
+    prescriptions: normalizedPrescriptions
+  }, data => {
+    if (requestId !== prescriptionPreviewRequestId) return
+    applyPrescriptionPreview(data)
+    if (showLoading) prescriptionPreviewLoading.value = false
+    onSuccess?.(prescriptionPreview)
+  }, message => {
+    if (requestId !== prescriptionPreviewRequestId) return
+    if (showLoading) prescriptionPreviewLoading.value = false
+    if (!silent) ElMessage.warning(message || '处方禁忌检测失败')
+  })
+}
+function schedulePrescriptionPreview() {
+  clearPrescriptionPreviewTimer()
+  if (!detailVisible.value || !detail.value?.id) return
+  const prescriptions = buildPrescriptionSubmitPayload()
+  if (!prescriptions.length) {
+    resetPrescriptionPreview()
+    return
+  }
+  prescriptionPreviewTimer = setTimeout(() => {
+    requestPrescriptionPreview(prescriptions, { silent: true })
+  }, 320)
+}
+function refreshPrescriptionPreview() {
+  const prescriptions = buildPrescriptionSubmitPayload()
+  if (!prescriptions.length) {
+    resetPrescriptionPreview()
+    ElMessage.info('当前还没有可检测的处方内容')
+    return
+  }
+  requestPrescriptionPreview(prescriptions, {
+    showLoading: true,
+    onSuccess: preview => {
+      if (preview.conflictDetected === 1) {
+        ElMessage.warning('已识别到联用冲突，请先调整处方')
+        return
+      }
+      ElMessage.success(preview.overallWarnings.length ? '已更新处方禁忌提醒' : '当前处方未识别到禁忌冲突')
+    }
+  })
+}
+function validatePrescriptionRowsForSubmit() {
+  const rows = effectivePrescriptionRows()
+  if (!rows.length) return null
+  const usedMedicineIds = new Set()
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index]
+    const rowNumber = index + 1
+    const medicineId = normalizePositiveInteger(row?.medicineId)
+    if (!medicineId) return `请先选择第 ${rowNumber} 个药品`
+    if (!nullableTrimText(row?.dosage)) return `请填写第 ${rowNumber} 个药品的单次剂量`
+    if (!nullableTrimText(row?.frequency)) return `请填写第 ${rowNumber} 个药品的用药频次`
+    if (!normalizePositiveInteger(row?.durationDays)) return `请填写第 ${rowNumber} 个药品的用药天数`
+    if (usedMedicineIds.has(medicineId)) return `药品“${prescriptionMedicineLabel(row)}”重复选择，请合并为一条处方`
+    usedMedicineIds.add(medicineId)
+  }
+  return null
+}
 function normalizeMessageAiScene(value) {
   return ['opening', 'clarify', 'check_result', 'follow_up'].includes(`${value || ''}`) ? `${value}` : 'opening'
 }
@@ -4000,7 +4396,8 @@ function buildDoctorLocalDraftSnapshot() {
       summary: trimText(handleForm.summary),
       medicalAdvice: trimText(handleForm.medicalAdvice),
       followUpPlan: trimText(handleForm.followUpPlan),
-      internalRemark: trimText(handleForm.internalRemark)
+      internalRemark: trimText(handleForm.internalRemark),
+      prescriptions: buildPrescriptionDraftSnapshot()
     },
     conclusionForm: {
       conditionLevel: conclusionForm.conditionLevel || '',
@@ -4141,6 +4538,7 @@ function restoreDoctorLocalDraft(recordId = detail.value?.id) {
   handleForm.medicalAdvice = snapshot.handleForm?.medicalAdvice || ''
   handleForm.followUpPlan = snapshot.handleForm?.followUpPlan || ''
   handleForm.internalRemark = snapshot.handleForm?.internalRemark || ''
+  replacePrescriptionRows(snapshot.handleForm?.prescriptions)
   conclusionForm.conditionLevel = snapshot.conclusionForm?.conditionLevel || ''
   conclusionForm.disposition = snapshot.conclusionForm?.disposition || ''
   conclusionForm.diagnosisDirection = snapshot.conclusionForm?.diagnosisDirection || ''
@@ -4170,6 +4568,7 @@ function restoreDoctorLocalDraft(recordId = detail.value?.id) {
 
   doctorLocalDraftSavedAt.value = payload.savedAt || ''
   doctorLocalDraftRestoredAt.value = payload.savedAt || ''
+  schedulePrescriptionPreview()
   return true
 }
 function flushDoctorLocalDraftBeforeReset() {
@@ -4643,18 +5042,19 @@ function submitHandle(status, options = {}) {
   if (status === 'completed' && conclusionForm.isConsistentWithAi === 0 && !conclusionForm.aiMismatchReasons.length && !`${conclusionForm.aiMismatchRemark || ''}`.trim()) {
     return ElMessage.warning('与 AI 不一致时请至少选择一个差异原因或填写补充说明')
   }
+  const prescriptionValidationMessage = validatePrescriptionRowsForSubmit()
+  if (prescriptionValidationMessage) return ElMessage.warning(prescriptionValidationMessage)
+  const prescriptions = buildPrescriptionSubmitPayload()
   const openNext = options.openNext === true
   const nextPlan = openNext ? buildAdjacentDetailPlan(1) : null
-  submitLoading.value = true
-  submitStatus.value = status
-  handleSubmitMode.value = openNext ? 'next' : 'stay'
-  post('/api/doctor/consultation/handle', {
+  const payload = {
     consultationId: detail.value.id,
     status,
     summary: `${handleForm.summary || ''}`.trim(),
     medicalAdvice: `${handleForm.medicalAdvice || ''}`.trim(),
     followUpPlan: `${handleForm.followUpPlan || ''}`.trim(),
     internalRemark: `${handleForm.internalRemark || ''}`.trim(),
+    prescriptions,
     conditionLevel: conclusionForm.conditionLevel || null,
     disposition: conclusionForm.disposition || null,
     diagnosisDirection: `${conclusionForm.diagnosisDirection || ''}`.trim(),
@@ -4666,21 +5066,46 @@ function submitHandle(status, options = {}) {
     aiMismatchRemark: conclusionForm.isConsistentWithAi === 0 ? `${conclusionForm.aiMismatchRemark || ''}`.trim() : '',
     patientInstruction: `${conclusionForm.patientInstruction || ''}`.trim(),
     aiLogId: handleAiUsage.applied === 1 && handleAiUsage.recordId === detail.value.id ? handleAiUsage.logId : null
-  }, () => {
-    submitLoading.value = false
-    submitStatus.value = ''
-    handleSubmitMode.value = 'stay'
-    ElMessage.success(status === 'completed' ? '医生处理结果已保存' : '已标记为处理中')
-    refreshDoctorWorkspaceContext()
-    reopenDetailAfterMutation({
-      reopenId: detail.value.id,
-      nextPlan
+  }
+  const executeSubmit = () => {
+    submitLoading.value = true
+    submitStatus.value = status
+    handleSubmitMode.value = openNext ? 'next' : 'stay'
+    post('/api/doctor/consultation/handle', payload, () => {
+      submitLoading.value = false
+      submitStatus.value = ''
+      handleSubmitMode.value = 'stay'
+      ElMessage.success(status === 'completed' ? '医生处理结果已保存' : '已标记为处理中')
+      refreshDoctorWorkspaceContext()
+      reopenDetailAfterMutation({
+        reopenId: detail.value.id,
+        nextPlan
+      })
+    }, message => {
+      submitLoading.value = false
+      submitStatus.value = ''
+      handleSubmitMode.value = 'stay'
+      ElMessage.warning(message || '医生处理结果保存失败')
     })
-  }, message => {
-    submitLoading.value = false
-    submitStatus.value = ''
-    handleSubmitMode.value = 'stay'
-    ElMessage.warning(message || '医生处理结果保存失败')
+  }
+  if (!prescriptions.length) {
+    resetPrescriptionPreview()
+    executeSubmit()
+    return
+  }
+  requestPrescriptionPreview(prescriptions, {
+    showLoading: true,
+    onSuccess: preview => {
+      if (preview.conflictDetected === 1) {
+        ElMessage.warning(prescriptionConflictWarningText.value || '当前处方存在不可同时用药，请调整后再提交')
+        return
+      }
+      if (preview.validationWarnings.length) {
+        ElMessage.warning(preview.validationWarnings[0])
+        return
+      }
+      executeSubmit()
+    }
   })
 }
 function submitFollowUp(options = {}) {
@@ -4808,6 +5233,21 @@ function doctorRecommendationScoreText(item) {
 }
 function displayAnswer(answer) { return answer.fieldType === 'switch' ? (answer.fieldValue === '1' ? '是' : '否') : (answer.fieldValue || '-') }
 function statusLabel(value) { return ({ submitted: '已提交', triaged: '已分诊', processing: '处理中', completed: '已完成' })[value] || value || '-' }
+function paymentStatusLabel(payment) {
+  if (!payment) return '未收费'
+  const amount = Number(payment.amount ?? 0)
+  if (Number.isFinite(amount) && amount <= 0) return '免费'
+  if (payment.status === 'paid') return '已支付'
+  if (payment.status === 'pending') return '待支付'
+  return payment.status || '未收费'
+}
+function paymentChannelLabel(channel) {
+  return ({ mock: '模拟支付', free: '免费' })[`${channel || ''}`.trim().toLowerCase()] || (channel || '-')
+}
+function formatAmount(value) {
+  const amount = Number(value ?? 0)
+  return `￥${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`
+}
 function handleStatusLabel(value) { return value === 'completed' ? '处理完成' : '处理中' }
 function statusTagType(value) { return ({ submitted: 'info', triaged: 'primary', processing: 'warning', completed: 'success' })[value] || 'info' }
 function triageActionLabel(value) { return ({ emergency: '立即急诊', offline: '尽快线下就医', followup: '复诊随访', online: '线上继续' })[value] || '继续关注' }
@@ -4848,6 +5288,7 @@ watch(detailVisible, value => {
     stopMessagePolling()
     clearMessageNewState()
     resetMessageSyncState()
+    resetPrescriptionPreviewState()
     detail.value = null
     consultationMessages.value = []
     messageLoading.value = false
@@ -4911,6 +5352,10 @@ watch(
 watch(() => conclusionForm.isConsistentWithAi, value => { if (value !== 0) clearAiMismatchReview() })
 watch(() => conclusionForm.needFollowUp, value => { if (value !== 1) conclusionForm.followUpWithinDays = null })
 watch(() => followUpForm.needRevisit, value => { if (value !== 1) followUpForm.nextFollowUpDate = '' })
+watch(() => handleForm.prescriptions, () => {
+  if (applyingDoctorLocalDraft) return
+  schedulePrescriptionPreview()
+}, { deep: true })
 watch(
   [
     detailVisible,
@@ -4946,6 +5391,7 @@ watch(replyTemplates, () => {
 onBeforeUnmount(() => {
   persistDoctorLocalDraft({ immediate: true })
   stopMessagePolling()
+  resetPrescriptionPreviewState()
   if (typeof window !== 'undefined') {
     window.removeEventListener('beforeunload', handleDoctorDraftBeforeUnload)
   }
@@ -5794,6 +6240,61 @@ onMounted(() => {
   color: #36555c;
 }
 
+.prescription-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.prescription-editor-head,
+.prescription-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.prescription-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.prescription-card {
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(19, 73, 80, 0.1);
+  background: rgba(19, 73, 80, 0.04);
+}
+
+.prescription-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.prescription-warning-list {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(210, 155, 47, 0.12);
+}
+
+.prescription-warning-list p,
+.prescription-empty p {
+  margin: 0;
+  line-height: 1.7;
+  color: #5f4b1f;
+}
+
+.prescription-empty {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(19, 73, 80, 0.04);
+}
+
 :deep(.focus-action-input .el-textarea__inner) {
   border-color: rgba(15, 102, 101, 0.28);
   box-shadow: 0 0 0 3px rgba(15, 102, 101, 0.12);
@@ -5951,6 +6452,7 @@ onMounted(() => {
 @media (max-width: 1100px) {
   .stats,
   .grid,
+  .prescription-grid,
   .patient-action-grid,
   .workflow-assistant-grid,
   .archive-grid,
@@ -5963,6 +6465,7 @@ onMounted(() => {
 @media (max-width: 760px) {
   .stats,
   .grid,
+  .prescription-grid,
   .patient-action-grid,
   .workflow-assistant-grid,
   .archive-grid,
@@ -5974,6 +6477,8 @@ onMounted(() => {
   .head,
   .toolbar,
   .actions,
+  .prescription-editor-head,
+  .prescription-card-head,
   .archive-toolbar,
   .head-actions,
   .patient-action-card-head,

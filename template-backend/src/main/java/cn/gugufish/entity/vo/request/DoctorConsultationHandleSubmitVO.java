@@ -63,6 +63,8 @@ public class DoctorConsultationHandleSubmitVO {
     @Length(max = 500)
     String patientInstruction;
 
+    List<DoctorPrescriptionItemSubmitVO> prescriptions;
+
     @Positive
     Integer aiLogId;
 }

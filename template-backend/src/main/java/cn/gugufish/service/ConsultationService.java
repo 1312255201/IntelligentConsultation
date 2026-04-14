@@ -16,6 +16,7 @@ public interface ConsultationService {
     List<ConsultationRecordVO> listRecords(int accountId);
     ConsultationRecordVO recordDetail(int accountId, int id);
     String createRecord(int accountId, ConsultationRecordCreateVO vo);
+    String mockPay(int accountId, int recordId);
     ConsultationFeedbackOptionsVO feedbackOptions();
     String submitTriageFeedback(int accountId, ConsultationTriageFeedbackSubmitVO vo);
     String submitServiceFeedback(int accountId, ConsultationServiceFeedbackSubmitVO vo);

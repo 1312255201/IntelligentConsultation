@@ -8,22 +8,18 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.util.Date;
 
 @Data
-@TableName("db_consultation_category")
+@TableName("db_medicine_interaction")
 @NoArgsConstructor
 @AllArgsConstructor
-public class ConsultationCategory implements BaseData {
+public class MedicineInteraction implements BaseData {
     @TableId(type = IdType.AUTO)
     Integer id;
-    Integer departmentId;
-    String name;
-    String code;
-    String description;
-    BigDecimal priceAmount;
-    Integer sort;
+    Integer medicineId;
+    Integer conflictMedicineId;
+    String interactionText;
     Integer status;
     Date createTime;
     Date updateTime;

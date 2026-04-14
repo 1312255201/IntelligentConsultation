@@ -12,19 +12,23 @@ import java.math.BigDecimal;
 import java.util.Date;
 
 @Data
-@TableName("db_consultation_category")
+@TableName("db_consultation_payment")
 @NoArgsConstructor
 @AllArgsConstructor
-public class ConsultationCategory implements BaseData {
+public class ConsultationPayment implements BaseData {
     @TableId(type = IdType.AUTO)
     Integer id;
-    Integer departmentId;
-    String name;
-    String code;
-    String description;
-    BigDecimal priceAmount;
-    Integer sort;
-    Integer status;
+    Integer consultationId;
+    Integer accountId;
+    Integer patientId;
+    String patientName;
+    Integer categoryId;
+    String categoryName;
+    BigDecimal amount;
+    String status;
+    String paymentNo;
+    String paymentChannel;
+    Date paidTime;
     Date createTime;
     Date updateTime;
 }

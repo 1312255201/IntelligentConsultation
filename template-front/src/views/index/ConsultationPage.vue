@@ -14,6 +14,10 @@
         <strong>{{ records.length }}</strong>
       </article>
       <article class="stat-card">
+        <span>待支付</span>
+        <strong>{{ pendingPaymentCount }}</strong>
+      </article>
+      <article class="stat-card">
         <span>今日新增</span>
         <strong>{{ todayCount }}</strong>
       </article>
@@ -200,6 +204,7 @@
             <strong>{{ item.name }}</strong>
             <p>{{ item.description || item.defaultTemplateDescription || '用于装配对应场景下的问诊前置资料。' }}</p>
             <div class="category-meta">
+              <span>{{ formatAmount(item.priceAmount) }}</span>
               <span>{{ item.defaultTemplateName }}</span>
               <span>{{ item.defaultTemplateFieldCount || 0 }} 项字段</span>
             </div>
@@ -271,6 +276,12 @@
               提交并进入 AI 导诊
             </el-button>
           </div>
+        </div>
+
+        <div v-if="currentCategory" class="template-meta">
+          <span>分类：{{ currentCategory.name }}</span>
+          <span>参考费用：{{ formatAmount(currentCategory.priceAmount) }}</span>
+          <span v-if="currentCategory.departmentName">科室：{{ currentCategory.departmentName }}</span>
         </div>
 
         <el-skeleton v-if="templateLoading" :rows="8" animated />
@@ -454,6 +465,14 @@
             <el-tag type="warning" effect="light">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="收费" min-width="170">
+          <template #default="{ row }">
+            <div class="record-message-cell">
+              <el-tag :type="paymentStatusTagType(row.payment)" effect="light">{{ paymentStatusLabel(row.payment) }}</el-tag>
+              <span>{{ formatAmount(row.payment?.amount) }}</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="智能分配" min-width="220">
           <template #default="{ row }">
             <div class="record-message-cell">
@@ -509,12 +528,48 @@
             <article><span>就诊人</span><strong>{{ detailRecord.patientName }}</strong></article>
             <article><span>问诊分类</span><strong>{{ detailRecord.categoryName }}</strong></article>
             <article><span>状态</span><strong>{{ statusLabel(detailRecord.status) }}</strong></article>
+            <article><span>收费金额</span><strong>{{ formatAmount(detailPayment?.amount) }}</strong></article>
+            <article><span>收费状态</span><strong>{{ paymentStatusLabel(detailPayment) }}</strong></article>
           </div>
 
           <div class="detail-summary">
             <p><strong>标题：</strong>{{ detailRecord.title }}</p>
             <p><strong>主诉摘要：</strong>{{ detailRecord.chiefComplaint || '未自动提取' }}</p>
             <p><strong>健康摘要：</strong>{{ detailRecord.healthSummary || '未关联健康档案摘要' }}</p>
+          </div>
+
+          <div
+            v-if="detailPayment"
+            ref="paymentPanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'payment' }]"
+          >
+            <div class="doctor-recommend-head">
+              <div>
+                <strong>问诊收费</strong>
+                <span>{{ detailPayment.status === 'paid' ? '当前已完成模拟支付，可继续按原流程查看 AI 导诊与问诊详情。' : '当前为演示版模拟收费，不接真实支付，点击按钮即可完成付款。' }}</span>
+              </div>
+              <el-tag :type="paymentStatusTagType(detailPayment)" effect="light">
+                {{ paymentStatusLabel(detailPayment) }}
+              </el-tag>
+            </div>
+            <div class="session-meta">
+              <span>应付金额 {{ formatAmount(detailPayment.amount) }}</span>
+              <span v-if="detailPayment.paymentNo">支付单号 {{ detailPayment.paymentNo }}</span>
+              <span v-if="detailPayment.paymentChannel">支付方式 {{ paymentChannelLabel(detailPayment.paymentChannel) }}</span>
+              <span v-if="detailPayment.paidTime">支付时间 {{ formatDate(detailPayment.paidTime) }}</span>
+            </div>
+            <p class="result-copy">{{ paymentSummaryText(detailPayment) }}</p>
+            <div class="journey-actions">
+              <el-button
+                v-if="detailPayment.status === 'pending'"
+                type="primary"
+                :loading="paymentSubmitting"
+                @click="submitMockPayment()"
+              >
+                模拟支付
+              </el-button>
+              <el-button plain @click="openTriageWorkspace(detailRecord.id)">打开 AI 导诊</el-button>
+            </div>
           </div>
 
           <el-alert
@@ -924,6 +979,30 @@
             <div class="summary-panel">
               <p><strong>处理建议：</strong>{{ detailRecord.doctorHandle.medicalAdvice || '当前暂无详细建议，请稍后查看。' }}</p>
               <p><strong>随访计划：</strong>{{ detailRecord.doctorHandle.followUpPlan || '当前暂无随访安排。' }}</p>
+            </div>
+          </div>
+
+          <div v-if="detailRecord.prescriptions?.length" class="result-panel">
+            <div class="doctor-recommend-head">
+              <strong>医生处方</strong>
+              <span>展示医生开具的药品方案，以及系统自动识别出的用药禁忌和联用冲突提醒。</span>
+            </div>
+            <div class="doctor-recommend-list">
+              <article
+                v-for="item in detailRecord.prescriptions"
+                :key="`prescription-${item.id || item.medicineId || item.medicineName}`"
+                class="doctor-recommend-card"
+              >
+                <div class="session-meta">
+                  <span>{{ item.medicineName }}</span>
+                  <span v-if="item.specification">{{ item.specification }}</span>
+                  <span>{{ item.dosage || '-' }}</span>
+                  <span>{{ item.frequency || '-' }}</span>
+                  <span>{{ item.durationDays ? `${item.durationDays} 天` : '-' }}</span>
+                </div>
+                <p class="result-copy"><strong>服药说明：</strong>{{ item.medicationInstruction || '请按医嘱规范使用。' }}</p>
+                <p v-if="item.warningSummary" class="result-copy"><strong>禁忌提醒：</strong>{{ item.warningSummary }}</p>
+              </article>
             </div>
           </div>
 
@@ -1439,6 +1518,7 @@ const conversationPendingNewMessageLabel = ref('')
 const conversationLastSyncedAt = ref(null)
 const conversationSyncStatus = ref('idle')
 const archiveSummaryPanelRef = ref(null)
+const paymentPanelRef = ref(null)
 const doctorHandlePanelRef = ref(null)
 const doctorConclusionPanelRef = ref(null)
 const followUpPanelRef = ref(null)
@@ -1467,6 +1547,7 @@ const doctorGuidanceAckSubmitting = ref(false)
 const feedbackOptions = ref({ departments: [], doctors: [] })
 const feedbackSubmitting = ref(false)
 const serviceFeedbackSubmitting = ref(false)
+const paymentSubmitting = ref(false)
 const formData = reactive({})
 const triageAiDraft = reactive({ content: '' })
 const messageDraft = reactive({ content: '', attachments: [], sceneType: '' })
@@ -1558,6 +1639,7 @@ const todayCount = computed(() => {
 })
 const unreadDoctorReplyCount = computed(() => records.value.filter(recordHasUnreadDoctorReply).length)
 const waitingDoctorHandleCount = computed(() => records.value.filter(item => recordProgressStage(item) === 'waiting_doctor').length)
+const pendingPaymentCount = computed(() => records.value.filter(isPendingPaymentRecord).length)
 const pendingFollowUpCount = computed(() => records.value.filter(item => ['pending', 'due_today', 'overdue'].includes(followUpState(item))).length)
 const pendingServiceFeedbackCount = computed(() => records.value.filter(isPendingServiceFeedbackRecord).length)
 const dueTodayFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'due_today').length)
@@ -1601,6 +1683,7 @@ const filteredRecords = computed(() => records.value
   .slice()
   .sort(compareRecordOrder))
 const detailArchiveSummary = computed(() => detailRecord.value?.archiveSummary || null)
+const detailPayment = computed(() => normalizePayment(detailRecord.value?.payment))
 const detailMessageSummary = computed(() => getMessageSummary(detailRecord.value))
 const conversationSyncText = computed(() => {
   if (conversationSyncStatus.value === 'failed') {
@@ -1627,6 +1710,7 @@ const conversationPendingNewMessageText = computed(() => {
 const patientJourneyLeadText = computed(() => {
   const record = detailRecord.value
   if (!record) return ''
+  if (isPendingPaymentRecord(record)) return '当前问诊已生成收费记录，建议先完成模拟支付，再继续查看 AI 导诊和后续沟通内容。'
   const stage = recordProgressStage(record)
   if (stage === 'waiting_doctor') return '医生接手前，你仍可以继续补充症状变化、检查结果和相关图片资料。'
   if (recordHasUnreadDoctorReply(record)) return '医生刚有新回复，建议先查看本轮处理结果，再决定是否继续补充资料。'
@@ -1642,6 +1726,7 @@ const patientJourneySummaryText = computed(() => {
   const record = detailRecord.value
   if (!record) return ''
   const parts = []
+  if (record.payment) parts.push(paymentSummaryText(record.payment))
   const doctorName = currentDoctorName(record)
   if (record?.doctorHandle?.completeTime) {
     parts.push(`${doctorName || '医生'}已于 ${formatDate(record.doctorHandle.completeTime)} 完成本轮处理`)
@@ -1665,6 +1750,7 @@ const patientJourneyTags = computed(() => {
   const record = detailRecord.value
   if (!record) return []
   const tags = [recordProgressLabel(record)]
+  if (record.payment) tags.push(paymentStatusLabel(record.payment))
   const doctorName = currentDoctorName(record)
   if (doctorName) tags.push(`跟进医生 ${doctorName}`)
   const followState = followUpState(record)
@@ -1682,7 +1768,19 @@ const patientJourneyTags = computed(() => {
 const patientJourneyCards = computed(() => {
   const record = detailRecord.value
   if (!record) return []
-  const cards = [{
+  const cards = []
+  if (record.payment) {
+    cards.push({
+      key: 'payment',
+      title: '问诊收费',
+      status: paymentStatusLabel(record.payment),
+      description: abbreviateText(paymentSummaryText(record.payment), 96),
+      action: 'payment',
+      actionLabel: isPendingPaymentRecord(record) ? '去支付' : '查看收费',
+      tone: isPendingPaymentRecord(record) ? 'warning' : 'success'
+    })
+  }
+  cards.push({
     key: 'conversation',
     title: '医患沟通',
     status: recordMessageStatus(record),
@@ -1690,7 +1788,7 @@ const patientJourneyCards = computed(() => {
     action: 'conversation',
     actionLabel: recordHasUnreadDoctorReply(record) ? '查看回复' : '打开沟通',
     tone: recordHasUnreadDoctorReply(record) ? 'success' : recordProgressStage(record) === 'waiting_doctor' ? 'warning' : 'info'
-  }]
+  })
   if (record.doctorHandle || record.doctorConclusion) {
     const hasConclusion = !!record.doctorConclusion
     cards.push({
@@ -1929,7 +2027,7 @@ function normalizeRecordRouteQuery(query = {}) {
 
 function resolveConsultationAction(value) {
   const action = typeof value === 'string' ? value.trim() : ''
-  return ['conversation', 'followup', 'feedback', 'archive', 'doctor_handle', 'doctor_conclusion', 'guidance_ack', 'check_result', 'followup_update'].includes(action) ? action : ''
+  return ['conversation', 'payment', 'followup', 'feedback', 'archive', 'doctor_handle', 'doctor_conclusion', 'guidance_ack', 'check_result', 'followup_update'].includes(action) ? action : ''
 }
 
 function buildRecordRouteQuery({ includeId = true, action = null } = {}) {
@@ -1989,23 +2087,28 @@ function focusDetailActionSection(action, recordId = null) {
   const targetAction = resolveConsultationAction(action)
   if (!targetAction) return
   nextTick(() => {
-    const target = targetAction === 'conversation'
-      ? (conversationInputRef.value?.$el || conversationInputRef.value?.textarea || conversationInputRef.value)
-      : targetAction === 'followup'
-        ? (followUpPanelRef.value?.$el || followUpPanelRef.value)
-        : targetAction === 'feedback'
-          ? (serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value)
-          : targetAction === 'archive'
-            ? (archiveSummaryPanelRef.value?.$el || archiveSummaryPanelRef.value)
-            : targetAction === 'doctor_handle'
-              ? (doctorHandlePanelRef.value?.$el || doctorHandlePanelRef.value)
-              : targetAction === 'doctor_conclusion'
-                ? (doctorConclusionPanelRef.value?.$el || doctorConclusionPanelRef.value)
-                : targetAction === 'guidance_ack'
-                  ? (guidanceAckPanelRef.value?.$el || guidanceAckPanelRef.value)
-                : targetAction === 'check_result'
-                  ? (checkResultUpdatePanelRef.value?.$el || checkResultUpdatePanelRef.value)
-                  : (followUpUpdatePanelRef.value?.$el || followUpUpdatePanelRef.value)
+    let target = null
+    if (targetAction === 'conversation') {
+      target = conversationInputRef.value?.$el || conversationInputRef.value?.textarea || conversationInputRef.value
+    } else if (targetAction === 'payment') {
+      target = paymentPanelRef.value?.$el || paymentPanelRef.value
+    } else if (targetAction === 'followup') {
+      target = followUpPanelRef.value?.$el || followUpPanelRef.value
+    } else if (targetAction === 'feedback') {
+      target = serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value
+    } else if (targetAction === 'archive') {
+      target = archiveSummaryPanelRef.value?.$el || archiveSummaryPanelRef.value
+    } else if (targetAction === 'doctor_handle') {
+      target = doctorHandlePanelRef.value?.$el || doctorHandlePanelRef.value
+    } else if (targetAction === 'doctor_conclusion') {
+      target = doctorConclusionPanelRef.value?.$el || doctorConclusionPanelRef.value
+    } else if (targetAction === 'guidance_ack') {
+      target = guidanceAckPanelRef.value?.$el || guidanceAckPanelRef.value
+    } else if (targetAction === 'check_result') {
+      target = checkResultUpdatePanelRef.value?.$el || checkResultUpdatePanelRef.value
+    } else {
+      target = followUpUpdatePanelRef.value?.$el || followUpUpdatePanelRef.value
+    }
     if (!target?.scrollIntoView) return
     clearFocusedDetailSection()
     focusedDetailSection.value = targetAction
@@ -2198,6 +2301,61 @@ function statusLabel(value) {
   }[value] || value || '-'
 }
 
+function normalizePayment(payment) {
+  const record = ensureObject(payment)
+  if (!record) return null
+  const amount = Number(record.amount ?? 0)
+  return {
+    ...record,
+    amount: Number.isFinite(amount) ? amount : 0
+  }
+}
+
+function paymentStatusLabel(payment) {
+  const record = normalizePayment(payment)
+  if (!record) return '未收费'
+  if (record.amount <= 0) return '免费'
+  if (record.status === 'paid') return '已支付'
+  if (record.status === 'pending') return '待支付'
+  return record.status || '未收费'
+}
+
+function paymentStatusTagType(payment) {
+  const record = normalizePayment(payment)
+  if (!record) return 'info'
+  if (record.amount <= 0 || record.status === 'paid') return 'success'
+  if (record.status === 'pending') return 'warning'
+  return 'info'
+}
+
+function paymentChannelLabel(channel) {
+  return {
+    mock: '模拟支付',
+    free: '免费'
+  }[`${channel || ''}`.trim().toLowerCase()] || (channel || '-')
+}
+
+function paymentSummaryText(payment) {
+  const record = normalizePayment(payment)
+  if (!record) return '当前问诊尚未生成收费记录。'
+  if (record.amount <= 0) return '当前问诊无需额外支付，可直接继续后续 AI 导诊与医患沟通流程。'
+  if (record.status === 'paid') {
+    const paidTimeText = record.paidTime ? `，支付时间 ${formatDate(record.paidTime)}` : ''
+    return `本次问诊已完成模拟支付，金额 ${formatAmount(record.amount)}${paidTimeText}。`
+  }
+  return `本次问诊待支付 ${formatAmount(record.amount)}，点击“模拟支付”即可完成演示版付款。`
+}
+
+function isPendingPaymentRecord(record) {
+  const payment = normalizePayment(record?.payment)
+  return !!payment && payment.amount > 0 && payment.status === 'pending'
+}
+
+function formatAmount(value) {
+  const amount = Number(value ?? 0)
+  return `￥${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`
+}
+
 function doctorHandleStatusLabel(value) {
   return value === 'completed' ? '处理完成' : '处理中'
 }
@@ -2381,6 +2539,10 @@ function submitConsultation() {
       const latestRecord = list?.[0]
       if (latestRecord?.id) {
         resetForm()
+        if (isPendingPaymentRecord(latestRecord)) {
+          openRecordDetail(latestRecord, { action: 'payment' })
+          return
+        }
         openTriageWorkspace(latestRecord.id)
         return
       }
@@ -2410,6 +2572,30 @@ function serializeFieldValue(field) {
 
 function shouldSubmitValue(value) {
   return value !== null && value !== undefined && value !== '' && value !== '[]'
+}
+
+function submitMockPayment() {
+  const recordId = detailRecord.value?.id
+  if (!recordId || !isPendingPaymentRecord(detailRecord.value) || paymentSubmitting.value) return
+  paymentSubmitting.value = true
+  post('/api/user/consultation/payment/mock-pay', {
+    recordId
+  }, (data) => {
+    paymentSubmitting.value = false
+    const nextPayment = normalizePayment(data)
+    if (detailRecord.value?.id === recordId) {
+      detailRecord.value = {
+        ...detailRecord.value,
+        payment: nextPayment
+      }
+      syncRecordSnapshot(detailRecord.value)
+    }
+    ElMessage.success('模拟支付成功')
+    refreshRecordDetail(recordId)
+  }, (message) => {
+    paymentSubmitting.value = false
+    ElMessage.warning(message || '模拟支付失败')
+  })
 }
 
 function resolveConversationBoardElement() {
@@ -2762,12 +2948,14 @@ function normalizeConsultationRecord(record, options = {}) {
   const normalizedRecord = {
     ...nextRecord,
     smartDispatch: normalizeSmartDispatch(nextRecord.smartDispatch),
-    messageSummary: normalizeMessageSummary(nextRecord.messageSummary)
+    messageSummary: normalizeMessageSummary(nextRecord.messageSummary),
+    payment: normalizePayment(nextRecord.payment)
   }
 
   if (!detail) return normalizedRecord
 
   normalizedRecord.answers = ensureArray(nextRecord.answers)
+  normalizedRecord.prescriptions = ensureArray(nextRecord.prescriptions)
   normalizedRecord.recommendedDoctors = ensureArray(nextRecord.recommendedDoctors)
   normalizedRecord.doctorFollowUps = ensureArray(nextRecord.doctorFollowUps)
   normalizedRecord.aiComparison = ensureObject(nextRecord.aiComparison)
@@ -3180,7 +3368,8 @@ function syncRecordSnapshot(record) {
         doctorConclusion: record.doctorConclusion,
         doctorFollowUps: record.doctorFollowUps,
         smartDispatch: normalizeSmartDispatch(record.smartDispatch),
-        messageSummary: normalizeMessageSummary(record.messageSummary)
+        messageSummary: normalizeMessageSummary(record.messageSummary),
+        payment: normalizePayment(record.payment)
       }
     : item)
 }

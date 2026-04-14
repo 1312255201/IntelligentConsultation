@@ -44,6 +44,16 @@ function normalizeTriageSession(session) {
   }
 }
 
+function normalizePayment(payment) {
+  const record = ensureObject(payment)
+  if (!record) return null
+  const amount = Number(record.amount ?? 0)
+  return {
+    ...record,
+    amount: Number.isFinite(amount) ? amount : 0
+  }
+}
+
 export function normalizeDoctorMessageSummary(summary) {
   return {
     totalCount: Number(summary?.totalCount || 0),
@@ -78,6 +88,7 @@ export function normalizeDoctorReminderRecord(record = {}) {
   return {
     ...source,
     answers: sortBySortAsc(source?.answers),
+    prescriptions: ensureArray(source?.prescriptions),
     recommendedDoctors: ensureArray(source?.recommendedDoctors),
     doctorAssignment: ensureObject(source?.doctorAssignment),
     doctorHandle: ensureObject(source?.doctorHandle),
@@ -91,6 +102,7 @@ export function normalizeDoctorReminderRecord(record = {}) {
     triageResult: ensureObject(source?.triageResult),
     triageFeedback: ensureObject(source?.triageFeedback),
     ruleHits: ensureArray(source?.ruleHits),
+    payment: normalizePayment(source?.payment),
     serviceFeedback: normalizeDoctorServiceFeedback(source?.serviceFeedback)
   }
 }

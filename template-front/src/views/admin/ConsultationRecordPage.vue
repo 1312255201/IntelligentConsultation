@@ -721,6 +721,10 @@
             <article><span>推荐科室</span><strong>{{ detail.departmentName || '待分配' }}</strong></article>
             <article><span>初步分诊</span><strong><span class="badge" :style="triageBadgeStyle(detail.triageLevelColor)">{{ detail.triageLevelName || '待评估' }}</span></strong></article>
             <article><span>当前状态</span><strong>{{ statusLabel(detail.status) }}</strong></article>
+            <article><span>收费金额</span><strong>{{ formatAmount(detail.payment?.amount) }}</strong></article>
+            <article><span>收费状态</span><strong>{{ paymentStatusLabel(detail.payment) }}</strong></article>
+            <article><span>支付方式</span><strong>{{ paymentChannelLabel(detail.payment?.paymentChannel) }}</strong></article>
+            <article><span>支付时间</span><strong>{{ formatDate(detail.payment?.paidTime) }}</strong></article>
           </div>
 
           <section class="card panel">
@@ -730,6 +734,12 @@
             <p class="copy"><strong>健康摘要：</strong>{{ detail.healthSummary || '未关联健康档案摘要' }}</p>
             <p class="copy"><strong>系统建议：</strong>{{ detail.triageSuggestion || '当前暂无额外建议' }}</p>
             <p class="copy"><strong>规则摘要：</strong>{{ detail.triageRuleSummary || '当前未命中额外高风险规则' }}</p>
+          </section>
+
+          <section v-if="detail.payment" class="card panel">
+            <h3>收费记录</h3>
+            <p class="copy"><strong>收费说明：</strong>{{ paymentSummaryText(detail.payment) }}</p>
+            <p class="copy"><strong>支付单号：</strong>{{ detail.payment.paymentNo || '尚未生成' }}</p>
           </section>
 
           <section class="card panel">
@@ -792,6 +802,35 @@
               <p class="copy"><strong>处理建议：</strong>{{ detail.doctorHandle.medicalAdvice || '暂无处理建议' }}</p>
               <p class="copy"><strong>随访计划：</strong>{{ detail.doctorHandle.followUpPlan || '暂无随访安排' }}</p>
               <p class="copy"><strong>内部备注：</strong>{{ detail.doctorHandle.internalRemark || '暂无内部备注' }}</p>
+            </div>
+          </section>
+
+          <section v-if="detail.prescriptions?.length" class="card panel">
+            <div class="head">
+              <div>
+                <h3>医生处方</h3>
+                <p>查看医生在本次问诊中开具的药品，以及系统自动识别的禁忌和联用冲突提醒。</p>
+              </div>
+              <div class="chips">
+                <span>共 {{ detail.prescriptions.length }} 项</span>
+              </div>
+            </div>
+            <div class="list">
+              <article
+                v-for="item in detail.prescriptions"
+                :key="`admin-prescription-${item.id || item.medicineId || item.medicineName}`"
+                class="subcard"
+              >
+                <div class="chips">
+                  <span>{{ item.medicineName }}</span>
+                  <span v-if="item.specification">{{ item.specification }}</span>
+                  <span>{{ item.dosage || '-' }}</span>
+                  <span>{{ item.frequency || '-' }}</span>
+                  <span>{{ item.durationDays ? `${item.durationDays} 天` : '-' }}</span>
+                </div>
+                <p class="copy"><strong>服药说明：</strong>{{ item.medicationInstruction || '暂无额外说明' }}</p>
+                <p v-if="item.warningSummary" class="copy"><strong>禁忌提醒：</strong>{{ item.warningSummary }}</p>
+              </article>
             </div>
           </section>
 
@@ -1524,7 +1563,9 @@ function openDetail(id, options = {}) {
   get(`/api/admin/consultation-record/detail?id=${detailId}`, data => {
     detail.value = data ? {
       ...data,
-      smartDispatch: normalizeSmartDispatch(data?.smartDispatch)
+      prescriptions: Array.isArray(data?.prescriptions) ? data.prescriptions : [],
+      smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
+      payment: normalizePayment(data?.payment)
     } : null
     detailLoading.value = false
   }, message => {
@@ -1579,6 +1620,36 @@ function smartDispatchLine(record) {
   return smartDispatchHintText(summary)
 }
 function statusLabel(value) { return ({ submitted: '已提交', triaged: '已分诊', processing: '处理中', completed: '已完成' })[value] || value || '-' }
+function normalizePayment(payment) {
+  if (!payment || typeof payment !== 'object' || Array.isArray(payment)) return null
+  const amount = Number(payment.amount ?? 0)
+  return {
+    ...payment,
+    amount: Number.isFinite(amount) ? amount : 0
+  }
+}
+function paymentStatusLabel(payment) {
+  const record = normalizePayment(payment)
+  if (!record) return '未收费'
+  if (record.amount <= 0) return '免费'
+  if (record.status === 'paid') return '已支付'
+  if (record.status === 'pending') return '待支付'
+  return record.status || '未收费'
+}
+function paymentChannelLabel(channel) {
+  return ({ mock: '模拟支付', free: '免费' })[`${channel || ''}`.trim().toLowerCase()] || (channel || '-')
+}
+function paymentSummaryText(payment) {
+  const record = normalizePayment(payment)
+  if (!record) return '当前未生成收费记录。'
+  if (record.amount <= 0) return '当前问诊为免费问诊，无需额外支付。'
+  if (record.status === 'paid') return `已完成模拟支付，金额 ${formatAmount(record.amount)}。`
+  return `当前待支付金额 ${formatAmount(record.amount)}。`
+}
+function formatAmount(value) {
+  const amount = Number(value ?? 0)
+  return `￥${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`
+}
 function handleStatusLabel(value) { return value === 'completed' ? '处理完成' : '处理中' }
 function conditionLevelLabel(value) { return ({ low: '轻度', medium: '中度', high: '较高风险', critical: '危急' })[value] || '未填写' }
 function dispositionLabel(value) { return ({ observe: '继续观察', online_followup: '线上随访', offline_visit: '线下就医', emergency: '立即急诊' })[value] || '未填写' }

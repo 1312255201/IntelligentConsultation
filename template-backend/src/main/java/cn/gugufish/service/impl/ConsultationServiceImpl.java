@@ -73,6 +73,8 @@ import cn.gugufish.mapper.TriageLevelDictMapper;
 import cn.gugufish.service.ConsultationService;
 import cn.gugufish.service.ConsultationDoctorRecommendationService;
 import cn.gugufish.service.ConsultationMessageService;
+import cn.gugufish.service.ConsultationPaymentService;
+import cn.gugufish.service.ConsultationPrescriptionService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
@@ -164,6 +166,8 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationServiceFeedbackService consultationServiceFeedbackService;
     @Resource ConsultationMessageService consultationMessageService;
     @Resource ConsultationDoctorRecommendationService consultationDoctorRecommendationService;
+    @Resource ConsultationPrescriptionService consultationPrescriptionService;
+    @Resource ConsultationPaymentService consultationPaymentService;
 
     @Override
     public List<ConsultationEntryCategoryVO> listEntryCategories() {
@@ -211,6 +215,7 @@ public class ConsultationServiceImpl implements ConsultationService {
                     vo.setName(item.getName());
                     vo.setCode(item.getCode());
                     vo.setDescription(item.getDescription());
+                    vo.setPriceAmount(item.getPriceAmount());
                     vo.setSort(item.getSort());
                     vo.setDefaultTemplateId(template.getId());
                     vo.setDefaultTemplateName(template.getName());
@@ -256,6 +261,7 @@ public class ConsultationServiceImpl implements ConsultationService {
 
         List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
         Map<Integer, ConsultationMessageSummaryVO> messageSummaryMap = consultationMessageService.summarizeUserMessages(consultationIds);
+        Map<Integer, cn.gugufish.entity.vo.response.ConsultationPaymentVO> paymentMap = consultationPaymentService.mapByConsultationIds(consultationIds);
         Map<Integer, ConsultationDoctorAssignment> assignmentMap = new HashMap<>();
         consultationDoctorAssignmentMapper.selectList(Wrappers.<ConsultationDoctorAssignment>query()
                         .in("consultation_id", consultationIds)
@@ -310,6 +316,7 @@ public class ConsultationServiceImpl implements ConsultationService {
                             ? List.of()
                             : List.of(latestFollowUp.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO.class)));
                     vo.setMessageSummary(messageSummaryMap.get(item.getId()));
+                    vo.setPayment(paymentMap.get(item.getId()));
                     vo.setServiceFeedback(sanitizeUserServiceFeedback(serviceFeedbackMap.get(item.getId())));
                     vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                             assignment == null ? null : assignment.getDoctorId(),
@@ -340,6 +347,8 @@ public class ConsultationServiceImpl implements ConsultationService {
                 .toList();
         var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(id);
         var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(id);
+        var payment = consultationPaymentService.detailByConsultationId(id);
+        var prescriptions = consultationPrescriptionService.listByConsultationId(id);
         var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(id);
         var triageSession = triageSessionQueryService.detailByConsultationId(id);
         var triageResult = triageResultQueryService.detailByConsultationId(id);
@@ -360,6 +369,8 @@ public class ConsultationServiceImpl implements ConsultationService {
             }
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
+            vo.setPayment(payment);
+            vo.setPrescriptions(prescriptions);
             vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                     assignment == null ? null : assignment.getDoctorId(),
                     assignment == null ? null : assignment.getDoctorName(),
@@ -981,8 +992,22 @@ public class ConsultationServiceImpl implements ConsultationService {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return resultMessage;
         }
+        String paymentMessage = consultationPaymentService.createPendingPayment(record, category.getPriceAmount(), now);
+        if (paymentMessage != null) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return paymentMessage;
+        }
         triggerAiTriageEnrichment(record.getId());
         return null;
+    }
+
+    @Override
+    public String mockPay(int accountId, int recordId) {
+        ConsultationRecord record = consultationRecordMapper.selectOne(Wrappers.<ConsultationRecord>query()
+                .eq("id", recordId)
+                .eq("account_id", accountId));
+        if (record == null) return "闂瘖璁板綍涓嶅瓨鍦ㄦ垨鏆傛棤鏀粯鏉冮檺";
+        return consultationPaymentService.mockPay(accountId, recordId);
     }
 
     @Override

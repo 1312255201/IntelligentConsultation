@@ -2,6 +2,7 @@ package cn.gugufish.controller.doctor;
 
 import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
+import cn.gugufish.entity.vo.request.ConsultationPrescriptionPreviewRequestVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationAiDraftGenerateVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationFollowUpSubmitVO;
@@ -12,11 +13,13 @@ import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftGenerateVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationServiceFeedbackHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
+import cn.gugufish.entity.vo.response.ConsultationPrescriptionPreviewVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationFollowUpDraftVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationHandleDraftVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationMessageDraftVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
 import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
+import cn.gugufish.entity.vo.response.MedicineCatalogVO;
 import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.DoctorWorkspaceService;
 import cn.gugufish.utils.Const;
@@ -105,6 +108,22 @@ public class DoctorWorkspaceController {
         return messages == null
                 ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
                 : RestBean.success(messages);
+    }
+
+    @GetMapping("/medicine/options")
+    @Operation(summary = "查询医生可用药品选项")
+    public RestBean<List<MedicineCatalogVO>> medicineOptions(@RequestAttribute(Const.ATTR_USER_ID) int accountId) {
+        return RestBean.success(doctorWorkspaceService.medicineOptions(accountId));
+    }
+
+    @PostMapping("/consultation/prescription/preview")
+    @Operation(summary = "预览处方禁忌和联用风险")
+    public RestBean<ConsultationPrescriptionPreviewVO> previewConsultationPrescription(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                                                                       @RequestBody @Valid ConsultationPrescriptionPreviewRequestVO vo) {
+        ConsultationPrescriptionPreviewVO preview = doctorWorkspaceService.previewConsultationPrescription(accountId, vo);
+        return preview == null
+                ? RestBean.failure(404, "当前问诊记录不存在或暂无查看权限")
+                : RestBean.success(preview);
     }
 
     @PostMapping("/consultation/handle/ai-draft")

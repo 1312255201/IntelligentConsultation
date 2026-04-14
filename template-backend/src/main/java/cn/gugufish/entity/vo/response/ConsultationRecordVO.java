@@ -40,6 +40,8 @@ public class ConsultationRecordVO {
     ConsultationMessageSummaryVO messageSummary;
     ConsultationArchiveSummaryVO archiveSummary;
     ConsultationAiComparisonVO aiComparison;
+    ConsultationPaymentVO payment;
+    List<ConsultationPrescriptionVO> prescriptions;
     List<ConsultationDoctorFollowUpVO> doctorFollowUps;
     TriageSessionVO triageSession;
     TriageResultVO triageResult;

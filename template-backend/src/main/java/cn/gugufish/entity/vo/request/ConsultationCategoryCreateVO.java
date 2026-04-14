@@ -6,8 +6,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import lombok.Data;
 import org.hibernate.validator.constraints.Length;
+
+import java.math.BigDecimal;
 
 @Data
 public class ConsultationCategoryCreateVO {
@@ -23,6 +27,10 @@ public class ConsultationCategoryCreateVO {
     String code;
     @Length(max = 255)
     String description;
+    @NotNull
+    @DecimalMin(value = "0.00")
+    @Digits(integer = 8, fraction = 2)
+    BigDecimal priceAmount;
     @NotNull
     @Min(0)
     @Max(999)

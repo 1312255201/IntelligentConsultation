@@ -130,7 +130,7 @@ public class ConsultationAiConfigServiceImpl implements ConsultationAiConfigServ
     private ConsultationAiConfig defaultConfig(Date updateTime) {
         return new ConsultationAiConfig(
                 CONFIG_ID,
-                aiTriageProperties.getDefaultEnabled() ? 1 : 0,
+                aiTriageProperties.isDefaultEnabled() ? 1 : 0,
                 normalizePromptVersion(aiTriageProperties.getDefaultPromptVersion()),
                 Math.max(aiTriageProperties.getDefaultDoctorCandidateLimit(), 1),
                 updateTime

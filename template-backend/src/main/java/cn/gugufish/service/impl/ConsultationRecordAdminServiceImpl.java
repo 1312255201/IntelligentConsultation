@@ -38,6 +38,8 @@ import cn.gugufish.mapper.TriageResultMapper;
 import cn.gugufish.mapper.TriageSessionMapper;
 import cn.gugufish.service.ConsultationDoctorAssignmentQueryService;
 import cn.gugufish.service.ConsultationDispatchConfigService;
+import cn.gugufish.service.ConsultationPaymentService;
+import cn.gugufish.service.ConsultationPrescriptionService;
 import cn.gugufish.service.ConsultationRecordAdminService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
@@ -120,6 +122,12 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
     @Resource
     ConsultationDispatchConfigService consultationDispatchConfigService;
 
+    @Resource
+    ConsultationPrescriptionService consultationPrescriptionService;
+
+    @Resource
+    ConsultationPaymentService consultationPaymentService;
+
     @Override
     public List<AdminConsultationRecordVO> listRecords() {
         List<ConsultationRecord> records = consultationRecordMapper.selectList(Wrappers.<ConsultationRecord>query()
@@ -128,6 +136,7 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         if (records.isEmpty()) return List.of();
 
         List<Integer> consultationIds = records.stream().map(ConsultationRecord::getId).toList();
+        Map<Integer, cn.gugufish.entity.vo.response.ConsultationPaymentVO> paymentMap = consultationPaymentService.mapByConsultationIds(consultationIds);
         Map<Integer, ConsultationDoctorAssignment> assignmentMap = loadLatestAssignmentMap(consultationIds);
         Map<Integer, TriageResult> triageResultMap = loadLatestTriageResultEntityMap(consultationIds);
         Map<Integer, cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO> serviceFeedbackMap =
@@ -140,6 +149,7 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
                     if (assignment != null) {
                         vo.setDoctorAssignment(assignment.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorAssignmentVO.class));
                     }
+                    vo.setPayment(paymentMap.get(item.getId()));
                     vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                             assignment == null ? null : assignment.getDoctorId(),
                             assignment == null ? null : assignment.getDoctorName(),
@@ -371,6 +381,8 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         var doctorAssignment = consultationDoctorAssignmentQueryService.detailByConsultationId(id);
         var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(id);
         var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(id);
+        var payment = consultationPaymentService.detailByConsultationId(id);
+        var prescriptions = consultationPrescriptionService.listByConsultationId(id);
         var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(id);
         var triageSession = triageSessionQueryService.detailByConsultationId(id);
         var triageResult = triageResultQueryService.detailByConsultationId(id);
@@ -383,6 +395,8 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
             vo.setDoctorAssignment(doctorAssignment);
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
+            vo.setPayment(payment);
+            vo.setPrescriptions(prescriptions);
             vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                     doctorAssignment == null ? null : doctorAssignment.getDoctorId(),
                     doctorAssignment == null ? null : doctorAssignment.getDoctorName(),

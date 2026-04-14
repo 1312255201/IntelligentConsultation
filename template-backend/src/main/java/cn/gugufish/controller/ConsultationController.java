@@ -2,6 +2,7 @@ package cn.gugufish.controller;
 
 import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
+import cn.gugufish.entity.vo.request.ConsultationPaymentMockPayVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
 import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageMessageSendVO;
@@ -10,8 +11,10 @@ import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
 import cn.gugufish.entity.vo.response.ConsultationEntryCategoryVO;
 import cn.gugufish.entity.vo.response.ConsultationIntakeTemplateVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
+import cn.gugufish.entity.vo.response.ConsultationPaymentVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordVO;
 import cn.gugufish.service.ConsultationMessageService;
+import cn.gugufish.service.ConsultationPaymentService;
 import cn.gugufish.service.ConsultationService;
 import cn.gugufish.service.ConsultationTriageChatService;
 import cn.gugufish.utils.Const;
@@ -52,6 +55,9 @@ public class ConsultationController {
 
     @Resource
     ConsultationMessageService consultationMessageService;
+
+    @Resource
+    ConsultationPaymentService consultationPaymentService;
 
     @Resource
     ConsultationTriageChatService consultationTriageChatService;
@@ -128,6 +134,18 @@ public class ConsultationController {
     public RestBean<Void> create(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                  @RequestBody @Valid ConsultationRecordCreateVO vo) {
         return this.messageHandle(() -> consultationService.createRecord(id, vo));
+    }
+
+    @PostMapping("/payment/mock-pay")
+    @Operation(summary = "妯℃嫙鏀粯闂瘖璐圭敤")
+    public RestBean<ConsultationPaymentVO> mockPay(@RequestAttribute(Const.ATTR_USER_ID) int id,
+                                                   @RequestBody @Valid ConsultationPaymentMockPayVO vo) {
+        String message = consultationService.mockPay(id, vo.getRecordId());
+        if (message != null) {
+            return RestBean.failure(400, message);
+        }
+        ConsultationPaymentVO payment = consultationPaymentService.detailByConsultationId(vo.getRecordId());
+        return payment == null ? RestBean.failure(404, "鏀惰垂璁板綍涓嶅瓨鍦?") : RestBean.success(payment);
     }
 
     @GetMapping("/feedback/options")

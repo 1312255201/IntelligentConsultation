@@ -179,6 +179,11 @@ const router = createRouter({
           component: () => import('@/views/admin/SymptomDictPage.vue')
         },
         {
+          path: 'medicine',
+          name: 'admin-medicine',
+          component: () => import('@/views/admin/MedicinePage.vue')
+        },
+        {
           path: 'triage-level',
           name: 'admin-triage-level',
           component: () => import('@/views/admin/TriageLevelDictPage.vue')

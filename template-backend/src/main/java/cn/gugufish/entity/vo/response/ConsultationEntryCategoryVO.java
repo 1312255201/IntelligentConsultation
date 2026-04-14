@@ -2,6 +2,8 @@ package cn.gugufish.entity.vo.response;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 @Data
 public class ConsultationEntryCategoryVO {
     Integer id;
@@ -10,6 +12,7 @@ public class ConsultationEntryCategoryVO {
     String name;
     String code;
     String description;
+    BigDecimal priceAmount;
     Integer sort;
     Integer defaultTemplateId;
     String defaultTemplateName;

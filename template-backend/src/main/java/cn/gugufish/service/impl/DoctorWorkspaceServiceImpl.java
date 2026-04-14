@@ -16,6 +16,7 @@ import cn.gugufish.entity.dto.DoctorSchedule;
 import cn.gugufish.entity.dto.DoctorServiceTag;
 import cn.gugufish.entity.dto.TriageResult;
 import cn.gugufish.entity.dto.TriageRuleHitLog;
+import cn.gugufish.entity.vo.request.ConsultationPrescriptionPreviewRequestVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationAiDraftGenerateVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationFollowUpSubmitVO;
@@ -30,6 +31,7 @@ import cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
+import cn.gugufish.entity.vo.response.ConsultationPrescriptionPreviewVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
 import cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationFollowUpDraftVO;
@@ -37,6 +39,7 @@ import cn.gugufish.entity.vo.response.DoctorConsultationHandleDraftVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationMessageDraftVO;
 import cn.gugufish.entity.vo.response.DoctorScheduleVO;
 import cn.gugufish.entity.vo.response.DoctorWorkbenchVO;
+import cn.gugufish.entity.vo.response.MedicineCatalogVO;
 import cn.gugufish.entity.vo.response.TriageRuleHitLogVO;
 import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
 import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
@@ -58,8 +61,11 @@ import cn.gugufish.service.ConsultationDoctorAssignmentQueryService;
 import cn.gugufish.service.ConsultationDoctorConclusionQueryService;
 import cn.gugufish.service.ConsultationDoctorFollowUpQueryService;
 import cn.gugufish.service.ConsultationDoctorHandleQueryService;
+import cn.gugufish.service.ConsultationPaymentService;
+import cn.gugufish.service.ConsultationPrescriptionService;
 import cn.gugufish.service.ConsultationServiceFeedbackQueryService;
 import cn.gugufish.service.DoctorWorkspaceService;
+import cn.gugufish.service.MedicineCatalogService;
 import cn.gugufish.service.TriageFeedbackQueryService;
 import cn.gugufish.service.TriageResultQueryService;
 import cn.gugufish.service.TriageSessionQueryService;
@@ -172,6 +178,15 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
     @Resource
     ConsultationMessageService consultationMessageService;
+
+    @Resource
+    MedicineCatalogService medicineCatalogService;
+
+    @Resource
+    ConsultationPrescriptionService consultationPrescriptionService;
+
+    @Resource
+    ConsultationPaymentService consultationPaymentService;
 
     @Resource
     AiTriageProperties aiTriageProperties;
@@ -366,6 +381,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                         .orderByDesc("id"))
                 .forEach(item -> latestFollowUpMap.putIfAbsent(item.getConsultationId(), item));
         Map<Integer, ConsultationMessageSummaryVO> messageSummaryMap = consultationMessageService.summarizeDoctorMessages(consultationIds);
+        Map<Integer, cn.gugufish.entity.vo.response.ConsultationPaymentVO> paymentMap = consultationPaymentService.mapByConsultationIds(consultationIds);
         Map<Integer, ConsultationServiceFeedbackVO> serviceFeedbackMap = consultationServiceFeedbackQueryService.mapByConsultationIds(consultationIds);
 
         return records.stream()
@@ -388,6 +404,7 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                             ? List.of()
                             : List.of(latestFollowUp.asViewObject(cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO.class)));
                     vo.setMessageSummary(messageSummaryMap.get(item.getId()));
+                    vo.setPayment(paymentMap.get(item.getId()));
                     vo.setServiceFeedback(serviceFeedbackMap.get(item.getId()));
                     vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                             assignment == null ? null : assignment.getDoctorId(),
@@ -429,6 +446,8 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         var doctorAssignment = consultationDoctorAssignmentQueryService.detailByConsultationId(recordId);
         var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(recordId);
         var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(recordId);
+        var payment = consultationPaymentService.detailByConsultationId(recordId);
+        var prescriptions = consultationPrescriptionService.listByConsultationId(recordId);
         var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(recordId);
         var triageSession = triageSessionQueryService.detailByConsultationId(recordId);
         var triageResult = triageResultQueryService.detailByConsultationId(recordId);
@@ -442,6 +461,8 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setDoctorAssignment(doctorAssignment);
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
+            vo.setPayment(payment);
+            vo.setPrescriptions(prescriptions);
             vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                     doctorAssignment == null ? null : doctorAssignment.getDoctorId(),
                     doctorAssignment == null ? null : doctorAssignment.getDoctorName(),
@@ -469,6 +490,25 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setTriageFeedback(triageFeedback);
             vo.setServiceFeedback(serviceFeedback);
         });
+    }
+
+    @Override
+    public List<MedicineCatalogVO> medicineOptions(int accountId) {
+        Doctor doctor = currentDoctor(accountId);
+        if (doctor == null) return List.of();
+        return medicineCatalogService.listMedicines(true);
+    }
+
+    @Override
+    public ConsultationPrescriptionPreviewVO previewConsultationPrescription(int accountId, ConsultationPrescriptionPreviewRequestVO vo) {
+        if (vo == null || vo.getConsultationId() == null) return null;
+        Doctor doctor = currentDoctor(accountId);
+        if (doctor == null || doctor.getDepartmentId() == null) return null;
+
+        ConsultationRecord record = consultationRecordMapper.selectById(vo.getConsultationId());
+        if (record == null || !doctor.getDepartmentId().equals(record.getDepartmentId())) return null;
+
+        return consultationPrescriptionService.preview(vo.getPrescriptions());
     }
 
     @Override
@@ -791,6 +831,14 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 return "医生处理结果更新失败";
             }
         }
+
+        String prescriptionMessage = consultationPrescriptionService.replaceConsultationPrescriptions(
+                vo.getConsultationId(),
+                doctor,
+                vo.getPrescriptions(),
+                now
+        );
+        if (prescriptionMessage != null) return prescriptionMessage;
 
         String conclusionMessage = saveDoctorConclusion(vo.getConsultationId(), doctor, departmentName, status,
                 conditionLevel, disposition, diagnosisDirection, conclusionTags, needFollowUp,
@@ -1784,6 +1832,23 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         payload.put("aiMismatchReasons", ConsultationAiMismatchReasonUtils.normalizeCodes(vo.getAiMismatchReasons()));
         payload.put("aiMismatchRemark", trimToNull(vo.getAiMismatchRemark()));
         payload.put("patientInstruction", trimToNull(vo.getPatientInstruction()));
+        payload.put("prescriptions", vo.getPrescriptions() == null ? List.of() : vo.getPrescriptions().stream()
+                .filter(Objects::nonNull)
+                .map(item -> {
+                    Map<String, Object> prescription = new HashMap<>();
+                    prescription.put("medicineId", item.getMedicineId());
+                    prescription.put("dosage", trimToNull(item.getDosage()));
+                    prescription.put("frequency", trimToNull(item.getFrequency()));
+                    prescription.put("durationDays", item.getDurationDays());
+                    prescription.put("medicationInstruction", trimToNull(item.getMedicationInstruction()));
+                    return prescription;
+                })
+                .filter(item -> item.get("medicineId") != null
+                        || item.get("dosage") != null
+                        || item.get("frequency") != null
+                        || item.get("durationDays") != null
+                        || item.get("medicationInstruction") != null)
+                .toList());
         return JSON.toJSONString(payload);
     }
 

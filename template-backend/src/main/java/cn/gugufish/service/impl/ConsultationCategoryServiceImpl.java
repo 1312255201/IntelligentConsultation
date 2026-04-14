@@ -14,6 +14,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Date;
 import java.util.List;
 
@@ -46,6 +48,7 @@ public class ConsultationCategoryServiceImpl extends ServiceImpl<ConsultationCat
                 vo.getName().trim(),
                 vo.getCode().trim(),
                 blankToNull(vo.getDescription()),
+                normalizeAmount(vo.getPriceAmount()),
                 vo.getSort(),
                 vo.getStatus(),
                 now,
@@ -68,6 +71,7 @@ public class ConsultationCategoryServiceImpl extends ServiceImpl<ConsultationCat
                 .set("name", vo.getName().trim())
                 .set("code", vo.getCode().trim())
                 .set("description", blankToNull(vo.getDescription()))
+                .set("price_amount", normalizeAmount(vo.getPriceAmount()))
                 .set("sort", vo.getSort())
                 .set("status", vo.getStatus())
                 .set("update_time", new Date()));
@@ -105,5 +109,11 @@ public class ConsultationCategoryServiceImpl extends ServiceImpl<ConsultationCat
         if (value == null) return null;
         String text = value.trim();
         return text.isEmpty() ? null : text;
+    }
+
+    private BigDecimal normalizeAmount(BigDecimal amount) {
+        BigDecimal value = amount == null ? BigDecimal.ZERO : amount;
+        if (value.compareTo(BigDecimal.ZERO) < 0) value = BigDecimal.ZERO;
+        return value.setScale(2, RoundingMode.HALF_UP);
     }
 }

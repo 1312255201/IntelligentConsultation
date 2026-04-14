@@ -78,6 +78,12 @@ const menuItems = [
     icon: Tickets
   },
   {
+    index: '/admin/medicine',
+    title: '药品目录管理',
+    description: '维护药品基础信息、禁忌提醒与不可同时用药规则。',
+    icon: Tickets
+  },
+  {
     index: '/admin/triage-level',
     title: '分诊等级字典',
     description: '维护风险等级、优先级和建议动作。',
