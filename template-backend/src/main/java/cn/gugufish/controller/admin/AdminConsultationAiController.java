@@ -1,20 +1,30 @@
 package cn.gugufish.controller.admin;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.dto.ConsultationAiConfig;
+import cn.gugufish.entity.vo.request.ConsultationAiConfigSaveVO;
 import cn.gugufish.entity.vo.response.AdminDoctorFormAiUsageOverviewVO;
 import cn.gugufish.entity.vo.response.AdminDoctorMessageAiUsageOverviewVO;
 import cn.gugufish.entity.vo.response.ConsultationAiAuditItemVO;
+import cn.gugufish.entity.vo.response.ConsultationAiConfigVO;
+import cn.gugufish.entity.vo.response.ConsultationAiConfigHistoryVO;
 import cn.gugufish.entity.vo.response.ConsultationAiOverviewVO;
 import cn.gugufish.service.ConsultationAiAdminService;
+import cn.gugufish.service.ConsultationAiConfigService;
+import cn.gugufish.utils.Const;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,6 +33,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 @Validated
 @RestController
@@ -41,6 +52,29 @@ public class AdminConsultationAiController {
 
     @Resource
     ConsultationAiAdminService consultationAiAdminService;
+
+    @Resource
+    ConsultationAiConfigService consultationAiConfigService;
+
+    @GetMapping("/config")
+    @Operation(summary = "读取 AI 导诊配置")
+    public RestBean<ConsultationAiConfigVO> config() {
+        ConsultationAiConfig config = consultationAiConfigService.getConfig();
+        return RestBean.success(config.asViewObject(ConsultationAiConfigVO.class));
+    }
+
+    @GetMapping("/config-history")
+    @Operation(summary = "读取 AI 导诊配置变更历史")
+    public RestBean<List<ConsultationAiConfigHistoryVO>> configHistory(@RequestParam(defaultValue = "8") @Positive int limit) {
+        return RestBean.success(consultationAiConfigService.listHistory(limit));
+    }
+
+    @PostMapping("/config")
+    @Operation(summary = "保存 AI 导诊配置")
+    public RestBean<Void> saveConfig(@RequestAttribute(Const.ATTR_USER_ID) int accountId,
+                                     @RequestBody @Valid ConsultationAiConfigSaveVO vo) {
+        return this.messageHandle(() -> consultationAiConfigService.saveConfig(accountId, vo));
+    }
 
     @GetMapping("/overview")
     @Operation(summary = "查询 AI 导诊运行概览")
@@ -127,5 +161,14 @@ public class AdminConsultationAiController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                 .contentType(CSV_MEDIA_TYPE)
                 .body(content);
+    }
+
+    private <T> RestBean<T> messageHandle(Supplier<String> action) {
+        String message = action.get();
+        if (message == null) {
+            return RestBean.success();
+        } else {
+            return RestBean.failure(400, message);
+        }
     }
 }

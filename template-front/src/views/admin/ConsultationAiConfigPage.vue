@@ -58,6 +58,87 @@
       </article>
     </section>
 
+    <section class="panel-card" v-loading="configLoading">
+      <div class="panel-head">
+        <div>
+          <h3>AI 配置中心</h3>
+          <p>这里保存的是会直接影响 AI 导诊运行的业务配置。保存后，新产生的导诊摘要、追问建议和 Prompt 留痕会立即使用最新配置。</p>
+        </div>
+        <div class="hero-actions">
+          <el-button @click="loadAiConfig">刷新配置</el-button>
+          <el-button :disabled="!aiConfigDirty" @click="resetAiConfigForm">恢复已保存</el-button>
+          <el-button type="primary" :loading="configSubmitting" @click="saveAiConfig">保存配置</el-button>
+        </div>
+      </div>
+
+      <div class="config-grid">
+        <article class="config-note">
+          <strong>配置说明</strong>
+          <p>当前可编辑的是 AI 导诊总开关、Prompt 版本和推荐医生候选上限。</p>
+          <p>模型提供方、Base URL、温度、Token 等运行参数仍然从环境变量读取，方便区分“业务配置”和“部署配置”。</p>
+          <p>最近一次保存：{{ formatDate(aiConfigSnapshot.updateTime, true) }}</p>
+        </article>
+
+        <el-form label-position="top" class="config-form-grid">
+          <el-form-item label="AI 导诊总开关">
+            <el-switch
+              v-model="aiConfigForm.enabled"
+              :active-value="1"
+              :inactive-value="0"
+              inline-prompt
+              active-text="开"
+              inactive-text="关"
+            />
+          </el-form-item>
+          <el-form-item label="推荐医生候选上限">
+            <el-input-number
+              v-model="aiConfigForm.doctorCandidateLimit"
+              :min="1"
+              :max="10"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-form-item label="Prompt 版本" class="config-form-item-full">
+            <el-input
+              v-model="aiConfigForm.promptVersion"
+              maxlength="100"
+              show-word-limit
+              placeholder="例如：deepseek-triage-v2"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+    </section>
+
+    <section class="panel-card" v-loading="configHistoryLoading">
+      <div class="panel-head">
+        <div>
+          <h3>最近配置变更</h3>
+          <p>每次保存 AI 导诊配置后都会自动记录一条变更历史，方便回溯 Prompt 版本切换、开关变更和候选上限调整。</p>
+        </div>
+        <div class="hero-actions">
+          <el-button @click="loadAiConfigHistory">刷新记录</el-button>
+        </div>
+      </div>
+
+      <div v-if="configHistoryItems.length" class="config-history-list">
+        <article v-for="item in configHistoryItems" :key="`ai-config-history-${item.id}`" class="config-history-item">
+          <div class="chip-row audit-head-chips">
+            <span>{{ item.operatorUsername || 'system' }}</span>
+            <span>{{ formatDate(item.createTime, true) }}</span>
+            <span>{{ configEnabledLabel(item.enabledBefore) }} -> {{ configEnabledLabel(item.enabledAfter) }}</span>
+          </div>
+          <p class="copy"><strong>变更摘要：</strong>{{ item.changeSummary || '本次未识别到差异摘要' }}</p>
+          <div class="audit-tag-row">
+            <span>Prompt：{{ item.promptVersionBefore || '未设置' }} -> {{ item.promptVersionAfter || '未设置' }}</span>
+            <span>候选上限：{{ item.doctorCandidateLimitBefore ?? '未设置' }} -> {{ item.doctorCandidateLimitAfter ?? '未设置' }}</span>
+            <span v-if="item.operatorAccountId">账号ID：{{ item.operatorAccountId }}</span>
+          </div>
+        </article>
+      </div>
+      <el-empty v-else :description="configHistoryLoading ? '正在加载配置变更历史。' : '当前还没有 AI 配置变更记录。'" />
+    </section>
+
     <section class="content-grid">
       <article class="panel-card">
         <div class="panel-head">
@@ -712,22 +793,28 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { download, get } from '@/net'
+import { download, get, post } from '@/net'
 import { aiMismatchReasonLabel, comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 import { resolveTriageMessageAuditInsight } from '@/triage/insight'
 
 const router = useRouter()
 const loading = ref(false)
+const configLoading = ref(false)
+const configHistoryLoading = ref(false)
 const queueLoading = ref(false)
 const auditLoading = ref(false)
 const doctorMessageUsageLoading = ref(false)
 const doctorFormUsageLoading = ref(false)
 const queueExporting = ref(false)
 const auditExporting = ref(false)
+const configSubmitting = ref(false)
 const overview = ref(createEmptyOverview())
+const aiConfigForm = reactive(createEmptyAiConfigForm())
+const aiConfigSnapshot = reactive(createEmptyAiConfigForm())
+const configHistoryItems = ref([])
 const doctorMessageUsage = ref(createEmptyDoctorMessageUsageOverview())
 const doctorFormUsage = ref(createEmptyDoctorFormUsageOverview())
 const doctorFormFieldSceneFilter = ref('all')
@@ -783,6 +870,9 @@ const doctorFormTemplateSortOptions = [
 const totalAiMessages = computed(() => Number(overview.value.aiSummaryMessageCount || 0)
   + Number(overview.value.aiFollowupQuestionCount || 0)
   + Number(overview.value.aiChatReplyCount || 0))
+const aiConfigDirty = computed(() => Number(aiConfigForm.enabled || 0) !== Number(aiConfigSnapshot.enabled || 0)
+  || `${aiConfigForm.promptVersion || ''}` !== `${aiConfigSnapshot.promptVersion || ''}`
+  || Number(aiConfigForm.doctorCandidateLimit || 0) !== Number(aiConfigSnapshot.doctorCandidateLimit || 0))
 const displayAuditItems = computed(() => auditItems.value.filter(item => !highRiskOnly.value || isHighRiskAuditItem(item)))
 const highRiskAuditCount = computed(() => auditItems.value.filter(item => isHighRiskAuditItem(item)).length)
 const reviewedAuditCount = computed(() => auditItems.value.filter(item => item.doctorReview?.hasConclusion).length)
@@ -915,6 +1005,37 @@ function createEmptyOverview() {
   }
 }
 
+function createEmptyAiConfigForm() {
+  return {
+    enabled: 1,
+    promptVersion: 'deepseek-triage-v1',
+    doctorCandidateLimit: 3,
+    updateTime: null
+  }
+}
+
+function applyAiConfigForm(data) {
+  const next = {
+    ...createEmptyAiConfigForm(),
+    ...(data || {})
+  }
+  aiConfigForm.enabled = Number(next.enabled ?? 1) === 0 ? 0 : 1
+  aiConfigForm.promptVersion = `${next.promptVersion || ''}`.trim()
+  aiConfigForm.doctorCandidateLimit = Number(next.doctorCandidateLimit || 3)
+  aiConfigForm.updateTime = next.updateTime || null
+}
+
+function syncAiConfigSnapshot(data) {
+  const next = {
+    ...createEmptyAiConfigForm(),
+    ...(data || {})
+  }
+  aiConfigSnapshot.enabled = Number(next.enabled ?? 1) === 0 ? 0 : 1
+  aiConfigSnapshot.promptVersion = `${next.promptVersion || ''}`.trim()
+  aiConfigSnapshot.doctorCandidateLimit = Number(next.doctorCandidateLimit || 3)
+  aiConfigSnapshot.updateTime = next.updateTime || null
+}
+
 function createEmptyDoctorMessageUsageOverview() {
   return {
     generatedCount: 0,
@@ -952,6 +1073,60 @@ function createEmptyDoctorFormUsageOverview() {
     templateBreakdown: [],
     recentItems: []
   }
+}
+
+function loadAiConfig() {
+  configLoading.value = true
+  get('/api/admin/consultation-ai/config', data => {
+    applyAiConfigForm(data)
+    syncAiConfigSnapshot(data)
+    configLoading.value = false
+  }, message => {
+    configLoading.value = false
+    ElMessage.warning(message || 'AI 配置加载失败')
+  })
+}
+
+function resetAiConfigForm() {
+  applyAiConfigForm(aiConfigSnapshot)
+}
+
+function loadAiConfigHistory() {
+  configHistoryLoading.value = true
+  get('/api/admin/consultation-ai/config-history?limit=8', data => {
+    configHistoryItems.value = Array.isArray(data) ? data : []
+    configHistoryLoading.value = false
+  }, message => {
+    configHistoryLoading.value = false
+    ElMessage.warning(message || 'AI 配置变更历史加载失败')
+  })
+}
+
+function saveAiConfig() {
+  const payload = {
+    enabled: Number(aiConfigForm.enabled || 0) === 0 ? 0 : 1,
+    promptVersion: `${aiConfigForm.promptVersion || ''}`.trim(),
+    doctorCandidateLimit: Number(aiConfigForm.doctorCandidateLimit || 0)
+  }
+  if (!payload.promptVersion) {
+    ElMessage.warning('请输入 Prompt 版本')
+    return
+  }
+  configSubmitting.value = true
+  post('/api/admin/consultation-ai/config', payload, () => {
+    configSubmitting.value = false
+    ElMessage.success('AI 配置已保存')
+    loadAiConfig()
+    loadAiConfigHistory()
+    loadOverview()
+  }, message => {
+    configSubmitting.value = false
+    ElMessage.warning(message || 'AI 配置保存失败')
+  })
+}
+
+function configEnabledLabel(value) {
+  return Number(value ?? 0) === 0 ? '关闭' : '开启'
 }
 
 function loadOverview() {
@@ -1592,6 +1767,8 @@ function formatDate(value, withTime = false) {
 }
 
 onMounted(() => {
+  loadAiConfig()
+  loadAiConfigHistory()
   loadOverview()
   loadDoctorMessageUsage()
   loadDoctorFormUsage()
@@ -1668,6 +1845,55 @@ onMounted(() => {
 .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
 .panel-head h3 { margin: 0; font-size: 22px; }
 .detail-descriptions { margin-bottom: 18px; }
+.config-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.2fr);
+  gap: 18px;
+}
+.config-note {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(15, 102, 101, 0.04);
+  border: 1px solid rgba(15, 102, 101, 0.1);
+}
+.config-note strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #31474d;
+}
+.config-note p {
+  margin: 0;
+  line-height: 1.8;
+  color: #41575d;
+}
+.config-note p + p {
+  margin-top: 8px;
+}
+.config-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+}
+.config-form-grid :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+.config-form-item-full {
+  grid-column: 1 / -1;
+}
+.config-history-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.config-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(15, 102, 101, 0.04);
+  border: 1px solid rgba(15, 102, 101, 0.1);
+}
 .env-board {
   padding: 16px 18px;
   border-radius: 22px;
@@ -1857,7 +2083,9 @@ onMounted(() => {
 }
 @media (max-width: 1100px) {
   .hero-card,
-  .content-grid { grid-template-columns: 1fr; }
+  .content-grid,
+  .config-grid { grid-template-columns: 1fr; }
+  .config-history-list,
   .queue-list,
   .usage-list { grid-template-columns: 1fr; }
 }
@@ -1865,6 +2093,7 @@ onMounted(() => {
   .hero-side { grid-template-columns: 1fr; }
   .panel-head { flex-direction: column; align-items: flex-start; }
   .field-breakdown-head { flex-direction: column; }
+  .config-form-grid { grid-template-columns: 1fr; }
   .audit-toolbar,
   .audit-actions { width: 100%; }
   .audit-review-head { flex-direction: column; }
