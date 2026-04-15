@@ -42,6 +42,9 @@ public class AdminConsultationRecordVO {
     ConsultationArchiveSummaryVO archiveSummary;
     ConsultationAiComparisonVO aiComparison;
     ConsultationPaymentVO payment;
+    List<ConsultationCheckSuggestionVO> checkSuggestions;
+    List<ConsultationReportFeedbackVO> reportFeedbacks;
+    List<ConsultationMedicationFeedbackVO> medicationFeedbacks;
     List<ConsultationPrescriptionVO> prescriptions;
     List<ConsultationDoctorFollowUpVO> doctorFollowUps;
     TriageSessionVO triageSession;

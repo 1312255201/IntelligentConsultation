@@ -89,6 +89,15 @@ export function normalizeDoctorReminderRecord(record = {}) {
     ...source,
     answers: sortBySortAsc(source?.answers),
     prescriptions: ensureArray(source?.prescriptions),
+    checkSuggestions: sortBySortAsc(source?.checkSuggestions),
+    reportFeedbacks: sortByCreateTimeDesc(source?.reportFeedbacks).map(item => ({
+      ...item,
+      attachments: ensureArray(item?.attachments)
+    })),
+    medicationFeedbacks: sortByCreateTimeDesc(source?.medicationFeedbacks).map(item => ({
+      ...item,
+      attachments: ensureArray(item?.attachments)
+    })),
     recommendedDoctors: ensureArray(source?.recommendedDoctors),
     doctorAssignment: ensureObject(source?.doctorAssignment),
     doctorHandle: ensureObject(source?.doctorHandle),
@@ -127,6 +136,10 @@ export function isCheckResultUpdateMessageType(messageType) {
   return `${messageType || ''}`.trim().toLowerCase() === 'check_result_update'
 }
 
+export function isMedicationFeedbackMessageType(messageType) {
+  return `${messageType || ''}`.trim().toLowerCase() === 'medication_feedback'
+}
+
 export function isDoctorGuidanceAckMessageType(messageType) {
   return `${messageType || ''}`.trim().toLowerCase() === 'doctor_guidance_ack'
 }
@@ -142,9 +155,12 @@ export function messageProgressLabel(record) {
   const summary = getDoctorMessageSummary(record)
   const isFollowUpUpdate = isFollowUpUpdateMessageType(summary.latestMessageType)
   const isCheckResultUpdate = isCheckResultUpdateMessageType(summary.latestMessageType)
+  const isMedicationFeedback = isMedicationFeedbackMessageType(summary.latestMessageType)
   const isGuidanceAck = isDoctorGuidanceAckMessageType(summary.latestMessageType)
   if (summary.totalCount <= 0) return '暂无沟通'
   if (summary.latestSenderType === 'user' && isGuidanceAck) return '患者已确认查看'
+  if (summary.unreadCount > 0 && isMedicationFeedback) return '患者提交用药反馈'
+  if (summary.latestSenderType === 'user' && isMedicationFeedback) return '待查看用药反馈'
   if (summary.unreadCount > 0 && isCheckResultUpdate) return '患者补充检查结果'
   if (summary.latestSenderType === 'user' && isCheckResultUpdate) return '待查看检查结果'
   if (summary.totalCount <= 0) return '未沟通'
@@ -158,9 +174,12 @@ export function messageProgressType(record) {
   const summary = getDoctorMessageSummary(record)
   const isFollowUpUpdate = isFollowUpUpdateMessageType(summary.latestMessageType)
   const isCheckResultUpdate = isCheckResultUpdateMessageType(summary.latestMessageType)
+  const isMedicationFeedback = isMedicationFeedbackMessageType(summary.latestMessageType)
   const isGuidanceAck = isDoctorGuidanceAckMessageType(summary.latestMessageType)
   if (summary.totalCount <= 0) return 'info'
   if (summary.latestSenderType === 'user' && isGuidanceAck) return 'success'
+  if (summary.unreadCount > 0 && isMedicationFeedback) return 'warning'
+  if (summary.latestSenderType === 'user' && isMedicationFeedback) return 'primary'
   if (summary.unreadCount > 0 && isCheckResultUpdate) return 'success'
   if (summary.latestSenderType === 'user' && isCheckResultUpdate) return 'success'
   if (summary.totalCount <= 0) return 'info'
@@ -176,6 +195,9 @@ export function doctorMessagePreview(record) {
   if (!preview) return ''
   if (isDoctorGuidanceAckMessageType(summary.latestMessageType)) {
     return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
+  }
+  if (isMedicationFeedbackMessageType(summary.latestMessageType)) {
+    return preview.startsWith('[用药反馈]') ? preview : `[用药反馈] ${preview}`
   }
   if (isCheckResultUpdateMessageType(summary.latestMessageType)) {
     return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
@@ -394,6 +416,11 @@ export function hasLatestPatientCheckResultUpdate(record) {
   return summary.latestSenderType === 'user' && isCheckResultUpdateMessageType(summary.latestMessageType)
 }
 
+export function hasLatestPatientMedicationFeedback(record) {
+  const summary = getDoctorMessageSummary(record)
+  return summary.latestSenderType === 'user' && isMedicationFeedbackMessageType(summary.latestMessageType)
+}
+
 export function hasLatestPatientGuidanceAck(record) {
   const summary = getDoctorMessageSummary(record)
   return summary.latestSenderType === 'user' && isDoctorGuidanceAckMessageType(summary.latestMessageType)
@@ -407,6 +434,7 @@ export function patientActionState(record) {
   const feedbackResolved = Number(feedback?.isResolved || 0) === 1
   const feedbackScore = Number(feedback?.serviceScore || 0)
   if (patientUnreadDoctorReplyCount(record) > 0) return 'doctor_reply_unread_by_patient'
+  if (hasLatestPatientMedicationFeedback(record)) return 'patient_medication_feedback'
   if (hasLatestPatientCheckResultUpdate(record)) return 'patient_check_result_update'
   if (hasLatestPatientFollowUpUpdate(record)) return 'patient_followup_update'
   if (feedback) {
@@ -431,6 +459,7 @@ export function patientActionLabel(record) {
     const count = patientUnreadDoctorReplyCount(record)
     return count > 1 ? `待患者查看 ${count} 条` : '待患者查看'
   }
+  if (state === 'patient_medication_feedback') return '已提交用药反馈'
   if (state === 'patient_check_result_update') return '已补充检查结果'
   if (state === 'patient_followup_update') return '已补充恢复更新'
   if (state === 'service_feedback_handled') return '评价已处理'
@@ -448,6 +477,7 @@ export function patientActionLabel(record) {
 export function patientActionTagType(record) {
   const state = patientActionState(record)
   if (state === 'doctor_reply_unread_by_patient') return 'warning'
+  if (state === 'patient_medication_feedback') return 'warning'
   if (state === 'patient_check_result_update') return 'success'
   if (state === 'patient_followup_update') return 'success'
   if (state === 'service_feedback_handled') return 'success'
@@ -473,6 +503,9 @@ export function patientActionSummary(record) {
     const count = patientUnreadDoctorReplyCount(record)
     if (preview) return `最近有 ${count} 条医生回复患者尚未查看，最新内容：${preview}`
     return `最近有 ${count} 条医生回复患者尚未查看。`
+  }
+  if (state === 'patient_medication_feedback') {
+    return preview || '患者刚提交了用药反馈或疑似不良反应，建议优先查看是否需要调整处方。'
   }
   if (state === 'patient_check_result_update') {
     return preview || '患者刚补充了新的检查结果，可优先查看并决定后续处理。'

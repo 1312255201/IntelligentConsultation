@@ -65,6 +65,7 @@
             <el-option label="待患者查看回复" value="unread_reply" />
             <el-option label="已补充恢复更新" value="followup_update" />
             <el-option label="已补充检查结果" value="check_result_update" />
+            <el-option label="已提交用药反馈" value="medication_feedback" />
             <el-option label="已确认查看医生建议" value="guidance_ack" />
             <el-option label="已提交服务评价" value="service_feedback" />
             <el-option label="等待患者随访反馈" value="followup_waiting" />
@@ -800,6 +801,63 @@
                 <el-button text @click="focusDetailActionSection('reply', detail.id)">在沟通区查看</el-button>
               </div>
             </article>
+            <div v-if="detail.reportFeedbacks?.length" class="list">
+              <article v-for="item in detail.reportFeedbacks" :key="`report-feedback-${item.id}`" class="subcard">
+                <div class="head">
+                  <div>
+                    <strong>{{ item.reportName || '患者回传报告' }}</strong>
+                    <p>患者已按医生建议回传结构化检查结果，可直接作为本轮判断和解释依据。</p>
+                  </div>
+                  <div class="chips">
+                    <span>{{ checkSuggestionTypeLabel(item.reportType) }}</span>
+                    <span v-if="item.reportDate">{{ formatDate(item.reportDate) }}</span>
+                    <span>{{ formatDate(item.updateTime || item.createTime) }}</span>
+                  </div>
+                </div>
+                <p class="copy"><strong>结果摘要：</strong>{{ item.reportSummary || '未填写' }}</p>
+                <p class="copy"><strong>患者问题：</strong>{{ item.doctorQuestion || '未填写' }}</p>
+                <p v-if="item.suggestionId" class="copy"><strong>关联建议：</strong>{{ detail.checkSuggestions?.find(suggestion => suggestion.id === item.suggestionId)?.itemName || `检查建议 #${item.suggestionId}` }}</p>
+                <div v-if="messageAttachments(item).length" class="conversation-image-list">
+                  <img
+                    v-for="path in messageAttachments(item)"
+                    :key="`${item.id}-${path}`"
+                    :src="resolveImagePath(path)"
+                    alt="报告附件"
+                    class="conversation-image"
+                  />
+                </div>
+              </article>
+            </div>
+            <div v-if="detail.medicationFeedbacks?.length" class="list">
+              <article v-for="item in detail.medicationFeedbacks" :key="`medication-feedback-${item.id}`" class="subcard">
+                <div class="head">
+                  <div>
+                    <strong>{{ item.medicineName || '患者用药反馈' }}</strong>
+                    <p>患者已补充药效变化或疑似不良反应，可结合当前处方决定是否需要调整建议。</p>
+                  </div>
+                  <div class="chips">
+                    <span>{{ medicationFeedbackTypeLabel(item.feedbackType) }}</span>
+                    <span>{{ medicationSeverityLabel(item.severityLevel) }}</span>
+                    <span>{{ medicationActionLabel(item.actionTaken) }}</span>
+                    <span>{{ formatDate(item.updateTime || item.createTime) }}</span>
+                  </div>
+                </div>
+                <p class="copy"><strong>反馈摘要：</strong>{{ item.feedbackSummary || '未填写' }}</p>
+                <p class="copy"><strong>患者问题：</strong>{{ item.doctorQuestion || '未填写' }}</p>
+                <div v-if="messageAttachments(item).length" class="conversation-image-list">
+                  <img
+                    v-for="path in messageAttachments(item)"
+                    :key="`${item.id}-${path}`"
+                    :src="resolveImagePath(path)"
+                    alt="用药反馈附件"
+                    class="conversation-image"
+                  />
+                </div>
+                <div class="actions">
+                  <el-button plain :disabled="!canEdit || latestMedicationFeedback?.id !== item.id" @click="applyMedicationFeedbackToHandle">带入处理摘要</el-button>
+                </div>
+              </article>
+            </div>
             <el-form label-position="top" :disabled="!canEdit">
               <el-form-item label="医生判断摘要">
                 <div v-if="sceneTemplates('handle_summary').length" class="template-tools">
@@ -836,6 +894,61 @@
                   <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('follow_up_plan') || !trimText(handleAiDraft.followUpPlan)" @click="composeAiFieldWithTemplate('follow_up_plan', 'followUpPlan', handleAiDraft.followUpPlan, { label: '随访计划', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.followUpPlan" maxlength="500" show-word-limit placeholder="例如：建议 3 天后复诊，如加重请线下就医。" />
+              </el-form-item>
+              <el-form-item label="结构化检查建议">
+                <div class="prescription-editor">
+                  <div class="prescription-editor-head">
+                    <div class="chips">
+                      <span>已配置 {{ handleForm.checkSuggestions.length }} 项</span>
+                    </div>
+                    <div class="actions">
+                      <el-button plain :disabled="!canEdit" @click="addCheckSuggestionRow()">添加检查建议</el-button>
+                    </div>
+                  </div>
+                  <div v-if="handleForm.checkSuggestions.length" class="list">
+                    <article
+                      v-for="(item, index) in handleForm.checkSuggestions"
+                      :key="item.clientKey"
+                      class="subcard"
+                    >
+                      <div class="head">
+                        <div>
+                          <strong>{{ item.itemName || `检查建议 ${index + 1}` }}</strong>
+                          <p class="copy">{{ checkSuggestionTypeLabel(item.itemType) }} / {{ checkSuggestionUrgencyLabel(item.urgencyLevel) }}</p>
+                        </div>
+                        <el-button v-if="canEdit" link type="danger" @click="removeCheckSuggestionRow(index)">移除</el-button>
+                      </div>
+                      <div class="grid">
+                        <el-input v-model="item.itemName" maxlength="100" placeholder="检查项目，例如：血常规 / 胸部 CT / 病理活检" />
+                        <el-select v-model="item.itemType" placeholder="选择检查类型">
+                          <el-option v-for="option in checkSuggestionTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
+                        </el-select>
+                        <el-select v-model="item.urgencyLevel" placeholder="选择紧急程度">
+                          <el-option v-for="option in checkSuggestionUrgencyOptions" :key="option.value" :label="option.label" :value="option.value" />
+                        </el-select>
+                      </div>
+                      <el-input
+                        v-model="item.purpose"
+                        type="textarea"
+                        :rows="2"
+                        maxlength="300"
+                        show-word-limit
+                        placeholder="填写建议目的，例如：进一步排查感染指标、明确是否存在肺部炎症。"
+                      />
+                      <el-input
+                        v-model="item.attentionNote"
+                        type="textarea"
+                        :rows="2"
+                        maxlength="300"
+                        show-word-limit
+                        placeholder="填写注意事项，例如：空腹抽血、检查前避免剧烈运动。"
+                      />
+                    </article>
+                  </div>
+                  <div v-else class="prescription-empty">
+                    <p class="copy">{{ canEdit ? '当前还未配置结构化检查建议，可按需要补充化验、影像、病理等检查项目。' : '当前还未配置结构化检查建议。' }}</p>
+                  </div>
+                </div>
               </el-form-item>
               <el-form-item label="医生处方">
                 <div class="prescription-editor">
@@ -1527,6 +1640,17 @@ const accountContext = inject('account-context', null)
 const conditionLevelOptions = [{ label: '轻度', value: 'low' }, { label: '中度', value: 'medium' }, { label: '较高风险', value: 'high' }, { label: '危急', value: 'critical' }]
 const dispositionOptions = [{ label: '继续观察', value: 'observe' }, { label: '线上随访', value: 'online_followup' }, { label: '线下就医', value: 'offline_visit' }, { label: '立即急诊', value: 'emergency' }]
 const conclusionTagOptions = ['适合居家观察', '建议线下检查', '建议药物评估', '需要复诊随访', '过敏风险', '发热监测', '皮肤护理', '慢病管理']
+const checkSuggestionTypeOptions = [
+  { label: '化验检查', value: 'lab' },
+  { label: '影像检查', value: 'imaging' },
+  { label: '病理结果', value: 'pathology' },
+  { label: '其他结果', value: 'other' }
+]
+const checkSuggestionUrgencyOptions = [
+  { label: '常规', value: 'routine' },
+  { label: '尽快', value: 'soon' },
+  { label: '加急', value: 'urgent' }
+]
 const followUpTypeOptions = [{ label: '平台随访', value: 'platform' }, { label: '电话随访', value: 'phone' }, { label: '线下随访', value: 'offline' }, { label: '其他方式', value: 'other' }]
 const patientStatusOptions = [{ label: '明显好转', value: 'improved' }, { label: '基本稳定', value: 'stable' }, { label: '出现加重', value: 'worsened' }, { label: '其他情况', value: 'other' }]
 const messageAiSceneOptions = [
@@ -1607,7 +1731,7 @@ const doctor = reactive({ bound: 1, bindingMessage: '', doctorId: null, doctorNa
 const medicineLoading = ref(false)
 const prescriptionPreviewLoading = ref(false)
 const medicineOptions = ref([])
-const handleForm = reactive({ summary: '', medicalAdvice: '', followUpPlan: '', internalRemark: '', prescriptions: [] })
+const handleForm = reactive({ summary: '', medicalAdvice: '', followUpPlan: '', internalRemark: '', checkSuggestions: [], prescriptions: [] })
 const conclusionForm = reactive({
   conditionLevel: '',
   disposition: '',
@@ -1777,6 +1901,9 @@ const latestPatientFollowUpUpdate = computed(() => [...consultationMessages.valu
 const latestPatientCheckResultUpdate = computed(() => [...consultationMessages.value]
   .reverse()
   .find(item => isCheckResultUpdateMessage(item) && item.senderType === 'user') || null)
+const latestMedicationFeedback = computed(() => Array.isArray(detail.value?.medicationFeedbacks) && detail.value.medicationFeedbacks.length
+  ? detail.value.medicationFeedbacks[0]
+  : null)
 const latestPatientGuidanceAck = computed(() => [...consultationMessages.value]
   .reverse()
   .find(item => item?.senderType === 'user' && isDoctorGuidanceAckMessage(item)) || null)
@@ -1803,8 +1930,10 @@ const patientActionLeadText = computed(() => {
       ? '患者已确认查看本轮医生结论或随访建议，当前可继续关注恢复进展、检查资料和后续反馈。'
       : '当前已形成医生结论或随访建议，可优先关注患者是否完成查看确认，再决定是否继续提醒。'
   }
-  if (latestPatientCheckResultUpdate.value || latestPatientFollowUpUpdate.value) {
-    return '患者最近补充了新的恢复或检查信息，可直接带入当前处理与随访。'
+  if (latestMedicationFeedback.value || latestPatientCheckResultUpdate.value || latestPatientFollowUpUpdate.value) {
+    return latestMedicationFeedback.value
+      ? '患者最近补充了用药反馈或疑似不良反应，建议优先回看并决定是否调整处方或处理建议。'
+      : '患者最近补充了新的恢复或检查信息，可直接带入当前处理与随访。'
   }
   if (detail.value?.serviceFeedback) {
     return detail.value.serviceFeedback.doctorHandleStatus === 1
@@ -1826,6 +1955,7 @@ const patientActionTags = computed(() => {
   if (latestDoctorGuidanceReferenceTime.value) {
     tags.push(hasPatientAcknowledgedGuidance.value ? '已确认查看医生建议' : '待确认查看医生建议')
   }
+  if (latestMedicationFeedback.value) tags.push('已提交用药反馈')
   if (latestPatientCheckResultUpdate.value) tags.push('已补充检查结果')
   if (latestPatientFollowUpUpdate.value) tags.push('已补充恢复更新')
   else if (followUpState(detail.value) !== 'none') tags.push(followUpTagLabel(detail.value))
@@ -1899,6 +2029,26 @@ const patientActionCards = computed(() => {
     quickActionLabel: '带入处理摘要',
     tone: latestPatientCheckResultUpdate.value ? 'success' : 'info'
   })
+  if (latestMedicationFeedback.value || Array.isArray(record.medicationFeedbacks) && record.medicationFeedbacks.length) {
+    cards.push({
+      key: 'medication_feedback',
+      title: '用药反馈',
+      status: latestMedicationFeedback.value ? '已提交用药反馈' : '暂无用药反馈',
+      description: abbreviateText(
+        trimText(
+          latestMedicationFeedback.value?.feedbackSummary
+          || latestMedicationFeedback.value?.doctorQuestion
+          || '患者如已开始按医嘱用药，可继续反馈药效变化和疑似不良反应。'
+        ),
+        96
+      ),
+      action: 'handle',
+      actionLabel: latestMedicationFeedback.value ? '查看处理区' : '查看详情',
+      quickAction: latestMedicationFeedback.value && canEdit.value ? 'apply_medication_feedback' : '',
+      quickActionLabel: '带入处理摘要',
+      tone: latestMedicationFeedback.value ? 'warning' : 'info'
+    })
+  }
   if (latestDoctorGuidanceReferenceTime.value) {
     cards.push({
       key: 'guidance_ack',
@@ -2487,6 +2637,14 @@ const workflowAssistantPrimaryAction = computed(() => {
       action: 'claim'
     }
   }
+  if (latestMedicationFeedback.value && canEdit.value) {
+    return {
+      title: '患者刚提交了用药反馈',
+      description: '建议先查看疑似不良反应或用药效果，再决定是否调整处方和处理建议。',
+      buttonLabel: '带入处理摘要',
+      action: 'apply_medication_feedback'
+    }
+  }
   if (latestPatientCheckResultUpdate.value && canEdit.value) {
     return {
       title: '患者刚补充了检查结果',
@@ -2568,6 +2726,7 @@ const workflowAssistantPrimarySectionKey = computed(() => {
     archive: 'archive',
     apply_followup_update: 'followup',
     apply_check_result_update: 'handle',
+    apply_medication_feedback: 'handle',
     apply_service_feedback_followup: 'followup',
     apply_guidance_reminder: 'reply'
   })[action] || ''
@@ -2603,7 +2762,12 @@ function markFocusedDetailSection(sectionKey) {
 }
 function focusDetailActionSection(action, detailId = null, options = {}) {
   const targetAction = resolveConsultationAction(action)
-  if (!['reply', 'followup', 'patient_action', 'feedback'].includes(targetAction)) return
+  if (!['reply', 'followup', 'patient_action', 'feedback'].includes(targetAction)) {
+    if (['basic', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetAction)) {
+      focusDetailPanelSection(targetAction, detailId, options)
+    }
+    return
+  }
   const {
     behavior = 'smooth',
     syncQuery = true
@@ -2741,7 +2905,7 @@ function runWorkflowAssistantAction(action) {
     openAdjacentDetail(1)
     return
   }
-  if (['apply_followup_update', 'apply_check_result_update', 'apply_service_feedback_followup'].includes(action)) {
+  if (['apply_followup_update', 'apply_check_result_update', 'apply_medication_feedback', 'apply_service_feedback_followup'].includes(action)) {
     handlePatientActionQuickAction(action)
     return
   }
@@ -2828,7 +2992,7 @@ function applyRouteFilters() {
   dispatchFilter.value = ['all', 'recommended_to_me', 'waiting_accept', 'claimed_by_other'].includes(dispatchValue) ? dispatchValue : 'all'
   followUpFilter.value = ['all', 'pending', 'due_today', 'overdue'].includes(followUpValue) ? followUpValue : 'all'
   feedbackFilter.value = ['all', 'attention', 'has_feedback', 'low_score', 'unresolved'].includes(feedbackValue) ? feedbackValue : 'all'
-  patientActionFilter.value = ['all', 'unread_reply', 'followup_update', 'check_result_update', 'guidance_ack', 'service_feedback', 'followup_waiting'].includes(patientActionValue)
+  patientActionFilter.value = ['all', 'unread_reply', 'followup_update', 'check_result_update', 'medication_feedback', 'guidance_ack', 'service_feedback', 'followup_waiting'].includes(patientActionValue)
     ? patientActionValue
     : 'all'
   riskFilter.value = ['all', 'high_priority', 'normal'].includes(riskValue) ? riskValue : 'all'
@@ -2875,6 +3039,7 @@ function buildMessagePendingNewLabel(message) {
   if (!message) return ''
   const patientName = trimText(message?.senderName || detail.value?.patientName) || '患者'
   if (isDoctorGuidanceAckMessage(message)) return `${patientName}确认已查看医生建议`
+  if (isMedicationFeedbackMessage(message)) return `${patientName}提交了用药反馈`
   if (isCheckResultUpdateMessage(message)) return `${patientName}补充了检查结果`
   if (isFollowUpUpdateMessage(message)) return `${patientName}补充了恢复更新`
   const preview = trimText(buildLocalMessagePreview(message))
@@ -3064,6 +3229,7 @@ function syncForms() {
   handleForm.medicalAdvice = handle?.medicalAdvice || ''
   handleForm.followUpPlan = handle?.followUpPlan || ''
   handleForm.internalRemark = handle?.internalRemark || ''
+  replaceCheckSuggestionRows(detail.value?.checkSuggestions)
   replacePrescriptionRows(detail.value?.prescriptions)
   resetPrescriptionPreview()
   const conclusion = detail.value?.doctorConclusion
@@ -3376,6 +3542,10 @@ function isCheckResultUpdateMessage(message) {
   return `${message?.messageType || ''}`.trim().toLowerCase() === 'check_result_update'
 }
 
+function isMedicationFeedbackMessage(message) {
+  return `${message?.messageType || ''}`.trim().toLowerCase() === 'medication_feedback'
+}
+
 function isDoctorGuidanceAckMessage(message) {
   return isDoctorGuidanceAckMessageType(message?.messageType)
 }
@@ -3410,9 +3580,64 @@ function applyPatientCheckResultUpdateToHandle() {
   ElMessage.success('已将患者检查结果补充带入处理摘要。')
 }
 
+function medicationFeedbackTypeLabel(value) {
+  return ({
+    improved: '用药后有改善',
+    limited: '效果有限',
+    adverse_reaction: '疑似不良反应',
+    other: '其他反馈'
+  })[trimText(value)] || '其他反馈'
+}
+
+function medicationSeverityLabel(value) {
+  return ({
+    mild: '轻度',
+    medium: '中度',
+    high: '重度'
+  })[trimText(value)] || '未说明'
+}
+
+function medicationActionLabel(value) {
+  return ({
+    continued: '继续用药',
+    paused: '暂停用药',
+    stopped: '已经停药',
+    consulting: '正在咨询医生',
+    other: '其他处理'
+  })[trimText(value)] || '其他处理'
+}
+
+function buildMedicationFeedbackSummary(feedback = latestMedicationFeedback.value) {
+  if (!feedback) return ''
+  const segments = [
+    feedback.medicineName || '未命名药品',
+    medicationFeedbackTypeLabel(feedback.feedbackType),
+    `严重程度：${medicationSeverityLabel(feedback.severityLevel)}`,
+    `已采取动作：${medicationActionLabel(feedback.actionTaken)}`
+  ]
+  if (trimText(feedback.feedbackSummary)) segments.push(`反馈摘要：${trimText(feedback.feedbackSummary)}`)
+  if (trimText(feedback.doctorQuestion)) segments.push(`患者问题：${trimText(feedback.doctorQuestion)}`)
+  return joinUniqueSegments(segments)
+}
+
+function applyMedicationFeedbackToHandle() {
+  const feedback = latestMedicationFeedback.value
+  if (!feedback) return ElMessage.warning('当前还没有可带入的用药反馈。')
+  if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
+
+  const content = buildMedicationFeedbackSummary(feedback)
+  if (!content) return ElMessage.warning('当前用药反馈缺少可带入的摘要内容。')
+
+  const merged = mergeTextField(handleForm, 'summary', `患者用药反馈：\n${content}`)
+  focusDetailPanelSection('handle', detail.value?.id || null, { syncQuery: false })
+  if (!merged) return ElMessage.info('当前处理摘要已包含这条用药反馈。')
+  ElMessage.success('已将患者用药反馈带入处理摘要。')
+}
+
 function handlePatientActionQuickAction(action) {
   if (action === 'apply_followup_update') return applyPatientFollowUpUpdateToFollowUp()
   if (action === 'apply_check_result_update') return applyPatientCheckResultUpdateToHandle()
+  if (action === 'apply_medication_feedback') return applyMedicationFeedbackToHandle()
   if (action === 'apply_service_feedback_followup') return applyServiceFeedbackToFollowUp()
   if (action === 'apply_guidance_reminder') return applyGuidanceReminderToMessage()
 }
@@ -3566,6 +3791,7 @@ function matchesPatientActionFilter(record) {
   if (patientActionFilter.value === 'unread_reply') return state === 'doctor_reply_unread_by_patient'
   if (patientActionFilter.value === 'followup_update') return state === 'patient_followup_update'
   if (patientActionFilter.value === 'check_result_update') return state === 'patient_check_result_update'
+  if (patientActionFilter.value === 'medication_feedback') return state === 'patient_medication_feedback'
   if (patientActionFilter.value === 'guidance_ack') return state === 'patient_acknowledged_guidance'
   if (patientActionFilter.value === 'service_feedback') return state.startsWith('service_feedback_')
   if (patientActionFilter.value === 'followup_waiting') {
@@ -3674,6 +3900,9 @@ function messagePreview(record) {
     if (isDoctorGuidanceAckMessage({ messageType: summary.latestMessageType })) {
       return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
     }
+    if (isMedicationFeedbackMessage({ messageType: summary.latestMessageType })) {
+      return preview.startsWith('[用药反馈]') ? preview : `[用药反馈] ${preview}`
+    }
     if (isCheckResultUpdateMessage({ messageType: summary.latestMessageType })) {
       return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
     }
@@ -3684,6 +3913,7 @@ function messagePreview(record) {
   }
   const preview = summary.latestMessagePreview || '暂无沟通消息'
   if (isDoctorGuidanceAckMessage({ messageType: summary.latestMessageType })) return decoratePreview(preview)
+  if (isMedicationFeedbackMessage({ messageType: summary.latestMessageType })) return decoratePreview(preview)
   if (isCheckResultUpdateMessage({ messageType: summary.latestMessageType })) return decoratePreview(preview)
   if (!isFollowUpUpdateMessage({ messageType: summary.latestMessageType })) return preview
   if (preview.startsWith('[恢复更新]') || preview.startsWith('[Recovery Update]')) return preview
@@ -3718,6 +3948,9 @@ function buildLocalMessagePreview(message) {
     if (!preview) return preview
     if (isDoctorGuidanceAckMessage(message)) {
       return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
+    }
+    if (isMedicationFeedbackMessage(message)) {
+      return preview.startsWith('[用药反馈]') ? preview : `[用药反馈] ${preview}`
     }
     if (isCheckResultUpdateMessage(message)) {
       return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
@@ -3947,6 +4180,63 @@ function loadMedicineOptions(silent = false) {
     medicineOptions.value = []
     if (!silent) ElMessage.warning(message || '药品目录加载失败')
   })
+}
+function createCheckSuggestionFormItem(item = {}) {
+  return {
+    clientKey: item?.clientKey || `check-suggestion-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    itemName: trimText(item?.itemName),
+    itemType: trimText(item?.itemType) || 'lab',
+    urgencyLevel: trimText(item?.urgencyLevel) || 'routine',
+    purpose: trimText(item?.purpose),
+    attentionNote: trimText(item?.attentionNote)
+  }
+}
+function normalizeCheckSuggestionFormList(items) {
+  return ensureArray(items).map(item => createCheckSuggestionFormItem(item))
+}
+function replaceCheckSuggestionRows(items) {
+  handleForm.checkSuggestions.splice(0, handleForm.checkSuggestions.length, ...normalizeCheckSuggestionFormList(items))
+}
+function addCheckSuggestionRow(seed = {}) {
+  handleForm.checkSuggestions.push(createCheckSuggestionFormItem(seed))
+}
+function removeCheckSuggestionRow(index) {
+  handleForm.checkSuggestions.splice(index, 1)
+}
+function effectiveCheckSuggestionRows() {
+  return ensureArray(handleForm.checkSuggestions).filter(item => {
+    return [
+      trimText(item?.itemName),
+      trimText(item?.purpose),
+      trimText(item?.attentionNote),
+      trimText(item?.itemType),
+      trimText(item?.urgencyLevel)
+    ].some(Boolean)
+  })
+}
+function buildCheckSuggestionSubmitPayload() {
+  return effectiveCheckSuggestionRows().map(item => ({
+    itemName: nullableTrimText(item?.itemName),
+    itemType: trimText(item?.itemType) || null,
+    urgencyLevel: trimText(item?.urgencyLevel) || null,
+    purpose: nullableTrimText(item?.purpose),
+    attentionNote: nullableTrimText(item?.attentionNote)
+  }))
+}
+function buildCheckSuggestionDraftSnapshot() {
+  return ensureArray(handleForm.checkSuggestions).map(item => ({
+    itemName: trimText(item?.itemName),
+    itemType: trimText(item?.itemType) || '',
+    urgencyLevel: trimText(item?.urgencyLevel) || '',
+    purpose: trimText(item?.purpose),
+    attentionNote: trimText(item?.attentionNote)
+  }))
+}
+function checkSuggestionTypeLabel(value) {
+  return checkSuggestionTypeOptions.find(item => item.value === value)?.label || '其他结果'
+}
+function checkSuggestionUrgencyLabel(value) {
+  return checkSuggestionUrgencyOptions.find(item => item.value === value)?.label || '未说明'
 }
 function createPrescriptionFormItem(item = {}) {
   return {
@@ -4397,6 +4687,7 @@ function buildDoctorLocalDraftSnapshot() {
       medicalAdvice: trimText(handleForm.medicalAdvice),
       followUpPlan: trimText(handleForm.followUpPlan),
       internalRemark: trimText(handleForm.internalRemark),
+      checkSuggestions: buildCheckSuggestionDraftSnapshot(),
       prescriptions: buildPrescriptionDraftSnapshot()
     },
     conclusionForm: {
@@ -4538,6 +4829,7 @@ function restoreDoctorLocalDraft(recordId = detail.value?.id) {
   handleForm.medicalAdvice = snapshot.handleForm?.medicalAdvice || ''
   handleForm.followUpPlan = snapshot.handleForm?.followUpPlan || ''
   handleForm.internalRemark = snapshot.handleForm?.internalRemark || ''
+  replaceCheckSuggestionRows(snapshot.handleForm?.checkSuggestions)
   replacePrescriptionRows(snapshot.handleForm?.prescriptions)
   conclusionForm.conditionLevel = snapshot.conclusionForm?.conditionLevel || ''
   conclusionForm.disposition = snapshot.conclusionForm?.disposition || ''
@@ -5044,6 +5336,7 @@ function submitHandle(status, options = {}) {
   }
   const prescriptionValidationMessage = validatePrescriptionRowsForSubmit()
   if (prescriptionValidationMessage) return ElMessage.warning(prescriptionValidationMessage)
+  const checkSuggestions = buildCheckSuggestionSubmitPayload()
   const prescriptions = buildPrescriptionSubmitPayload()
   const openNext = options.openNext === true
   const nextPlan = openNext ? buildAdjacentDetailPlan(1) : null
@@ -5054,6 +5347,7 @@ function submitHandle(status, options = {}) {
     medicalAdvice: `${handleForm.medicalAdvice || ''}`.trim(),
     followUpPlan: `${handleForm.followUpPlan || ''}`.trim(),
     internalRemark: `${handleForm.internalRemark || ''}`.trim(),
+    checkSuggestions,
     prescriptions,
     conditionLevel: conclusionForm.conditionLevel || null,
     disposition: conclusionForm.disposition || null,
@@ -5254,6 +5548,7 @@ function triageActionLabel(value) { return ({ emergency: '立即急诊', offline
 function triageSessionStatusLabel(value) { return ({ completed: '已完成', in_progress: '进行中', closed: '已关闭' })[value] || value || '-' }
 function messageRoleLabel(value) { return ({ user: '患者', assistant: 'AI 导诊', system: '系统', rule_engine: '规则引擎' })[value] || value || '-' }
 function messageTypeLabel(value) {
+  if (value === 'medication_feedback') return '用药反馈'
   if (value === 'followup_update') return '恢复更新'
   if (value === 'check_result_update') return '检查结果补充'
   if (value === 'doctor_guidance_ack') return '已确认查看'

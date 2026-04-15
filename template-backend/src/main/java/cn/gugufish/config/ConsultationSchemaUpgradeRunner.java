@@ -16,8 +16,12 @@ import java.util.Map;
 @Order(0)
 public class ConsultationSchemaUpgradeRunner implements ApplicationRunner {
 
+    private static final String CONSULTATION_RECORD_TABLE = "db_consultation_record";
     private static final String SERVICE_FEEDBACK_TABLE = "db_consultation_service_feedback";
     private static final String SERVICE_FEEDBACK_HANDLE_INDEX = "idx_consultation_service_feedback_doctor_handle";
+    private static final String CHECK_SUGGESTION_TABLE = "db_consultation_check_suggestion";
+    private static final String REPORT_FEEDBACK_TABLE = "db_consultation_report_feedback";
+    private static final String MEDICATION_FEEDBACK_TABLE = "db_consultation_medication_feedback";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -32,11 +36,96 @@ public class ConsultationSchemaUpgradeRunner implements ApplicationRunner {
             log.warn("数据库结构升级检查跳过：当前连接未返回 schema 名称");
             return;
         }
+        if (!tableExists(schema, CONSULTATION_RECORD_TABLE)) {
+            log.warn("数据库结构升级检查跳过：表 {} 不存在", CONSULTATION_RECORD_TABLE);
+            return;
+        }
+        ensureStructuredFeedbackTables(schema);
         if (!tableExists(schema, SERVICE_FEEDBACK_TABLE)) {
             log.info("数据库结构升级检查跳过：表 {} 不存在", SERVICE_FEEDBACK_TABLE);
             return;
         }
         ensureConsultationServiceFeedbackHandleColumns(schema);
+    }
+
+    private void ensureStructuredFeedbackTables(String schema) {
+        if (!tableExists(schema, CHECK_SUGGESTION_TABLE)) {
+            executeDdl("""
+                    CREATE TABLE `db_consultation_check_suggestion` (
+                      `id` int NOT NULL AUTO_INCREMENT,
+                      `consultation_id` int NOT NULL,
+                      `doctor_id` int DEFAULT NULL,
+                      `doctor_name` varchar(50) DEFAULT NULL,
+                      `department_id` int DEFAULT NULL,
+                      `department_name` varchar(50) DEFAULT NULL,
+                      `item_name` varchar(100) NOT NULL,
+                      `item_type` varchar(20) NOT NULL DEFAULT 'other',
+                      `urgency_level` varchar(20) NOT NULL DEFAULT 'routine',
+                      `purpose` varchar(300) DEFAULT NULL,
+                      `attention_note` varchar(300) DEFAULT NULL,
+                      `status` tinyint(1) NOT NULL DEFAULT 1,
+                      `sort` int NOT NULL DEFAULT 0,
+                      `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      PRIMARY KEY (`id`),
+                      KEY `idx_consultation_check_suggestion_consultation_sort` (`consultation_id`, `status`, `sort`, `id`),
+                      KEY `idx_consultation_check_suggestion_doctor_time` (`doctor_id`, `update_time`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                    """, "自动创建结构化检查建议表");
+        }
+        if (!tableExists(schema, REPORT_FEEDBACK_TABLE)) {
+            executeDdl("""
+                    CREATE TABLE `db_consultation_report_feedback` (
+                      `id` int NOT NULL AUTO_INCREMENT,
+                      `consultation_id` int NOT NULL,
+                      `suggestion_id` int DEFAULT NULL,
+                      `account_id` int NOT NULL,
+                      `patient_id` int NOT NULL,
+                      `patient_name` varchar(50) NOT NULL,
+                      `report_type` varchar(20) NOT NULL DEFAULT 'other',
+                      `report_name` varchar(100) DEFAULT NULL,
+                      `report_summary` varchar(1000) DEFAULT NULL,
+                      `report_date` date DEFAULT NULL,
+                      `doctor_question` varchar(300) DEFAULT NULL,
+                      `attachments_json` text,
+                      `status` tinyint(1) NOT NULL DEFAULT 1,
+                      `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      PRIMARY KEY (`id`),
+                      KEY `idx_consultation_report_feedback_consultation_time` (`consultation_id`, `status`, `create_time`),
+                      KEY `idx_consultation_report_feedback_account_time` (`account_id`, `create_time`),
+                      KEY `idx_consultation_report_feedback_suggestion` (`suggestion_id`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                    """, "自动创建检查报告回传表");
+        }
+        if (!tableExists(schema, MEDICATION_FEEDBACK_TABLE)) {
+            executeDdl("""
+                    CREATE TABLE `db_consultation_medication_feedback` (
+                      `id` int NOT NULL AUTO_INCREMENT,
+                      `consultation_id` int NOT NULL,
+                      `prescription_id` int DEFAULT NULL,
+                      `medicine_id` int DEFAULT NULL,
+                      `medicine_name` varchar(100) DEFAULT NULL,
+                      `account_id` int NOT NULL,
+                      `patient_id` int NOT NULL,
+                      `patient_name` varchar(50) NOT NULL,
+                      `feedback_type` varchar(30) NOT NULL DEFAULT 'other',
+                      `severity_level` varchar(20) NOT NULL DEFAULT 'mild',
+                      `action_taken` varchar(20) NOT NULL DEFAULT 'consulting',
+                      `feedback_summary` varchar(1000) DEFAULT NULL,
+                      `doctor_question` varchar(300) DEFAULT NULL,
+                      `attachments_json` text,
+                      `status` tinyint(1) NOT NULL DEFAULT 1,
+                      `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      PRIMARY KEY (`id`),
+                      KEY `idx_consultation_medication_feedback_consultation_time` (`consultation_id`, `status`, `create_time`),
+                      KEY `idx_consultation_medication_feedback_account_time` (`account_id`, `create_time`),
+                      KEY `idx_consultation_medication_feedback_prescription` (`prescription_id`),
+                      KEY `idx_consultation_medication_feedback_medicine` (`medicine_id`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                    """, "自动创建用药反馈表");
+        }
     }
 
     private void ensureConsultationServiceFeedbackHandleColumns(String schema) {
@@ -91,7 +180,7 @@ public class ConsultationSchemaUpgradeRunner implements ApplicationRunner {
             jdbcTemplate.execute(sql);
             log.info("{} 成功", action);
         } catch (DataAccessException exception) {
-            throw new IllegalStateException(action + "失败，请检查数据库账号是否有 ALTER 权限，或手动执行 sql/mysql57-upgrade-2026-04-11-doctor-service-feedback-handle.sql", exception);
+            throw new IllegalStateException(action + "失败，请检查数据库账号是否有 ALTER 权限，或手动执行 sql/mysql57-upgrade-2026-04-15-consultation-check-and-feedback.sql", exception);
         }
     }
 

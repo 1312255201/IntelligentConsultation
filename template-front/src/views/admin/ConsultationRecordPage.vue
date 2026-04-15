@@ -805,6 +805,104 @@
             </div>
           </section>
 
+          <section v-if="detail.checkSuggestions?.length" class="card panel">
+            <div class="head">
+              <div>
+                <h3>结构化检查建议</h3>
+                <p>查看医生在本次问诊里建议补充的检查项目、目的和注意事项。</p>
+              </div>
+              <div class="chips">
+                <span>共 {{ detail.checkSuggestions.length }} 项</span>
+              </div>
+            </div>
+            <div class="list">
+              <article
+                v-for="item in detail.checkSuggestions"
+                :key="`admin-check-suggestion-${item.id}`"
+                class="subcard"
+              >
+                <div class="chips">
+                  <span>{{ item.itemName }}</span>
+                  <span>{{ checkSuggestionTypeLabel(item.itemType) }}</span>
+                  <span>{{ checkSuggestionUrgencyLabel(item.urgencyLevel) }}</span>
+                  <span v-if="item.doctorName">{{ item.doctorName }}</span>
+                </div>
+                <p class="copy"><strong>检查目的：</strong>{{ item.purpose || '暂无补充说明' }}</p>
+                <p class="copy"><strong>注意事项：</strong>{{ item.attentionNote || '暂无特殊注意事项' }}</p>
+              </article>
+            </div>
+          </section>
+
+          <section v-if="detail.reportFeedbacks?.length" class="card panel">
+            <div class="head">
+              <div>
+                <h3>检查报告回传</h3>
+                <p>查看患者按结构化检查建议回传的化验、影像、病理或其他报告内容。</p>
+              </div>
+              <div class="chips">
+                <span>共 {{ detail.reportFeedbacks.length }} 条</span>
+              </div>
+            </div>
+            <div class="list">
+              <article
+                v-for="item in detail.reportFeedbacks"
+                :key="`admin-report-feedback-${item.id}`"
+                class="subcard"
+              >
+                <div class="chips">
+                  <span>{{ item.reportName || '未填写报告名称' }}</span>
+                  <span>{{ reportTypeLabel(item.reportType) }}</span>
+                  <span>{{ formatDate(item.reportDate || item.createTime) }}</span>
+                  <span v-if="item.patientName">{{ item.patientName }}</span>
+                </div>
+                <p v-if="item.suggestionId" class="copy">
+                  <strong>关联建议：</strong>{{ checkSuggestionNameById(item.suggestionId) || `检查建议 #${item.suggestionId}` }}
+                </p>
+                <p class="copy"><strong>结果摘要：</strong>{{ item.reportSummary || '暂无结果摘要' }}</p>
+                <p class="copy"><strong>患者问题：</strong>{{ item.doctorQuestion || '患者未补充问题' }}</p>
+                <div v-if="item.attachments?.length" class="answer-grid">
+                  <article v-for="path in item.attachments" :key="path" class="subcard">
+                    <img :src="resolveImagePath(path)" alt="报告附件" class="image" />
+                  </article>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section v-if="detail.medicationFeedbacks?.length" class="card panel">
+            <div class="head">
+              <div>
+                <h3>用药反馈 / 不良反应上报</h3>
+                <p>查看患者针对已开药品的疗效反馈、暂停停药情况和疑似不良反应。</p>
+              </div>
+              <div class="chips">
+                <span>共 {{ detail.medicationFeedbacks.length }} 条</span>
+              </div>
+            </div>
+            <div class="list">
+              <article
+                v-for="item in detail.medicationFeedbacks"
+                :key="`admin-medication-feedback-${item.id}`"
+                class="subcard"
+              >
+                <div class="chips">
+                  <span>{{ item.medicineName || '未关联药品' }}</span>
+                  <span>{{ medicationFeedbackTypeLabel(item.feedbackType) }}</span>
+                  <span>{{ medicationSeverityLabel(item.severityLevel) }}</span>
+                  <span>{{ medicationActionLabel(item.actionTaken) }}</span>
+                </div>
+                <p class="copy"><strong>反馈摘要：</strong>{{ item.feedbackSummary || '暂无反馈摘要' }}</p>
+                <p class="copy"><strong>患者问题：</strong>{{ item.doctorQuestion || '患者未补充问题' }}</p>
+                <p class="copy"><strong>提交时间：</strong>{{ formatDate(item.createTime) }}</p>
+                <div v-if="item.attachments?.length" class="answer-grid">
+                  <article v-for="path in item.attachments" :key="path" class="subcard">
+                    <img :src="resolveImagePath(path)" alt="用药反馈附件" class="image" />
+                  </article>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <section v-if="detail.prescriptions?.length" class="card panel">
             <div class="head">
               <div>
@@ -1563,6 +1661,15 @@ function openDetail(id, options = {}) {
   get(`/api/admin/consultation-record/detail?id=${detailId}`, data => {
     detail.value = data ? {
       ...data,
+      checkSuggestions: Array.isArray(data?.checkSuggestions) ? data.checkSuggestions : [],
+      reportFeedbacks: Array.isArray(data?.reportFeedbacks) ? data.reportFeedbacks.map(item => ({
+        ...item,
+        attachments: Array.isArray(item?.attachments) ? item.attachments : []
+      })) : [],
+      medicationFeedbacks: Array.isArray(data?.medicationFeedbacks) ? data.medicationFeedbacks.map(item => ({
+        ...item,
+        attachments: Array.isArray(item?.attachments) ? item.attachments : []
+      })) : [],
       prescriptions: Array.isArray(data?.prescriptions) ? data.prescriptions : [],
       smartDispatch: normalizeSmartDispatch(data?.smartDispatch),
       payment: normalizePayment(data?.payment)
@@ -1651,6 +1758,12 @@ function formatAmount(value) {
   return `￥${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`
 }
 function handleStatusLabel(value) { return value === 'completed' ? '处理完成' : '处理中' }
+function checkSuggestionTypeLabel(value) { return ({ lab: '化验', imaging: '影像', pathology: '病理', other: '其他' })[value] || '其他' }
+function checkSuggestionUrgencyLabel(value) { return ({ routine: '常规', soon: '尽快', urgent: '加急' })[value] || '未标注紧急度' }
+function reportTypeLabel(value) { return ({ lab: '化验', imaging: '影像', pathology: '病理', other: '其他' })[value] || '其他' }
+function medicationFeedbackTypeLabel(value) { return ({ improved: '有改善', limited: '效果有限', adverse_reaction: '疑似不良反应', other: '其他' })[value] || '其他' }
+function medicationSeverityLabel(value) { return ({ mild: '轻度', medium: '中度', high: '重度' })[value] || '未标注严重度' }
+function medicationActionLabel(value) { return ({ continued: '继续用药', paused: '暂时停用', stopped: '已经停药', consulting: '正在咨询医生', other: '其他处理' })[value] || '其他处理' }
 function conditionLevelLabel(value) { return ({ low: '轻度', medium: '中度', high: '较高风险', critical: '危急' })[value] || '未填写' }
 function dispositionLabel(value) { return ({ observe: '继续观察', online_followup: '线上随访', offline_visit: '线下就医', emergency: '立即急诊' })[value] || '未填写' }
 function aiConsistencyLabel(value) { return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断' }
@@ -1660,6 +1773,11 @@ function patientStatusLabel(value) { return ({ improved: '明显好转', stable:
 function statusTagType(value) { return ({ submitted: 'info', triaged: 'primary', processing: 'warning', completed: 'success' })[value] || 'info' }
 function triageBadgeStyle(color) { return color ? { color, borderColor: `${color}33`, backgroundColor: `${color}14` } : {} }
 function parseJsonArray(value) { try { const parsed = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed : [] } catch { return [] } }
+function checkSuggestionNameById(id) {
+  const targetId = Number(id)
+  if (!Number.isInteger(targetId) || !detail.value?.checkSuggestions?.length) return ''
+  return detail.value.checkSuggestions.find(item => Number(item?.id) === targetId)?.itemName || ''
+}
 function mismatchReasonLabels(codes) { return (codes || []).map(item => aiMismatchReasonLabel(item)).filter(Boolean) }
 function doctorConclusionMismatchReasonLabels(conclusion) { return mismatchReasonLabels(parseJsonArray(conclusion?.aiMismatchReasonsJson)) }
 function hasServiceFeedback(record) { return !!record?.serviceFeedback }

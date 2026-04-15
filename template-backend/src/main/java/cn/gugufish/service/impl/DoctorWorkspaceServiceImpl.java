@@ -1,13 +1,16 @@
 package cn.gugufish.service.impl;
 
 import cn.gugufish.ai.AiTriageProperties;
+import cn.gugufish.entity.dto.ConsultationCheckSuggestion;
 import cn.gugufish.entity.dto.ConsultationServiceFeedback;
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
 import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
 import cn.gugufish.entity.dto.ConsultationDoctorFollowUp;
 import cn.gugufish.entity.dto.ConsultationDoctorHandle;
+import cn.gugufish.entity.dto.ConsultationMedicationFeedback;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
+import cn.gugufish.entity.dto.ConsultationReportFeedback;
 import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.DoctorFormAiLog;
@@ -21,18 +24,22 @@ import cn.gugufish.entity.vo.request.DoctorConsultationAiDraftGenerateVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationAssignSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationFollowUpSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationFormDraftApplyVO;
+import cn.gugufish.entity.vo.request.DoctorCheckSuggestionItemSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationHandleSubmitVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftApplyVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationMessageDraftGenerateVO;
 import cn.gugufish.entity.vo.request.DoctorConsultationServiceFeedbackHandleSubmitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
+import cn.gugufish.entity.vo.response.ConsultationCheckSuggestionVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO;
+import cn.gugufish.entity.vo.response.ConsultationMedicationFeedbackVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
 import cn.gugufish.entity.vo.response.ConsultationPrescriptionPreviewVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
+import cn.gugufish.entity.vo.response.ConsultationReportFeedbackVO;
 import cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationFollowUpDraftVO;
 import cn.gugufish.entity.vo.response.DoctorConsultationHandleDraftVO;
@@ -45,8 +52,11 @@ import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
 import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
 import cn.gugufish.mapper.ConsultationDoctorFollowUpMapper;
 import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
+import cn.gugufish.mapper.ConsultationCheckSuggestionMapper;
+import cn.gugufish.mapper.ConsultationMedicationFeedbackMapper;
 import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
+import cn.gugufish.mapper.ConsultationReportFeedbackMapper;
 import cn.gugufish.mapper.ConsultationServiceFeedbackMapper;
 import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
@@ -145,6 +155,15 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
 
     @Resource
     ConsultationDoctorFollowUpMapper consultationDoctorFollowUpMapper;
+
+    @Resource
+    ConsultationCheckSuggestionMapper consultationCheckSuggestionMapper;
+
+    @Resource
+    ConsultationReportFeedbackMapper consultationReportFeedbackMapper;
+
+    @Resource
+    ConsultationMedicationFeedbackMapper consultationMedicationFeedbackMapper;
 
     @Resource
     ConsultationRecordAnswerMapper consultationRecordAnswerMapper;
@@ -447,6 +466,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(recordId);
         var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(recordId);
         var payment = consultationPaymentService.detailByConsultationId(recordId);
+        var checkSuggestions = listCheckSuggestions(recordId);
+        var reportFeedbacks = listReportFeedbacks(recordId);
+        var medicationFeedbacks = listMedicationFeedbacks(recordId);
         var prescriptions = consultationPrescriptionService.listByConsultationId(recordId);
         var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(recordId);
         var triageSession = triageSessionQueryService.detailByConsultationId(recordId);
@@ -462,6 +484,9 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
             vo.setPayment(payment);
+            vo.setCheckSuggestions(checkSuggestions);
+            vo.setReportFeedbacks(reportFeedbacks);
+            vo.setMedicationFeedbacks(medicationFeedbacks);
             vo.setPrescriptions(prescriptions);
             vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                     doctorAssignment == null ? null : doctorAssignment.getDoctorId(),
@@ -831,6 +856,15 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                 return "医生处理结果更新失败";
             }
         }
+
+        String checkSuggestionMessage = replaceConsultationCheckSuggestions(
+                vo.getConsultationId(),
+                doctor,
+                departmentName,
+                vo.getCheckSuggestions(),
+                now
+        );
+        if (checkSuggestionMessage != null) return checkSuggestionMessage;
 
         String prescriptionMessage = consultationPrescriptionService.replaceConsultationPrescriptions(
                 vo.getConsultationId(),
@@ -1832,6 +1866,21 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
         payload.put("aiMismatchReasons", ConsultationAiMismatchReasonUtils.normalizeCodes(vo.getAiMismatchReasons()));
         payload.put("aiMismatchRemark", trimToNull(vo.getAiMismatchRemark()));
         payload.put("patientInstruction", trimToNull(vo.getPatientInstruction()));
+        payload.put("checkSuggestions", vo.getCheckSuggestions() == null ? List.of() : vo.getCheckSuggestions().stream()
+                .filter(Objects::nonNull)
+                .map(item -> {
+                    Map<String, Object> suggestion = new HashMap<>();
+                    suggestion.put("itemName", trimToNull(item.getItemName()));
+                    suggestion.put("itemType", normalizeCheckItemType(item.getItemType()));
+                    suggestion.put("urgencyLevel", normalizeCheckUrgencyLevel(item.getUrgencyLevel()));
+                    suggestion.put("purpose", trimToNull(item.getPurpose()));
+                    suggestion.put("attentionNote", trimToNull(item.getAttentionNote()));
+                    return suggestion;
+                })
+                .filter(item -> item.get("itemName") != null
+                        || item.get("purpose") != null
+                        || item.get("attentionNote") != null)
+                .toList());
         payload.put("prescriptions", vo.getPrescriptions() == null ? List.of() : vo.getPrescriptions().stream()
                 .filter(Objects::nonNull)
                 .map(item -> {
@@ -1850,6 +1899,122 @@ public class DoctorWorkspaceServiceImpl implements DoctorWorkspaceService {
                         || item.get("medicationInstruction") != null)
                 .toList());
         return JSON.toJSONString(payload);
+    }
+
+    private List<ConsultationCheckSuggestionVO> listCheckSuggestions(int consultationId) {
+        return consultationCheckSuggestionMapper.selectList(Wrappers.<ConsultationCheckSuggestion>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByAsc("sort")
+                        .orderByAsc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationCheckSuggestionVO.class))
+                .toList();
+    }
+
+    private List<ConsultationReportFeedbackVO> listReportFeedbacks(int consultationId) {
+        return consultationReportFeedbackMapper.selectList(Wrappers.<ConsultationReportFeedback>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationReportFeedbackVO.class, vo ->
+                        vo.setAttachments(parseJsonStringList(item.getAttachmentsJson()))))
+                .toList();
+    }
+
+    private List<ConsultationMedicationFeedbackVO> listMedicationFeedbacks(int consultationId) {
+        return consultationMedicationFeedbackMapper.selectList(Wrappers.<ConsultationMedicationFeedback>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationMedicationFeedbackVO.class, vo ->
+                        vo.setAttachments(parseJsonStringList(item.getAttachmentsJson()))))
+                .toList();
+    }
+
+    private String replaceConsultationCheckSuggestions(int consultationId,
+                                                       Doctor doctor,
+                                                       String departmentName,
+                                                       List<DoctorCheckSuggestionItemSubmitVO> items,
+                                                       Date now) {
+        if (items == null) return null;
+
+        List<ConsultationCheckSuggestion> entities = new ArrayList<>();
+        int sort = 0;
+        for (int index = 0; index < items.size(); index++) {
+            DoctorCheckSuggestionItemSubmitVO item = items.get(index);
+            if (item == null) continue;
+            String itemName = trimToNull(item.getItemName());
+            String itemType = normalizeCheckItemType(item.getItemType());
+            String urgencyLevel = normalizeCheckUrgencyLevel(item.getUrgencyLevel());
+            String purpose = abbreviate(trimToNull(item.getPurpose()), 300);
+            String attentionNote = abbreviate(trimToNull(item.getAttentionNote()), 300);
+            if (itemName == null && itemType == null && urgencyLevel == null && purpose == null && attentionNote == null) {
+                continue;
+            }
+            if (itemName == null) return "请填写第 " + (index + 1) + " 条检查建议名称";
+            if (itemType == null) return "请选择第 " + (index + 1) + " 条检查建议类型";
+            if (urgencyLevel == null) return "请选择第 " + (index + 1) + " 条检查建议紧急程度";
+            entities.add(new ConsultationCheckSuggestion(
+                    null,
+                    consultationId,
+                    doctor.getId(),
+                    doctor.getName(),
+                    doctor.getDepartmentId(),
+                    departmentName,
+                    itemName,
+                    itemType,
+                    urgencyLevel,
+                    purpose,
+                    attentionNote,
+                    1,
+                    sort++,
+                    now,
+                    now
+            ));
+        }
+
+        consultationCheckSuggestionMapper.delete(Wrappers.<ConsultationCheckSuggestion>query()
+                .eq("consultation_id", consultationId));
+        for (ConsultationCheckSuggestion entity : entities) {
+            if (consultationCheckSuggestionMapper.insert(entity) <= 0) {
+                return "检查建议保存失败";
+            }
+        }
+        return null;
+    }
+
+    private String normalizeCheckItemType(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) return null;
+        normalized = normalized.toLowerCase();
+        return List.of("lab", "imaging", "pathology", "other").contains(normalized) ? normalized : null;
+    }
+
+    private String normalizeCheckUrgencyLevel(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) return null;
+        normalized = normalized.toLowerCase();
+        return List.of("routine", "soon", "urgent").contains(normalized) ? normalized : null;
+    }
+
+    private List<String> parseJsonStringList(String json) {
+        String text = trimToNull(json);
+        if (text == null) return List.of();
+        try {
+            List<String> items = JSON.parseArray(text, String.class);
+            if (items == null) return List.of();
+            return items.stream()
+                    .map(this::trimToNull)
+                    .filter(Objects::nonNull)
+                    .toList();
+        } catch (Exception ignored) {
+            return List.of(text);
+        }
     }
 
     private String buildSavedFollowUpPreview(ConsultationDoctorFollowUp followUp) {

@@ -1,10 +1,13 @@
 package cn.gugufish.service.impl;
 
+import cn.gugufish.entity.dto.ConsultationCheckSuggestion;
 import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
 import cn.gugufish.entity.dto.ConsultationDispatchConfig;
+import cn.gugufish.entity.dto.ConsultationMedicationFeedback;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
+import cn.gugufish.entity.dto.ConsultationReportFeedback;
 import cn.gugufish.entity.dto.TriageMessage;
 import cn.gugufish.entity.dto.TriageRuleHitLog;
 import cn.gugufish.entity.dto.TriageResult;
@@ -21,17 +24,23 @@ import cn.gugufish.entity.vo.response.AdminConsultationDispatchSummaryVO;
 import cn.gugufish.entity.vo.response.AdminConsultationDispatchWaitVO;
 import cn.gugufish.entity.vo.response.AdminConsultationRecordVO;
 import cn.gugufish.entity.vo.response.ConsultationAiComparisonVO;
+import cn.gugufish.entity.vo.response.ConsultationCheckSuggestionVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO;
+import cn.gugufish.entity.vo.response.ConsultationMedicationFeedbackVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
+import cn.gugufish.entity.vo.response.ConsultationReportFeedbackVO;
 import cn.gugufish.entity.vo.response.ConsultationSmartDispatchVO;
 import cn.gugufish.entity.vo.response.TriageMessageVO;
 import cn.gugufish.entity.vo.response.TriageRuleHitLogVO;
 import cn.gugufish.entity.vo.response.TriageResultVO;
 import cn.gugufish.entity.vo.response.TriageSessionVO;
+import cn.gugufish.mapper.ConsultationCheckSuggestionMapper;
 import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
 import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
+import cn.gugufish.mapper.ConsultationMedicationFeedbackMapper;
 import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
+import cn.gugufish.mapper.ConsultationReportFeedbackMapper;
 import cn.gugufish.mapper.TriageMessageMapper;
 import cn.gugufish.mapper.TriageRuleHitLogMapper;
 import cn.gugufish.mapper.TriageResultMapper;
@@ -51,6 +60,7 @@ import cn.gugufish.service.TriageSessionQueryService;
 import cn.gugufish.utils.ConsultationAiComparisonUtils;
 import cn.gugufish.utils.ConsultationAiMismatchReasonUtils;
 import cn.gugufish.utils.ConsultationSmartDispatchUtils;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -82,6 +92,15 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
 
     @Resource
     ConsultationDoctorConclusionMapper consultationDoctorConclusionMapper;
+
+    @Resource
+    ConsultationCheckSuggestionMapper consultationCheckSuggestionMapper;
+
+    @Resource
+    ConsultationReportFeedbackMapper consultationReportFeedbackMapper;
+
+    @Resource
+    ConsultationMedicationFeedbackMapper consultationMedicationFeedbackMapper;
 
     @Resource
     TriageRuleHitLogMapper triageRuleHitLogMapper;
@@ -382,6 +401,9 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
         var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(id);
         var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(id);
         var payment = consultationPaymentService.detailByConsultationId(id);
+        var checkSuggestions = listCheckSuggestions(id);
+        var reportFeedbacks = listReportFeedbacks(id);
+        var medicationFeedbacks = listMedicationFeedbacks(id);
         var prescriptions = consultationPrescriptionService.listByConsultationId(id);
         var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(id);
         var triageSession = triageSessionQueryService.detailByConsultationId(id);
@@ -396,6 +418,9 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
             vo.setPayment(payment);
+            vo.setCheckSuggestions(checkSuggestions);
+            vo.setReportFeedbacks(reportFeedbacks);
+            vo.setMedicationFeedbacks(medicationFeedbacks);
             vo.setPrescriptions(prescriptions);
             vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                     doctorAssignment == null ? null : doctorAssignment.getDoctorId(),
@@ -1292,6 +1317,56 @@ public class ConsultationRecordAdminServiceImpl implements ConsultationRecordAdm
     private String normalizeGroupName(String value, String fallbackGroupName) {
         String text = trimToNull(value);
         return text == null ? fallbackGroupName : text;
+    }
+
+    private List<ConsultationCheckSuggestionVO> listCheckSuggestions(int consultationId) {
+        return consultationCheckSuggestionMapper.selectList(Wrappers.<ConsultationCheckSuggestion>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByAsc("sort")
+                        .orderByAsc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationCheckSuggestionVO.class))
+                .toList();
+    }
+
+    private List<ConsultationReportFeedbackVO> listReportFeedbacks(int consultationId) {
+        return consultationReportFeedbackMapper.selectList(Wrappers.<ConsultationReportFeedback>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationReportFeedbackVO.class, vo ->
+                        vo.setAttachments(parseJsonStringList(item.getAttachmentsJson()))))
+                .toList();
+    }
+
+    private List<ConsultationMedicationFeedbackVO> listMedicationFeedbacks(int consultationId) {
+        return consultationMedicationFeedbackMapper.selectList(Wrappers.<ConsultationMedicationFeedback>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationMedicationFeedbackVO.class, vo ->
+                        vo.setAttachments(parseJsonStringList(item.getAttachmentsJson()))))
+                .toList();
+    }
+
+    private List<String> parseJsonStringList(String json) {
+        String text = trimToNull(json);
+        if (text == null) return List.of();
+        try {
+            List<String> items = JSON.parseArray(text, String.class);
+            if (items == null) return List.of();
+            return items.stream()
+                    .map(this::trimToNull)
+                    .filter(Objects::nonNull)
+                    .toList();
+        } catch (Exception ignored) {
+            return List.of(text);
+        }
     }
 
     private String normalizeCompareStatus(String value) {

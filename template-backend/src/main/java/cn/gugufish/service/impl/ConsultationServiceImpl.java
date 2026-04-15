@@ -2,6 +2,7 @@ package cn.gugufish.service.impl;
 
 import cn.gugufish.entity.dto.BodyPartDict;
 import cn.gugufish.entity.dto.ConsultationCategory;
+import cn.gugufish.entity.dto.ConsultationCheckSuggestion;
 import cn.gugufish.entity.dto.ConsultationDoctorAssignment;
 import cn.gugufish.entity.dto.ConsultationDoctorConclusion;
 import cn.gugufish.entity.dto.ConsultationDoctorFollowUp;
@@ -9,8 +10,10 @@ import cn.gugufish.entity.dto.ConsultationDoctorHandle;
 import cn.gugufish.entity.dto.ConsultationDispatchConfig;
 import cn.gugufish.entity.dto.ConsultationIntakeField;
 import cn.gugufish.entity.dto.ConsultationIntakeTemplate;
+import cn.gugufish.entity.dto.ConsultationMedicationFeedback;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
+import cn.gugufish.entity.dto.ConsultationReportFeedback;
 import cn.gugufish.entity.dto.Department;
 import cn.gugufish.entity.dto.Doctor;
 import cn.gugufish.entity.dto.DoctorSchedule;
@@ -23,14 +26,18 @@ import cn.gugufish.entity.dto.SymptomDict;
 import cn.gugufish.entity.dto.TriageRuleHitLog;
 import cn.gugufish.entity.dto.TriageFeedback;
 import cn.gugufish.entity.dto.TriageMessage;
+import cn.gugufish.entity.dto.TriageLevelDict;
 import cn.gugufish.entity.dto.TriageResult;
 import cn.gugufish.entity.dto.TriageSession;
-import cn.gugufish.entity.dto.TriageLevelDict;
 import cn.gugufish.entity.vo.request.ConsultationAnswerSubmitVO;
+import cn.gugufish.entity.vo.request.ConsultationMedicationFeedbackSubmitVO;
+import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
+import cn.gugufish.entity.vo.request.ConsultationReportFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
 import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageFeedbackSubmitVO;
 import cn.gugufish.entity.vo.response.ConsultationArchiveSummaryVO;
+import cn.gugufish.entity.vo.response.ConsultationCheckSuggestionVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorConclusionVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorFollowUpVO;
 import cn.gugufish.entity.vo.response.ConsultationDoctorHandleVO;
@@ -40,22 +47,28 @@ import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
 import cn.gugufish.entity.vo.response.ConsultationEntryCategoryVO;
 import cn.gugufish.entity.vo.response.ConsultationIntakeFieldVO;
 import cn.gugufish.entity.vo.response.ConsultationIntakeTemplateVO;
+import cn.gugufish.entity.vo.response.ConsultationMedicationFeedbackVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageSummaryVO;
+import cn.gugufish.entity.vo.response.ConsultationPrescriptionVO;
 import cn.gugufish.entity.vo.response.ConsultationRecommendDoctorVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordAnswerVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordVO;
+import cn.gugufish.entity.vo.response.ConsultationReportFeedbackVO;
 import cn.gugufish.entity.vo.response.ConsultationServiceFeedbackVO;
 import cn.gugufish.entity.vo.response.TriageResultVO;
 import cn.gugufish.mapper.BodyPartDictMapper;
 import cn.gugufish.mapper.ConsultationCategoryMapper;
+import cn.gugufish.mapper.ConsultationCheckSuggestionMapper;
 import cn.gugufish.mapper.ConsultationDoctorConclusionMapper;
 import cn.gugufish.mapper.ConsultationDoctorFollowUpMapper;
 import cn.gugufish.mapper.ConsultationDoctorHandleMapper;
 import cn.gugufish.mapper.ConsultationIntakeFieldMapper;
 import cn.gugufish.mapper.ConsultationIntakeTemplateMapper;
 import cn.gugufish.mapper.ConsultationDoctorAssignmentMapper;
+import cn.gugufish.mapper.ConsultationMedicationFeedbackMapper;
 import cn.gugufish.mapper.ConsultationRecordAnswerMapper;
 import cn.gugufish.mapper.ConsultationRecordMapper;
+import cn.gugufish.mapper.ConsultationReportFeedbackMapper;
 import cn.gugufish.mapper.DepartmentMapper;
 import cn.gugufish.mapper.DoctorMapper;
 import cn.gugufish.mapper.DoctorScheduleMapper;
@@ -95,7 +108,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.beans.BeanUtils;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
@@ -111,6 +123,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
@@ -137,6 +150,9 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Resource ConsultationDoctorHandleMapper consultationDoctorHandleMapper;
     @Resource ConsultationDoctorConclusionMapper consultationDoctorConclusionMapper;
     @Resource ConsultationDoctorFollowUpMapper consultationDoctorFollowUpMapper;
+    @Resource ConsultationCheckSuggestionMapper consultationCheckSuggestionMapper;
+    @Resource ConsultationReportFeedbackMapper consultationReportFeedbackMapper;
+    @Resource ConsultationMedicationFeedbackMapper consultationMedicationFeedbackMapper;
     @Resource ConsultationRecordMapper consultationRecordMapper;
     @Resource ConsultationRecordAnswerMapper consultationRecordAnswerMapper;
     @Resource DepartmentMapper departmentMapper;
@@ -348,6 +364,9 @@ public class ConsultationServiceImpl implements ConsultationService {
         var doctorHandle = consultationDoctorHandleQueryService.detailByConsultationId(id);
         var doctorConclusion = consultationDoctorConclusionQueryService.detailByConsultationId(id);
         var payment = consultationPaymentService.detailByConsultationId(id);
+        var checkSuggestions = listCheckSuggestions(id);
+        var reportFeedbacks = listReportFeedbacks(id);
+        var medicationFeedbacks = listMedicationFeedbacks(id);
         var prescriptions = consultationPrescriptionService.listByConsultationId(id);
         var doctorFollowUps = consultationDoctorFollowUpQueryService.listByConsultationId(id);
         var triageSession = triageSessionQueryService.detailByConsultationId(id);
@@ -370,6 +389,9 @@ public class ConsultationServiceImpl implements ConsultationService {
             vo.setDoctorHandle(doctorHandle);
             vo.setDoctorConclusion(doctorConclusion);
             vo.setPayment(payment);
+            vo.setCheckSuggestions(checkSuggestions);
+            vo.setReportFeedbacks(reportFeedbacks);
+            vo.setMedicationFeedbacks(medicationFeedbacks);
             vo.setPrescriptions(prescriptions);
             vo.setSmartDispatch(ConsultationSmartDispatchUtils.build(
                     assignment == null ? null : assignment.getDoctorId(),
@@ -786,6 +808,187 @@ public class ConsultationServiceImpl implements ConsultationService {
         }
     }
 
+    private List<ConsultationCheckSuggestionVO> listCheckSuggestions(int consultationId) {
+        return consultationCheckSuggestionMapper.selectList(Wrappers.<ConsultationCheckSuggestion>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByAsc("sort")
+                        .orderByAsc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationCheckSuggestionVO.class))
+                .toList();
+    }
+
+    private List<ConsultationReportFeedbackVO> listReportFeedbacks(int consultationId) {
+        return consultationReportFeedbackMapper.selectList(Wrappers.<ConsultationReportFeedback>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationReportFeedbackVO.class, vo ->
+                        vo.setAttachments(parseJsonStringList(item.getAttachmentsJson()))))
+                .toList();
+    }
+
+    private List<ConsultationMedicationFeedbackVO> listMedicationFeedbacks(int consultationId) {
+        return consultationMedicationFeedbackMapper.selectList(Wrappers.<ConsultationMedicationFeedback>query()
+                        .eq("consultation_id", consultationId)
+                        .eq("status", 1)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"))
+                .stream()
+                .map(item -> item.asViewObject(ConsultationMedicationFeedbackVO.class, vo ->
+                        vo.setAttachments(parseJsonStringList(item.getAttachmentsJson()))))
+                .toList();
+    }
+
+    private List<String> normalizeAttachmentList(List<String> attachments) {
+        if (attachments == null || attachments.isEmpty()) return List.of();
+        return attachments.stream()
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(6)
+                .toList();
+    }
+
+    private String normalizeReportType(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) return null;
+        return switch (normalized.toLowerCase()) {
+            case "lab", "imaging", "pathology", "other" -> normalized.toLowerCase();
+            default -> null;
+        };
+    }
+
+    private String normalizeMedicationFeedbackType(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) return null;
+        return switch (normalized.toLowerCase()) {
+            case "improved", "limited", "adverse_reaction", "other" -> normalized.toLowerCase();
+            default -> null;
+        };
+    }
+
+    private String normalizeMedicationSeverityLevel(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) return null;
+        return switch (normalized.toLowerCase()) {
+            case "mild", "medium", "high" -> normalized.toLowerCase();
+            default -> null;
+        };
+    }
+
+    private String normalizeMedicationActionTaken(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) return null;
+        return switch (normalized.toLowerCase()) {
+            case "continued", "paused", "stopped", "consulting", "other" -> normalized.toLowerCase();
+            default -> null;
+        };
+    }
+
+    private Date parseDateValue(String value) {
+        String text = trimToNull(value);
+        if (text == null) return null;
+        return java.sql.Date.valueOf(text);
+    }
+
+    private ConsultationMessageSendVO buildStructuredUserMessage(int recordId,
+                                                                 String content,
+                                                                 List<String> attachments,
+                                                                 String sceneType) {
+        ConsultationMessageSendVO message = new ConsultationMessageSendVO();
+        message.setRecordId(recordId);
+        message.setContent(trimToNull(content));
+        message.setAttachments(attachments == null ? List.of() : attachments);
+        message.setSceneType(sceneType);
+        return message;
+    }
+
+    private String buildReportFeedbackMessageContent(ConsultationReportFeedback feedback,
+                                                     ConsultationCheckSuggestion suggestion) {
+        List<String> segments = new ArrayList<>();
+        segments.add("检查结果补充");
+        segments.add("报告类型：" + reportTypeLabel(feedback == null ? null : feedback.getReportType()));
+        if (suggestion != null && trimToNull(suggestion.getItemName()) != null) {
+            segments.add("对应建议：" + suggestion.getItemName());
+        }
+        if (trimToNull(feedback == null ? null : feedback.getReportName()) != null) {
+            segments.add("报告名称：" + feedback.getReportName());
+        }
+        if (feedback != null && feedback.getReportDate() != null) {
+            segments.add("报告日期：" + formatDateOnly(feedback.getReportDate()));
+        }
+        if (trimToNull(feedback == null ? null : feedback.getReportSummary()) != null) {
+            segments.add("结果摘要：" + feedback.getReportSummary());
+        }
+        if (trimToNull(feedback == null ? null : feedback.getDoctorQuestion()) != null) {
+            segments.add("想问医生：" + feedback.getDoctorQuestion());
+        }
+        return String.join("\n", segments);
+    }
+
+    private String buildMedicationFeedbackMessageContent(ConsultationMedicationFeedback feedback) {
+        List<String> segments = new ArrayList<>();
+        segments.add("用药反馈");
+        if (trimToNull(feedback == null ? null : feedback.getMedicineName()) != null) {
+            segments.add("关联药品：" + feedback.getMedicineName());
+        }
+        segments.add("反馈类型：" + medicationFeedbackTypeLabel(feedback == null ? null : feedback.getFeedbackType()));
+        segments.add("严重程度：" + medicationSeverityLabel(feedback == null ? null : feedback.getSeverityLevel()));
+        segments.add("已采取动作：" + medicationActionLabel(feedback == null ? null : feedback.getActionTaken()));
+        if (trimToNull(feedback == null ? null : feedback.getFeedbackSummary()) != null) {
+            segments.add("反馈摘要：" + feedback.getFeedbackSummary());
+        }
+        if (trimToNull(feedback == null ? null : feedback.getDoctorQuestion()) != null) {
+            segments.add("想问医生：" + feedback.getDoctorQuestion());
+        }
+        return String.join("\n", segments);
+    }
+
+    private String reportTypeLabel(String value) {
+        return switch (normalizeReportType(value) == null ? "" : normalizeReportType(value)) {
+            case "lab" -> "化验检查";
+            case "imaging" -> "影像检查";
+            case "pathology" -> "病理结果";
+            default -> "其他结果";
+        };
+    }
+
+    private String medicationFeedbackTypeLabel(String value) {
+        return switch (normalizeMedicationFeedbackType(value) == null ? "" : normalizeMedicationFeedbackType(value)) {
+            case "improved" -> "症状改善";
+            case "limited" -> "效果有限";
+            case "adverse_reaction" -> "疑似不良反应";
+            default -> "其他反馈";
+        };
+    }
+
+    private String medicationSeverityLabel(String value) {
+        return switch (normalizeMedicationSeverityLevel(value) == null ? "" : normalizeMedicationSeverityLevel(value)) {
+            case "mild" -> "轻度";
+            case "medium" -> "中度";
+            case "high" -> "重度";
+            default -> "未说明";
+        };
+    }
+
+    private String medicationActionLabel(String value) {
+        return switch (normalizeMedicationActionTaken(value) == null ? "" : normalizeMedicationActionTaken(value)) {
+            case "continued" -> "继续服用";
+            case "paused" -> "暂时停用";
+            case "stopped" -> "已经停药";
+            case "consulting" -> "正在咨询医生";
+            default -> "其他处理";
+        };
+    }
+
+    private String formatDateOnly(Date value) {
+        return value == null ? null : new SimpleDateFormat("yyyy-MM-dd").format(value);
+    }
+
     private String firstText(String... values) {
         if (values == null) return null;
         for (String value : values) {
@@ -879,11 +1082,6 @@ public class ConsultationServiceImpl implements ConsultationService {
     private String formatDateTime(Date value) {
         if (value == null) return null;
         return new SimpleDateFormat("yyyy-MM-dd HH:mm").format(value);
-    }
-
-    private String formatDateOnly(Date value) {
-        if (value == null) return null;
-        return new SimpleDateFormat("yyyy-MM-dd").format(value);
     }
 
     @Override
@@ -1013,6 +1211,148 @@ public class ConsultationServiceImpl implements ConsultationService {
     @Override
     public String submitTriageFeedback(int accountId, ConsultationTriageFeedbackSubmitVO vo) {
         return triageFeedbackService.submitFeedback(accountId, vo);
+    }
+
+    @Override
+    @Transactional
+    public String submitReportFeedback(int accountId, ConsultationReportFeedbackSubmitVO vo) {
+        if (vo == null || vo.getRecordId() == null) return "问诊记录不存在";
+        ConsultationRecord record = consultationRecordMapper.selectOne(Wrappers.<ConsultationRecord>query()
+                .eq("id", vo.getRecordId())
+                .eq("account_id", accountId));
+        if (record == null) return "问诊记录不存在或暂无操作权限";
+
+        String reportType = normalizeReportType(vo.getReportType());
+        String reportName = trimToNull(vo.getReportName());
+        String reportSummary = trimToNull(vo.getReportSummary());
+        String doctorQuestion = trimToNull(vo.getDoctorQuestion());
+        List<String> attachments = normalizeAttachmentList(vo.getAttachments());
+        if (reportType == null) return "请选择报告类型";
+        if (reportName == null && reportSummary == null && doctorQuestion == null && attachments.isEmpty()) {
+            return "请至少补充报告名称、结果摘要、想问医生的问题或附件";
+        }
+
+        ConsultationCheckSuggestion suggestion = null;
+        if (vo.getSuggestionId() != null) {
+            suggestion = consultationCheckSuggestionMapper.selectById(vo.getSuggestionId());
+            if (suggestion == null
+                    || !Objects.equals(suggestion.getConsultationId(), record.getId())
+                    || !Objects.equals(suggestion.getStatus(), 1)) {
+                return "所选检查建议不存在或不属于当前问诊";
+            }
+        }
+
+        Date reportDate;
+        try {
+            reportDate = parseDateValue(vo.getReportDate());
+        } catch (IllegalArgumentException exception) {
+            return "报告日期格式不正确，请使用 yyyy-MM-dd";
+        }
+
+        Date now = new Date();
+        ConsultationReportFeedback feedback = new ConsultationReportFeedback(
+                null,
+                record.getId(),
+                suggestion == null ? null : suggestion.getId(),
+                accountId,
+                record.getPatientId(),
+                record.getPatientName(),
+                reportType,
+                reportName,
+                reportSummary,
+                reportDate,
+                doctorQuestion,
+                attachments.isEmpty() ? null : JSON.toJSONString(attachments),
+                1,
+                now,
+                now
+        );
+        if (consultationReportFeedbackMapper.insert(feedback) <= 0) {
+            return "检查报告回传保存失败";
+        }
+
+        String message = consultationMessageService.sendUserMessage(accountId, buildStructuredUserMessage(
+                record.getId(),
+                buildReportFeedbackMessageContent(feedback, suggestion),
+                attachments,
+                "check_result_update"
+        ));
+        if (message != null) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        }
+        return message;
+    }
+
+    @Override
+    @Transactional
+    public String submitMedicationFeedback(int accountId, ConsultationMedicationFeedbackSubmitVO vo) {
+        if (vo == null || vo.getRecordId() == null) return "问诊记录不存在";
+        ConsultationRecord record = consultationRecordMapper.selectOne(Wrappers.<ConsultationRecord>query()
+                .eq("id", vo.getRecordId())
+                .eq("account_id", accountId));
+        if (record == null) return "问诊记录不存在或暂无操作权限";
+
+        ConsultationPrescriptionVO prescription = null;
+        if (vo.getPrescriptionId() != null) {
+            prescription = consultationPrescriptionService.listByConsultationId(record.getId()).stream()
+                    .filter(item -> Objects.equals(item.getId(), vo.getPrescriptionId()))
+                    .findFirst()
+                    .orElse(null);
+            if (prescription == null) return "所选药品处方不存在或不属于当前问诊";
+        }
+
+        Integer medicineId = prescription != null ? prescription.getMedicineId() : vo.getMedicineId();
+        String medicineName = trimToNull(prescription != null ? prescription.getMedicineName() : vo.getMedicineName());
+        if (medicineId == null && medicineName == null) return "请选择关联药品";
+
+        String feedbackType = normalizeMedicationFeedbackType(vo.getFeedbackType());
+        String severityLevel = normalizeMedicationSeverityLevel(vo.getSeverityLevel());
+        String actionTaken = normalizeMedicationActionTaken(vo.getActionTaken());
+        String feedbackSummary = trimToNull(vo.getFeedbackSummary());
+        String doctorQuestion = trimToNull(vo.getDoctorQuestion());
+        List<String> attachments = normalizeAttachmentList(vo.getAttachments());
+
+        if (feedbackType == null) return "请选择反馈类型";
+        if (severityLevel == null) return "请选择严重程度";
+        if (actionTaken == null) return "请选择已采取动作";
+        if (feedbackSummary == null && doctorQuestion == null && attachments.isEmpty()) {
+            return "请至少补充反馈摘要、想问医生的问题或附件";
+        }
+
+        Date now = new Date();
+        ConsultationMedicationFeedback feedback = new ConsultationMedicationFeedback(
+                null,
+                record.getId(),
+                prescription == null ? null : prescription.getId(),
+                medicineId,
+                medicineName,
+                accountId,
+                record.getPatientId(),
+                record.getPatientName(),
+                feedbackType,
+                severityLevel,
+                actionTaken,
+                feedbackSummary,
+                doctorQuestion,
+                attachments.isEmpty() ? null : JSON.toJSONString(attachments),
+                1,
+                now,
+                now
+        );
+        if (consultationMedicationFeedbackMapper.insert(feedback) <= 0) {
+            return "用药反馈保存失败";
+        }
+
+        String message = consultationMessageService.sendUserMessage(accountId, buildStructuredUserMessage(
+                record.getId(),
+                buildMedicationFeedbackMessageContent(feedback),
+                attachments,
+                "medication_feedback"
+        ));
+        if (message != null) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        }
+        return message;
     }
 
     @Override

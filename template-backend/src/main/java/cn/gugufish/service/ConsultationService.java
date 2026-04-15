@@ -1,5 +1,7 @@
 package cn.gugufish.service;
 
+import cn.gugufish.entity.vo.request.ConsultationMedicationFeedbackSubmitVO;
+import cn.gugufish.entity.vo.request.ConsultationReportFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
 import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageFeedbackSubmitVO;
@@ -19,5 +21,7 @@ public interface ConsultationService {
     String mockPay(int accountId, int recordId);
     ConsultationFeedbackOptionsVO feedbackOptions();
     String submitTriageFeedback(int accountId, ConsultationTriageFeedbackSubmitVO vo);
+    String submitReportFeedback(int accountId, ConsultationReportFeedbackSubmitVO vo);
+    String submitMedicationFeedback(int accountId, ConsultationMedicationFeedbackSubmitVO vo);
     String submitServiceFeedback(int accountId, ConsultationServiceFeedbackSubmitVO vo);
 }

@@ -1,8 +1,10 @@
 package cn.gugufish.controller;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.vo.request.ConsultationMedicationFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
 import cn.gugufish.entity.vo.request.ConsultationPaymentMockPayVO;
+import cn.gugufish.entity.vo.request.ConsultationReportFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
 import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageMessageSendVO;
@@ -159,6 +161,20 @@ public class ConsultationController {
     public RestBean<Void> submitFeedback(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                          @RequestBody @Valid ConsultationTriageFeedbackSubmitVO vo) {
         return this.messageHandle(() -> consultationService.submitTriageFeedback(id, vo));
+    }
+
+    @PostMapping("/report-feedback/submit")
+    @Operation(summary = "提交结构化检查报告反馈")
+    public RestBean<Void> submitReportFeedback(@RequestAttribute(Const.ATTR_USER_ID) int id,
+                                               @RequestBody @Valid ConsultationReportFeedbackSubmitVO vo) {
+        return this.messageHandle(() -> consultationService.submitReportFeedback(id, vo));
+    }
+
+    @PostMapping("/medication-feedback/submit")
+    @Operation(summary = "提交用药反馈")
+    public RestBean<Void> submitMedicationFeedback(@RequestAttribute(Const.ATTR_USER_ID) int id,
+                                                   @RequestBody @Valid ConsultationMedicationFeedbackSubmitVO vo) {
+        return this.messageHandle(() -> consultationService.submitMedicationFeedback(id, vo));
     }
 
     @PostMapping("/service-feedback/submit")

@@ -269,6 +269,7 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         String sceneType = normalizeMessageSceneType(vo == null ? null : vo.getSceneType());
         if ("followup_update".equals(sceneType)) return "followup_update";
         if ("check_result_update".equals(sceneType)) return "check_result_update";
+        if ("medication_feedback".equals(sceneType)) return "medication_feedback";
         if ("doctor_guidance_ack".equals(sceneType)) return "doctor_guidance_ack";
         return attachments == null || attachments.isEmpty()
                 ? "text"
@@ -282,6 +283,7 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
         return switch (normalized) {
             case "follow_up_update", "followup_update", "recovery_update" -> "followup_update";
             case "check_result", "check_result_update", "report_update", "report_upload", "inspection_result", "result_update" -> "check_result_update";
+            case "medication_feedback", "drug_feedback", "adverse_reaction", "medication_update" -> "medication_feedback";
             case "doctor_guidance_ack", "guidance_ack", "doctor_ack", "conclusion_ack", "advice_ack" -> "doctor_guidance_ack";
             default -> null;
         };
@@ -388,6 +390,11 @@ public class ConsultationMessageServiceImpl implements ConsultationMessageServic
             return preview.startsWith("[已确认查看]") || preview.startsWith("[Acknowledged]")
                     ? preview
                     : abbreviateText("[已确认查看] " + preview, 72);
+        }
+        if ("medication_feedback".equals(messageType)) {
+            return preview.startsWith("[用药反馈]") || preview.startsWith("[Medication Feedback]")
+                    ? preview
+                    : abbreviateText("[用药反馈] " + preview, 72);
         }
         if ("check_result_update".equals(messageType)) {
             return preview.startsWith("[检查结果]") || preview.startsWith("[Check Result]")

@@ -550,6 +550,74 @@ CREATE TABLE IF NOT EXISTS `db_consultation_prescription` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `db_consultation_check_suggestion` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_id` int NOT NULL,
+  `doctor_id` int DEFAULT NULL,
+  `doctor_name` varchar(50) DEFAULT NULL,
+  `department_id` int DEFAULT NULL,
+  `department_name` varchar(50) DEFAULT NULL,
+  `item_name` varchar(100) NOT NULL,
+  `item_type` varchar(20) NOT NULL DEFAULT 'other',
+  `urgency_level` varchar(20) NOT NULL DEFAULT 'routine',
+  `purpose` varchar(300) DEFAULT NULL,
+  `attention_note` varchar(300) DEFAULT NULL,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `sort` int NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_consultation_check_suggestion_consultation_sort` (`consultation_id`, `status`, `sort`, `id`),
+  KEY `idx_consultation_check_suggestion_doctor_time` (`doctor_id`, `update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_consultation_report_feedback` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_id` int NOT NULL,
+  `suggestion_id` int DEFAULT NULL,
+  `account_id` int NOT NULL,
+  `patient_id` int NOT NULL,
+  `patient_name` varchar(50) NOT NULL,
+  `report_type` varchar(20) NOT NULL DEFAULT 'other',
+  `report_name` varchar(100) DEFAULT NULL,
+  `report_summary` varchar(1000) DEFAULT NULL,
+  `report_date` date DEFAULT NULL,
+  `doctor_question` varchar(300) DEFAULT NULL,
+  `attachments_json` text,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_consultation_report_feedback_consultation_time` (`consultation_id`, `status`, `create_time`),
+  KEY `idx_consultation_report_feedback_account_time` (`account_id`, `create_time`),
+  KEY `idx_consultation_report_feedback_suggestion` (`suggestion_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `db_consultation_medication_feedback` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `consultation_id` int NOT NULL,
+  `prescription_id` int DEFAULT NULL,
+  `medicine_id` int DEFAULT NULL,
+  `medicine_name` varchar(100) DEFAULT NULL,
+  `account_id` int NOT NULL,
+  `patient_id` int NOT NULL,
+  `patient_name` varchar(50) NOT NULL,
+  `feedback_type` varchar(30) NOT NULL DEFAULT 'other',
+  `severity_level` varchar(20) NOT NULL DEFAULT 'mild',
+  `action_taken` varchar(20) NOT NULL DEFAULT 'consulting',
+  `feedback_summary` varchar(1000) DEFAULT NULL,
+  `doctor_question` varchar(300) DEFAULT NULL,
+  `attachments_json` text,
+  `status` tinyint(1) NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_consultation_medication_feedback_consultation_time` (`consultation_id`, `status`, `create_time`),
+  KEY `idx_consultation_medication_feedback_account_time` (`account_id`, `create_time`),
+  KEY `idx_consultation_medication_feedback_prescription` (`prescription_id`),
+  KEY `idx_consultation_medication_feedback_medicine` (`medicine_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `db_consultation_doctor_follow_up` (
   `id` int NOT NULL AUTO_INCREMENT,
   `consultation_id` int NOT NULL,

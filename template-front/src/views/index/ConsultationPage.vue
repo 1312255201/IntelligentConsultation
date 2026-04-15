@@ -1006,6 +1006,32 @@
             </div>
           </div>
 
+          <div v-if="detailRecord.checkSuggestions?.length" class="result-panel">
+            <div class="doctor-recommend-head">
+              <strong>医生检查建议</strong>
+              <span>这里展示医生给出的结构化检查建议，方便你按项目补充化验、影像、病理或其他结果。</span>
+            </div>
+            <div class="detail-answers">
+              <article
+                v-for="item in detailRecord.checkSuggestions"
+                :key="`check-suggestion-${item.id}`"
+                class="detail-answer-card"
+              >
+                <div class="chip-row">
+                  <span>{{ item.itemName || '未命名检查项' }}</span>
+                  <span>{{ checkSuggestionTypeLabel(item.itemType) }}</span>
+                  <span>{{ checkSuggestionUrgencyLabel(item.urgencyLevel) }}</span>
+                  <span v-if="item.doctorName">{{ item.doctorName }}</span>
+                  <span>{{ formatDate(item.updateTime || item.createTime) }}</span>
+                </div>
+                <div class="detail-answer-value">
+                  <p><strong>检查目的：</strong>{{ item.purpose || '未填写' }}</p>
+                  <p><strong>注意事项：</strong>{{ item.attentionNote || '未填写' }}</p>
+                </div>
+              </article>
+            </div>
+          </div>
+
           <div
             v-if="detailRecord.doctorConclusion"
             ref="doctorConclusionPanelRef"
@@ -1209,16 +1235,65 @@
               :closable="false"
               class="conversation-alert"
             />
-            <article v-if="latestPatientCheckResultUpdate" class="detail-answer-card">
-              <div class="chip-row">
-                <span>Latest result update {{ formatDate(latestPatientCheckResultUpdate.createTime) }}</span>
-                <span v-if="messageAttachments(latestPatientCheckResultUpdate).length">Images {{ messageAttachments(latestPatientCheckResultUpdate).length }}</span>
-              </div>
-              <div class="detail-answer-value">
-                <p>{{ latestPatientCheckResultUpdate.content || 'The latest check-result update only contains image attachments.' }}</p>
-              </div>
-            </article>
+            <div v-if="detailRecord.checkSuggestions?.length" class="detail-answers">
+              <article
+                v-for="item in detailRecord.checkSuggestions"
+                :key="`check-suggestion-brief-${item.id}`"
+                class="detail-answer-card"
+              >
+                <div class="chip-row">
+                  <span>{{ item.itemName || '未命名检查项目' }}</span>
+                  <span>{{ checkSuggestionTypeLabel(item.itemType) }}</span>
+                  <span>{{ checkSuggestionUrgencyLabel(item.urgencyLevel) }}</span>
+                </div>
+                <div class="detail-answer-value">
+                  <p><strong>检查目的：</strong>{{ item.purpose || '未填写' }}</p>
+                  <p><strong>注意事项：</strong>{{ item.attentionNote || '未填写' }}</p>
+                </div>
+              </article>
+            </div>
+            <div v-if="detailRecord.reportFeedbacks?.length" class="detail-answers">
+              <article
+                v-for="item in detailRecord.reportFeedbacks"
+                :key="`report-feedback-${item.id}`"
+                class="detail-answer-card"
+              >
+                <div class="chip-row">
+                  <span>{{ item.reportName || '未命名报告' }}</span>
+                  <span>{{ checkResultTypeLabel(item.reportType) }}</span>
+                  <span v-if="item.reportDate">{{ formatDate(item.reportDate, true) }}</span>
+                  <span>{{ formatDate(item.updateTime || item.createTime) }}</span>
+                </div>
+                <div class="detail-answer-value">
+                  <p v-if="item.suggestionId"><strong>关联建议：</strong>{{ checkSuggestionNameById(item.suggestionId) || `检查建议 #${item.suggestionId}` }}</p>
+                  <p><strong>结果摘要：</strong>{{ item.reportSummary || '未填写' }}</p>
+                  <p><strong>想问医生：</strong>{{ item.doctorQuestion || '未填写' }}</p>
+                </div>
+                <div v-if="item.attachments?.length" class="conversation-image-list">
+                  <img
+                    v-for="path in item.attachments"
+                    :key="`${item.id}-${path}`"
+                    :src="resolveImagePath(path)"
+                    alt="报告附件"
+                    class="conversation-image"
+                  />
+                </div>
+              </article>
+            </div>
             <div class="feedback-form followup-update-form">
+              <el-select
+                v-model="checkResultUpdateForm.suggestionId"
+                clearable
+                style="width: 100%"
+                placeholder="关联医生检查建议（可选）"
+              >
+                <el-option
+                  v-for="item in detailRecord.checkSuggestions || []"
+                  :key="`check-suggestion-option-${item.id}`"
+                  :label="`${item.itemName || '未命名检查项目'} / ${checkSuggestionTypeLabel(item.itemType)} / ${checkSuggestionUrgencyLabel(item.urgencyLevel)}`"
+                  :value="item.id"
+                />
+              </el-select>
               <el-select
                 v-model="checkResultUpdateForm.resultType"
                 style="width: 220px"
@@ -1231,6 +1306,18 @@
                   :value="item.value"
                 />
               </el-select>
+              <el-input
+                v-model="checkResultUpdateForm.reportName"
+                maxlength="100"
+                placeholder="填写报告名称，例如：血常规 / 胸部 CT / 病理报告"
+              />
+              <el-date-picker
+                v-model="checkResultUpdateForm.reportDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                style="width: 220px"
+                placeholder="选择报告日期"
+              />
               <el-input
                 v-model="checkResultUpdateForm.resultSummary"
                 type="textarea"
@@ -1247,11 +1334,157 @@
                 show-word-limit
                 placeholder="可以补充想请医生判断的问题，例如：这些结果是否提示需要调整用药或线下复查？"
               />
-              <span class="conversation-tip">如需上传报告图片，可先带入消息框，再在沟通区继续上传图片。</span>
+              <div v-if="checkResultUpdateForm.attachments.length" class="conversation-attachments">
+                <article
+                  v-for="(path, index) in checkResultUpdateForm.attachments"
+                  :key="`check-result-attachment-${path}`"
+                  class="conversation-attachment-item"
+                >
+                  <img :src="resolveImagePath(path)" alt="检查结果附件" class="conversation-image" />
+                  <div class="conversation-attachment-actions">
+                    <span>附件 {{ index + 1 }}</span>
+                    <el-button link type="danger" @click="removeCheckResultAttachment(index)">移除</el-button>
+                  </div>
+                </article>
+              </div>
+              <div class="conversation-toolbar">
+                <el-upload
+                  :action="uploadAction"
+                  :headers="uploadHeaders"
+                  :show-file-list="false"
+                  accept="image/*"
+                  :before-upload="beforeCheckResultAttachmentUpload"
+                  :disabled="checkResultUpdateForm.attachments.length >= 6"
+                  :on-success="handleCheckResultAttachmentUploadSuccess"
+                >
+                  <el-button plain :disabled="checkResultUpdateForm.attachments.length >= 6">上传报告图片</el-button>
+                </el-upload>
+                <span class="conversation-tip">支持上传检查单、化验单或影像结果截图，单次最多 6 张。</span>
+              </div>
               <div class="feedback-actions">
-                <el-button plain @click="applyCheckResultUpdateToMessageDraft">带入消息框</el-button>
+                <el-button plain @click="resetCheckResultUpdateForm()">重置表单</el-button>
                 <el-button type="primary" :loading="checkResultUpdateSubmitting" @click="submitCheckResultUpdate">
                   发送检查结果
+                </el-button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="showMedicationFeedbackPanel"
+            ref="medicationFeedbackPanelRef"
+            :class="['result-panel', { 'focus-action-panel': focusedDetailSection === 'medication_feedback' }]"
+          >
+            <div class="doctor-recommend-head">
+              <strong>用药反馈 / 不良反应上报</strong>
+              <span>把用药后的改善情况、效果有限、疑似不良反应和已采取的处理动作结构化同步给医生。</span>
+            </div>
+            <el-alert
+              :title="medicationFeedbackHint"
+              :type="canSubmitMedicationFeedback ? 'info' : 'warning'"
+              :closable="false"
+              class="conversation-alert"
+            />
+            <div v-if="detailRecord.medicationFeedbacks?.length" class="detail-answers">
+              <article
+                v-for="item in detailRecord.medicationFeedbacks"
+                :key="`medication-feedback-${item.id}`"
+                class="detail-answer-card"
+              >
+                <div class="chip-row">
+                  <span>{{ item.medicineName || prescriptionNameById(item.prescriptionId) || '未命名药品' }}</span>
+                  <span>{{ medicationFeedbackTypeLabel(item.feedbackType) }}</span>
+                  <span>{{ medicationSeverityLabel(item.severityLevel) }}</span>
+                  <span>{{ medicationActionLabel(item.actionTaken) }}</span>
+                  <span>{{ formatDate(item.updateTime || item.createTime) }}</span>
+                </div>
+                <div class="detail-answer-value">
+                  <p><strong>反馈摘要：</strong>{{ item.feedbackSummary || '未填写' }}</p>
+                  <p><strong>想问医生：</strong>{{ item.doctorQuestion || '未填写' }}</p>
+                </div>
+                <div v-if="item.attachments?.length" class="conversation-image-list">
+                  <img
+                    v-for="path in item.attachments"
+                    :key="`${item.id}-${path}`"
+                    :src="resolveImagePath(path)"
+                    alt="用药反馈附件"
+                    class="conversation-image"
+                  />
+                </div>
+              </article>
+            </div>
+            <div class="feedback-form followup-update-form">
+              <el-select
+                v-model="medicationFeedbackForm.prescriptionId"
+                :disabled="!canSubmitMedicationFeedback"
+                style="width: 100%"
+                placeholder="选择要反馈的处方药品"
+              >
+                <el-option
+                  v-for="item in detailRecord.prescriptions || []"
+                  :key="`prescription-feedback-${item.id}`"
+                  :label="`${item.medicineName || '未命名药品'}${item.dosage ? ` / ${item.dosage}` : ''}${item.frequency ? ` / ${item.frequency}` : ''}`"
+                  :value="item.id"
+                />
+              </el-select>
+              <el-select v-model="medicationFeedbackForm.feedbackType" :disabled="!canSubmitMedicationFeedback" style="width: 220px" placeholder="选择反馈类型">
+                <el-option v-for="item in medicationFeedbackTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="medicationFeedbackForm.severityLevel" :disabled="!canSubmitMedicationFeedback" style="width: 220px" placeholder="选择严重程度">
+                <el-option v-for="item in medicationSeverityOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-select v-model="medicationFeedbackForm.actionTaken" :disabled="!canSubmitMedicationFeedback" style="width: 220px" placeholder="选择已采取动作">
+                <el-option v-for="item in medicationActionOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+              <el-input
+                v-model="medicationFeedbackForm.feedbackSummary"
+                :disabled="!canSubmitMedicationFeedback"
+                type="textarea"
+                :rows="3"
+                maxlength="600"
+                show-word-limit
+                placeholder="描述服药后的变化，例如：咳嗽减轻，但服药后胃部不适、头晕。"
+              />
+              <el-input
+                v-model="medicationFeedbackForm.doctorQuestion"
+                :disabled="!canSubmitMedicationFeedback"
+                type="textarea"
+                :rows="2"
+                maxlength="300"
+                show-word-limit
+                placeholder="补充想问医生的问题，例如：这种反应是否需要停药或调整剂量？"
+              />
+              <div v-if="medicationFeedbackForm.attachments.length" class="conversation-attachments">
+                <article
+                  v-for="(path, index) in medicationFeedbackForm.attachments"
+                  :key="`medication-feedback-attachment-${path}`"
+                  class="conversation-attachment-item"
+                >
+                  <img :src="resolveImagePath(path)" alt="用药反馈附件" class="conversation-image" />
+                  <div class="conversation-attachment-actions">
+                    <span>附件 {{ index + 1 }}</span>
+                    <el-button link type="danger" @click="removeMedicationFeedbackAttachment(index)">移除</el-button>
+                  </div>
+                </article>
+              </div>
+              <div class="conversation-toolbar">
+                <el-upload
+                  :action="uploadAction"
+                  :headers="uploadHeaders"
+                  :show-file-list="false"
+                  accept="image/*"
+                  :before-upload="beforeMedicationFeedbackAttachmentUpload"
+                  :disabled="!canSubmitMedicationFeedback || medicationFeedbackForm.attachments.length >= 6"
+                  :on-success="handleMedicationFeedbackAttachmentUploadSuccess"
+                >
+                  <el-button plain :disabled="!canSubmitMedicationFeedback || medicationFeedbackForm.attachments.length >= 6">上传反馈图片</el-button>
+                </el-upload>
+                <span class="conversation-tip">可上传皮疹照片、用药记录截图等资料，帮助医生判断是否需要调整方案。</span>
+              </div>
+              <div class="feedback-actions">
+                <el-button plain @click="resetMedicationFeedbackForm()">重置表单</el-button>
+                <el-button type="primary" :disabled="!canSubmitMedicationFeedback" :loading="medicationFeedbackSubmitting" @click="submitMedicationFeedback">
+                  提交用药反馈
                 </el-button>
               </div>
             </div>
@@ -1524,6 +1757,7 @@ const doctorConclusionPanelRef = ref(null)
 const followUpPanelRef = ref(null)
 const guidanceAckPanelRef = ref(null)
 const checkResultUpdatePanelRef = ref(null)
+const medicationFeedbackPanelRef = ref(null)
 const followUpUpdatePanelRef = ref(null)
 const serviceFeedbackPanelRef = ref(null)
 const focusedDetailSection = ref('')
@@ -1543,6 +1777,7 @@ const messageLoading = ref(false)
 const messageSending = ref(false)
 const followUpUpdateSubmitting = ref(false)
 const checkResultUpdateSubmitting = ref(false)
+const medicationFeedbackSubmitting = ref(false)
 const doctorGuidanceAckSubmitting = ref(false)
 const feedbackOptions = ref({ departments: [], doctors: [] })
 const feedbackSubmitting = ref(false)
@@ -1567,6 +1802,24 @@ const checkResultTypeOptions = [
   { label: '病理结果', value: 'pathology' },
   { label: '其他结果', value: 'other' }
 ]
+const medicationFeedbackTypeOptions = [
+  { label: '用药后有改善', value: 'improved' },
+  { label: '效果有限', value: 'limited' },
+  { label: '疑似不良反应', value: 'adverse_reaction' },
+  { label: '其他反馈', value: 'other' }
+]
+const medicationSeverityOptions = [
+  { label: '轻度', value: 'mild' },
+  { label: '中度', value: 'medium' },
+  { label: '重度', value: 'high' }
+]
+const medicationActionOptions = [
+  { label: '继续用药', value: 'continued' },
+  { label: '暂停用药', value: 'paused' },
+  { label: '已经停药', value: 'stopped' },
+  { label: '正在咨询医生', value: 'consulting' },
+  { label: '其他处理', value: 'other' }
+]
 const serviceFeedbackForm = reactive({
   serviceScore: 5,
   isResolved: 1,
@@ -1578,9 +1831,22 @@ const followUpUpdateForm = reactive({
   helpRequest: ''
 })
 const checkResultUpdateForm = reactive({
+  suggestionId: null,
   resultType: 'lab',
+  reportName: '',
+  reportDate: '',
   resultSummary: '',
-  doctorQuestion: ''
+  doctorQuestion: '',
+  attachments: []
+})
+const medicationFeedbackForm = reactive({
+  prescriptionId: null,
+  feedbackType: 'improved',
+  severityLevel: 'mild',
+  actionTaken: 'consulting',
+  feedbackSummary: '',
+  doctorQuestion: '',
+  attachments: []
 })
 const feedbackForm = reactive({
   userScore: 5,
@@ -1763,6 +2029,9 @@ const patientJourneyTags = computed(() => {
   if (canSubmitServiceFeedback.value) {
     tags.push(record.serviceFeedback ? '已提交服务评价' : '待提交服务评价')
   }
+  if (showMedicationFeedbackPanel.value) {
+    tags.push(latestMedicationFeedback.value ? '已提交用药反馈' : '可上报用药反馈')
+  }
   return tags.slice(0, 4)
 })
 const patientJourneyCards = computed(() => {
@@ -1835,6 +2104,25 @@ const patientJourneyCards = computed(() => {
       tone: latestPatientCheckResultUpdate.value ? 'success' : 'info'
     })
   }
+  if (showMedicationFeedbackPanel.value) {
+    cards.push({
+      key: 'medication_feedback',
+      title: '用药反馈',
+      status: latestMedicationFeedback.value ? '最近已反馈' : canSubmitMedicationFeedback.value ? '可提交反馈' : '查看历史反馈',
+      description: abbreviateText(
+        trimText(
+          latestMedicationFeedback.value?.feedbackSummary
+          || latestMedicationFeedback.value?.doctorQuestion
+          || medicationFeedbackHint.value
+          || '如已按医嘱用药，可继续反馈药效变化和不适反应。'
+        ),
+        96
+      ),
+      action: 'medication_feedback',
+      actionLabel: latestMedicationFeedback.value ? '继续反馈' : '去反馈',
+      tone: latestMedicationFeedback.value ? 'success' : 'info'
+    })
+  }
   const followState = followUpState(record)
   if (followState !== 'none' || Array.isArray(record.doctorFollowUps) && record.doctorFollowUps.length) {
     const hasPendingFollowUpUpdate = canSubmitFollowUpUpdate.value
@@ -1900,6 +2188,9 @@ const latestPatientFollowUpUpdate = computed(() => [...consultationMessages.valu
 const latestPatientCheckResultUpdate = computed(() => [...consultationMessages.value]
   .reverse()
   .find(item => isCheckResultUpdateMessage(item)) || null)
+const latestMedicationFeedback = computed(() => ensureArray(detailRecord.value?.medicationFeedbacks)[0] || null)
+const selectedPrescription = computed(() => ensureArray(detailRecord.value?.prescriptions)
+  .find(item => Number(item?.id || 0) === Number(medicationFeedbackForm.prescriptionId || 0)) || null)
 const latestPatientGuidanceAck = computed(() => [...consultationMessages.value]
   .reverse()
   .find(item => item?.senderType === 'user' && isDoctorGuidanceAckMessage(item)) || null)
@@ -1960,6 +2251,24 @@ const checkResultUpdateHint = computed(() => {
   if (detailRecord.value.status === 'processing') return '如果医生让你补充化验单、影像报告或其它检查结果，可在这里结构化提交。'
   return '导诊完成后，可先把关键检查结果结构化补充给医生，医生接手后能更快继续判断。'
 })
+const showMedicationFeedbackPanel = computed(() => !!(
+  detailRecord.value
+  && (ensureArray(detailRecord.value.prescriptions).length || ensureArray(detailRecord.value.medicationFeedbacks).length)
+))
+const canSubmitMedicationFeedback = computed(() => !!(
+  detailRecord.value
+  && ensureArray(detailRecord.value.prescriptions).length
+))
+const medicationFeedbackHint = computed(() => {
+  if (!detailRecord.value) return ''
+  if (!ensureArray(detailRecord.value.prescriptions).length) {
+    return '当前还没有可关联的医生处方，可以先查看已经提交的用药反馈记录。'
+  }
+  if (detailRecord.value.status === 'completed') {
+    return '问诊完成后，仍可继续反馈用药效果、疑似不良反应和已经采取的处理措施。'
+  }
+  return '如果已经开始按医嘱用药，可在这里结构化反馈用药效果或不适情况。'
+})
 const canSubmitFollowUpUpdate = computed(() => !!detailRecord.value && ['pending', 'due_today', 'overdue'].includes(followUpState(detailRecord.value)))
 const followUpUpdateHint = computed(() => {
   if (!detailRecord.value) return ''
@@ -1995,6 +2304,18 @@ watch(() => feedbackForm.manualCorrectDepartmentId, (value) => {
   }
 })
 
+watch(() => checkResultUpdateForm.suggestionId, (value) => {
+  const suggestion = ensureArray(detailRecord.value?.checkSuggestions)
+    .find(item => Number(item?.id || 0) === Number(value || 0))
+  if (!suggestion) return
+  if (!`${checkResultUpdateForm.reportName || ''}`.trim()) {
+    checkResultUpdateForm.reportName = suggestion.itemName || ''
+  }
+  if (['lab', 'imaging', 'pathology', 'other'].includes(suggestion.itemType)) {
+    checkResultUpdateForm.resultType = suggestion.itemType
+  }
+})
+
 watch([recordKeyword, recordStatusFilter, recordProgressFilter, recordFollowUpFilter], () => {
   if (syncingRecordRoute.value) return
   const routeState = normalizeRecordRouteQuery(route.query)
@@ -2027,7 +2348,7 @@ function normalizeRecordRouteQuery(query = {}) {
 
 function resolveConsultationAction(value) {
   const action = typeof value === 'string' ? value.trim() : ''
-  return ['conversation', 'payment', 'followup', 'feedback', 'archive', 'doctor_handle', 'doctor_conclusion', 'guidance_ack', 'check_result', 'followup_update'].includes(action) ? action : ''
+  return ['conversation', 'payment', 'followup', 'feedback', 'archive', 'doctor_handle', 'doctor_conclusion', 'guidance_ack', 'check_result', 'medication_feedback', 'followup_update'].includes(action) ? action : ''
 }
 
 function buildRecordRouteQuery({ includeId = true, action = null } = {}) {
@@ -2106,6 +2427,8 @@ function focusDetailActionSection(action, recordId = null) {
       target = guidanceAckPanelRef.value?.$el || guidanceAckPanelRef.value
     } else if (targetAction === 'check_result') {
       target = checkResultUpdatePanelRef.value?.$el || checkResultUpdatePanelRef.value
+    } else if (targetAction === 'medication_feedback') {
+      target = medicationFeedbackPanelRef.value?.$el || medicationFeedbackPanelRef.value
     } else {
       target = followUpUpdatePanelRef.value?.$el || followUpUpdatePanelRef.value
     }
@@ -2720,6 +3043,8 @@ function applyDetailRecordPayload(data) {
   const nextRecord = normalizeConsultationRecord(data, { detail: true })
   detailRecord.value = nextRecord
   syncRecordSnapshot(nextRecord)
+  resetCheckResultUpdateForm(nextRecord)
+  resetMedicationFeedbackForm(nextRecord)
   applyServiceFeedbackForm(nextRecord?.serviceFeedback)
   applyFeedbackForm(nextRecord?.triageFeedback)
 }
@@ -2744,6 +3069,7 @@ function openRecordDetailById(recordId, options = {}) {
   resetMessageDraft()
   resetFollowUpUpdateForm()
   resetCheckResultUpdateForm()
+  resetMedicationFeedbackForm()
 
   get(`/api/user/consultation/record/detail?recordId=${recordId}`, (data) => {
     try {
@@ -2795,6 +3121,7 @@ function openRecordDetail(row, options = {}) {
   resetMessageDraft()
   resetFollowUpUpdateForm()
   resetCheckResultUpdateForm()
+  resetMedicationFeedbackForm()
   get(`/api/user/consultation/record/detail?recordId=${row.id}`, (data) => {
     try {
       applyDetailRecordPayload(data)
@@ -2955,6 +3282,15 @@ function normalizeConsultationRecord(record, options = {}) {
   if (!detail) return normalizedRecord
 
   normalizedRecord.answers = ensureArray(nextRecord.answers)
+  normalizedRecord.checkSuggestions = ensureArray(nextRecord.checkSuggestions)
+  normalizedRecord.reportFeedbacks = ensureArray(nextRecord.reportFeedbacks).map(item => ({
+    ...item,
+    attachments: ensureArray(item?.attachments)
+  }))
+  normalizedRecord.medicationFeedbacks = ensureArray(nextRecord.medicationFeedbacks).map(item => ({
+    ...item,
+    attachments: ensureArray(item?.attachments)
+  }))
   normalizedRecord.prescriptions = ensureArray(nextRecord.prescriptions)
   normalizedRecord.recommendedDoctors = ensureArray(nextRecord.recommendedDoctors)
   normalizedRecord.doctorFollowUps = ensureArray(nextRecord.doctorFollowUps)
@@ -3249,6 +3585,9 @@ function buildLocalMessagePreview(message) {
     if (isDoctorGuidanceAckMessage(message)) {
       return preview.startsWith('[已确认查看]') ? preview : `[已确认查看] ${preview}`
     }
+    if (isMedicationFeedbackMessage(message)) {
+      return preview.startsWith('[用药反馈]') ? preview : `[用药反馈] ${preview}`
+    }
     if (isCheckResultUpdateMessage(message)) {
       return preview.startsWith('[检查结果]') ? preview : `[检查结果] ${preview}`
     }
@@ -3386,10 +3725,30 @@ function resetFollowUpUpdateForm() {
   followUpUpdateForm.helpRequest = ''
 }
 
-function resetCheckResultUpdateForm() {
-  checkResultUpdateForm.resultType = 'lab'
+function resetCheckResultUpdateForm(record = detailRecord.value) {
+  const suggestions = ensureArray(record?.checkSuggestions)
+  const firstSuggestion = suggestions[0] || null
+  checkResultUpdateForm.suggestionId = firstSuggestion?.id || null
+  checkResultUpdateForm.resultType = ['lab', 'imaging', 'pathology', 'other'].includes(firstSuggestion?.itemType)
+    ? firstSuggestion.itemType
+    : 'lab'
+  checkResultUpdateForm.reportName = firstSuggestion?.itemName || ''
+  checkResultUpdateForm.reportDate = ''
   checkResultUpdateForm.resultSummary = ''
   checkResultUpdateForm.doctorQuestion = ''
+  checkResultUpdateForm.attachments = []
+}
+
+function resetMedicationFeedbackForm(record = detailRecord.value) {
+  const prescriptions = ensureArray(record?.prescriptions)
+  const firstPrescription = prescriptions[0] || null
+  medicationFeedbackForm.prescriptionId = firstPrescription?.id || null
+  medicationFeedbackForm.feedbackType = 'improved'
+  medicationFeedbackForm.severityLevel = 'mild'
+  medicationFeedbackForm.actionTaken = 'consulting'
+  medicationFeedbackForm.feedbackSummary = ''
+  medicationFeedbackForm.doctorQuestion = ''
+  medicationFeedbackForm.attachments = []
 }
 
 function messageAttachments(message) {
@@ -3408,6 +3767,10 @@ function isFollowUpUpdateMessage(message) {
 
 function isCheckResultUpdateMessage(message) {
   return `${message?.messageType || ''}`.trim().toLowerCase() === 'check_result_update'
+}
+
+function isMedicationFeedbackMessage(message) {
+  return `${message?.messageType || ''}`.trim().toLowerCase() === 'medication_feedback'
 }
 
 function isDoctorGuidanceAckMessage(message) {
@@ -3453,6 +3816,58 @@ function removeMessageAttachment(index) {
   messageDraft.attachments.splice(index, 1)
 }
 
+function beforeStructuredAttachmentUpload(file, attachments = []) {
+  const isImage = `${file.type || ''}`.startsWith('image/')
+  const isLt5M = file.size / 1024 / 1024 <= 5
+  if (!isImage) {
+    ElMessage.error('当前阶段仅支持上传图片资料')
+    return false
+  }
+  if (!isLt5M) {
+    ElMessage.error('上传图片不能超过 5MB')
+    return false
+  }
+  if (attachments.length >= 6) {
+    ElMessage.warning('单次最多上传 6 张图片')
+    return false
+  }
+  return true
+}
+
+function appendStructuredAttachment(response, attachments, successText) {
+  if (response?.code !== 200) {
+    ElMessage.error(response?.message || '图片上传失败')
+    return
+  }
+  if (!response?.data || attachments.includes(response.data) || attachments.length >= 6) return
+  attachments.push(response.data)
+  ElMessage.success(successText)
+}
+
+function beforeCheckResultAttachmentUpload(file) {
+  return beforeStructuredAttachmentUpload(file, checkResultUpdateForm.attachments)
+}
+
+function handleCheckResultAttachmentUploadSuccess(response) {
+  appendStructuredAttachment(response, checkResultUpdateForm.attachments, '检查结果图片上传成功')
+}
+
+function removeCheckResultAttachment(index) {
+  checkResultUpdateForm.attachments.splice(index, 1)
+}
+
+function beforeMedicationFeedbackAttachmentUpload(file) {
+  return beforeStructuredAttachmentUpload(file, medicationFeedbackForm.attachments)
+}
+
+function handleMedicationFeedbackAttachmentUploadSuccess(response) {
+  appendStructuredAttachment(response, medicationFeedbackForm.attachments, '用药反馈图片上传成功')
+}
+
+function removeMedicationFeedbackAttachment(index) {
+  medicationFeedbackForm.attachments.splice(index, 1)
+}
+
 function sendConsultationMessage() {
   const recordId = detailRecord.value?.id
   if (!recordId) return
@@ -3486,6 +3901,42 @@ function checkResultTypeLabel(value) {
   return checkResultTypeOptions.find(item => item.value === value)?.label || '其他结果'
 }
 
+function checkSuggestionTypeLabel(value) {
+  return checkResultTypeLabel(value)
+}
+
+function checkSuggestionUrgencyLabel(value) {
+  return ({
+    routine: '常规',
+    soon: '尽快',
+    urgent: '加急'
+  })[`${value || ''}`] || '未说明'
+}
+
+function medicationFeedbackTypeLabel(value) {
+  return medicationFeedbackTypeOptions.find(item => item.value === value)?.label || '其他反馈'
+}
+
+function medicationSeverityLabel(value) {
+  return medicationSeverityOptions.find(item => item.value === value)?.label || '未说明'
+}
+
+function medicationActionLabel(value) {
+  return medicationActionOptions.find(item => item.value === value)?.label || '其他处理'
+}
+
+function prescriptionNameById(prescriptionId) {
+  const prescription = ensureArray(detailRecord.value?.prescriptions)
+    .find(item => Number(item?.id || 0) === Number(prescriptionId || 0))
+  return prescription?.medicineName || ''
+}
+
+function checkSuggestionNameById(suggestionId) {
+  const suggestion = ensureArray(detailRecord.value?.checkSuggestions)
+    .find(item => Number(item?.id || 0) === Number(suggestionId || 0))
+  return suggestion?.itemName || ''
+}
+
 function buildFollowUpUpdateContent() {
   const segments = [`Recovery status: ${followUpRecoveryStatusLabel(followUpUpdateForm.recoveryStatus)}`]
   const progressNote = `${followUpUpdateForm.progressNote || ''}`.trim()
@@ -3498,8 +3949,11 @@ function buildFollowUpUpdateContent() {
 function buildCheckResultUpdateContent() {
   const resultSummary = `${checkResultUpdateForm.resultSummary || ''}`.trim()
   const doctorQuestion = `${checkResultUpdateForm.doctorQuestion || ''}`.trim()
-  if (!resultSummary && !doctorQuestion) return ''
+  const reportName = `${checkResultUpdateForm.reportName || ''}`.trim()
+  if (!reportName && !resultSummary && !doctorQuestion && !checkResultUpdateForm.attachments.length) return ''
   const segments = [`检查类型：${checkResultTypeLabel(checkResultUpdateForm.resultType)}`]
+  if (reportName) segments.push(`报告名称：${reportName}`)
+  if (checkResultUpdateForm.reportDate) segments.push(`报告日期：${checkResultUpdateForm.reportDate}`)
   if (resultSummary) segments.push(`结果摘要：${resultSummary}`)
   if (doctorQuestion) segments.push(`希望医生帮助判断：${doctorQuestion}`)
   return segments.join('\n')
@@ -3579,48 +4033,73 @@ function submitDoctorGuidanceAck() {
   })
 }
 
-function applyCheckResultUpdateToMessageDraft() {
-  if (!canSubmitCheckResultUpdate.value) {
-    ElMessage.warning('The current consultation is not ready for structured check-result updates yet.')
-    return
-  }
-  const content = buildCheckResultUpdateContent()
-  if (!content) {
-    ElMessage.warning('Please complete the check-result update first.')
-    return
-  }
-  const current = `${messageDraft.content || ''}`.trim()
-  messageDraft.content = current && current !== content ? `${current}\n\n${content}` : content
-  messageDraft.sceneType = 'check_result_update'
-  ElMessage.success('Check-result update was added to the message box.')
-  focusDetailActionSection('conversation', detailRecord.value?.id || null)
-}
-
 function submitCheckResultUpdate() {
   const recordId = detailRecord.value?.id
   if (!recordId || !canSubmitCheckResultUpdate.value) {
     ElMessage.warning('The current consultation is not ready for structured check-result updates yet.')
     return
   }
-  const content = buildCheckResultUpdateContent()
-  if (!content) {
-    ElMessage.warning('Please complete the check-result update first.')
+  const payload = {
+    recordId,
+    suggestionId: checkResultUpdateForm.suggestionId || null,
+    reportType: checkResultUpdateForm.resultType || null,
+    reportName: `${checkResultUpdateForm.reportName || ''}`.trim(),
+    reportDate: checkResultUpdateForm.reportDate || '',
+    reportSummary: `${checkResultUpdateForm.resultSummary || ''}`.trim(),
+    doctorQuestion: `${checkResultUpdateForm.doctorQuestion || ''}`.trim(),
+    attachments: [...checkResultUpdateForm.attachments]
+  }
+  if (!(payload.reportName || payload.reportSummary || payload.doctorQuestion || payload.attachments.length)) {
+    ElMessage.warning('请至少填写报告名称、结果摘要、想问医生的问题或上传检查图片。')
     return
   }
   checkResultUpdateSubmitting.value = true
-  post('/api/user/consultation/message/send', {
-    recordId,
-    content,
-    sceneType: 'check_result_update'
-  }, () => {
+  post('/api/user/consultation/report-feedback/submit', payload, () => {
     checkResultUpdateSubmitting.value = false
-    resetCheckResultUpdateForm()
-    ElMessage.success('Check-result update was sent to the doctor.')
+    ElMessage.success('检查结果已回传给医生。')
     loadConsultationMessages(recordId, { preserveScroll: false })
     refreshRecordDetail(recordId)
   }, (message) => {
     checkResultUpdateSubmitting.value = false
-    ElMessage.warning(message || 'Failed to send the check-result update.')
+    ElMessage.warning(message || '检查结果回传失败')
+  })
+}
+
+function submitMedicationFeedback() {
+  const recordId = detailRecord.value?.id
+  if (!recordId || !canSubmitMedicationFeedback.value) {
+    ElMessage.warning(medicationFeedbackHint.value || '当前还不能提交用药反馈。')
+    return
+  }
+  const payload = {
+    recordId,
+    prescriptionId: medicationFeedbackForm.prescriptionId || null,
+    medicineId: selectedPrescription.value?.medicineId || null,
+    medicineName: selectedPrescription.value?.medicineName || '',
+    feedbackType: medicationFeedbackForm.feedbackType || null,
+    severityLevel: medicationFeedbackForm.severityLevel || null,
+    actionTaken: medicationFeedbackForm.actionTaken || null,
+    feedbackSummary: `${medicationFeedbackForm.feedbackSummary || ''}`.trim(),
+    doctorQuestion: `${medicationFeedbackForm.doctorQuestion || ''}`.trim(),
+    attachments: [...medicationFeedbackForm.attachments]
+  }
+  if (!payload.prescriptionId) {
+    ElMessage.warning('请先选择关联处方。')
+    return
+  }
+  if (!(payload.feedbackSummary || payload.doctorQuestion || payload.attachments.length)) {
+    ElMessage.warning('请至少填写反馈摘要、想问医生的问题或上传相关图片。')
+    return
+  }
+  medicationFeedbackSubmitting.value = true
+  post('/api/user/consultation/medication-feedback/submit', payload, () => {
+    medicationFeedbackSubmitting.value = false
+    ElMessage.success('用药反馈已提交给医生。')
+    loadConsultationMessages(recordId, { preserveScroll: false })
+    refreshRecordDetail(recordId)
+  }, (message) => {
+    medicationFeedbackSubmitting.value = false
+    ElMessage.warning(message || '用药反馈提交失败')
   })
 }
 
@@ -3708,6 +4187,7 @@ function messageRoleLabel(value) {
 }
 
 function messageTypeLabel(value) {
+  if (value === 'medication_feedback') return '用药反馈'
   if (value === 'followup_update') return '恢复更新'
   if (value === 'check_result_update') return '检查结果补充'
   if (value === 'doctor_guidance_ack') return '已确认查看'
@@ -3912,6 +4392,7 @@ watch(detailVisible, (value) => {
     resetMessageDraft()
     resetFollowUpUpdateForm()
     resetCheckResultUpdateForm()
+    resetMedicationFeedbackForm()
     if (route.query.id || route.query.action) {
       router.replace({ path: route.path, query: buildRecordRouteQuery({ includeId: false, action: '' }) })
     }
