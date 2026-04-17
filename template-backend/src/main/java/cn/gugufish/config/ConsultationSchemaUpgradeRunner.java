@@ -16,6 +16,7 @@ import java.util.Map;
 @Order(0)
 public class ConsultationSchemaUpgradeRunner implements ApplicationRunner {
 
+    private static final String OPERATION_LOG_TABLE = "db_operation_log";
     private static final String CONSULTATION_RECORD_TABLE = "db_consultation_record";
     private static final String SERVICE_FEEDBACK_TABLE = "db_consultation_service_feedback";
     private static final String SERVICE_FEEDBACK_HANDLE_INDEX = "idx_consultation_service_feedback_doctor_handle";
@@ -36,6 +37,7 @@ public class ConsultationSchemaUpgradeRunner implements ApplicationRunner {
             log.warn("数据库结构升级检查跳过：当前连接未返回 schema 名称");
             return;
         }
+        ensureOperationLogTable(schema);
         if (!tableExists(schema, CONSULTATION_RECORD_TABLE)) {
             log.warn("数据库结构升级检查跳过：表 {} 不存在", CONSULTATION_RECORD_TABLE);
             return;
@@ -46,6 +48,31 @@ public class ConsultationSchemaUpgradeRunner implements ApplicationRunner {
             return;
         }
         ensureConsultationServiceFeedbackHandleColumns(schema);
+    }
+
+    private void ensureOperationLogTable(String schema) {
+        if (tableExists(schema, OPERATION_LOG_TABLE)) return;
+        executeDdl("""
+                CREATE TABLE `db_operation_log` (
+                  `id` int NOT NULL AUTO_INCREMENT,
+                  `request_id` bigint NOT NULL,
+                  `request_url` varchar(255) NOT NULL,
+                  `request_method` varchar(20) NOT NULL,
+                  `remote_ip` varchar(64) DEFAULT NULL,
+                  `account_id` int DEFAULT NULL,
+                  `username` varchar(100) DEFAULT NULL,
+                  `role` varchar(50) DEFAULT NULL,
+                  `request_params` text,
+                  `response_code` int DEFAULT NULL,
+                  `response_summary` text,
+                  `duration_ms` int DEFAULT NULL,
+                  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (`id`),
+                  KEY `idx_operation_log_request_time` (`request_url`, `create_time`),
+                  KEY `idx_operation_log_account_time` (`account_id`, `create_time`),
+                  KEY `idx_operation_log_request_id` (`request_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """, "自动创建操作日志表");
     }
 
     private void ensureStructuredFeedbackTables(String schema) {
@@ -180,7 +207,7 @@ public class ConsultationSchemaUpgradeRunner implements ApplicationRunner {
             jdbcTemplate.execute(sql);
             log.info("{} 成功", action);
         } catch (DataAccessException exception) {
-            throw new IllegalStateException(action + "失败，请检查数据库账号是否有 ALTER 权限，或手动执行 sql/mysql57-upgrade-2026-04-15-consultation-check-and-feedback.sql", exception);
+            throw new IllegalStateException(action + "失败，请检查数据库账号是否具备 DDL 权限，或手动执行 sql 目录下对应的升级脚本", exception);
         }
     }
 

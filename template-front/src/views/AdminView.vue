@@ -14,8 +14,12 @@ import {
   DataAnalysis,
   Document,
   HomeFilled,
+  List,
   Location,
   OfficeBuilding,
+  Operation,
+  Setting,
+  ShoppingCart,
   Tickets,
   User,
   UserFilled
@@ -24,9 +28,45 @@ import WorkspaceShell from '@/components/WorkspaceShell.vue'
 
 const menuItems = [
   {
-    index: '/admin/homepage',
-    title: '主页设置',
-    description: '维护首页展示内容、推荐医生与案例素材。',
+    index: '/admin/account',
+    title: '系统登录信息管理',
+    description: '查看系统账号、调整角色并重置登录密码。',
+    icon: User
+  },
+  {
+    index: '/admin/user',
+    title: '用户信息管理',
+    description: '查看用户建档、问诊、支付和处方覆盖情况。',
+    icon: UserFilled
+  },
+  {
+    index: '/admin/order',
+    title: '订单信息管理',
+    description: '查看问诊订单、支付状态和关联问诊记录。',
+    icon: ShoppingCart
+  },
+  {
+    index: '/admin/resource',
+    title: '医疗资源管理',
+    description: '统一查看科室、医生、排班、药品和知识资产。',
+    icon: OfficeBuilding
+  },
+  {
+    index: '/admin/operation-log',
+    title: '操作日志查看',
+    description: '查看系统请求日志、响应结果和处理耗时。',
+    icon: Operation
+  },
+  {
+    index: '/admin/global-config',
+    title: '全局配置管理',
+    description: '统一查看平台展示、智能分配和 AI 导诊核心配置。',
+    icon: Setting
+  },
+  {
+    index: '/admin/platform',
+    title: '平台信息管理',
+    description: '维护首页展示内容、推荐医生和案例素材。',
     icon: HomeFilled
   },
   {
@@ -57,12 +97,12 @@ const menuItems = [
     index: '/admin/consultation-category',
     title: '问诊分类管理',
     description: '维护问诊入口分类与科室归属关系。',
-    icon: Tickets
+    icon: List
   },
   {
     index: '/admin/consultation-template',
     title: '前置模板管理',
-    description: '维护问诊前置采集模板和字段。',
+    description: '维护问诊前置信息采集模板和字段。',
     icon: Document
   },
   {
@@ -80,7 +120,7 @@ const menuItems = [
   {
     index: '/admin/medicine',
     title: '药品目录管理',
-    description: '维护药品基础信息、禁忌提醒与不可同时用药规则。',
+    description: '维护药品基础信息、禁忌提醒与联用冲突规则。',
     icon: Tickets
   },
   {
@@ -98,7 +138,7 @@ const menuItems = [
   {
     index: '/admin/triage-knowledge',
     title: '导诊知识库管理',
-    description: '维护 AI 导诊可复用的知识、指南和医生画像。',
+    description: '维护 AI 导诊可复用的知识、指南和说明。',
     icon: Document
   },
   {
@@ -109,20 +149,20 @@ const menuItems = [
   },
   {
     index: '/admin/consultation-record',
-    title: '导诊记录中心',
+    title: '问诊记录中心',
     description: '查看用户问诊记录、分诊结果和反馈闭环。',
     icon: DataAnalysis
   },
   {
     index: '/admin/consultation-dispatch',
     title: '智能分配策略',
-    description: '配置 AI 导诊推荐排序权重、候选医生数量和超时阈值。',
+    description: '配置推荐医生排序权重、候选数量和超时阈值。',
     icon: DataAnalysis
   },
   {
     index: '/admin/consultation-ai',
     title: 'AI 导诊配置',
-    description: '查看 DeepSeek 接入状态、Prompt 版本、模型参数和 AI 导诊产出概况。',
+    description: '查看模型参数、审计样本和导诊使用概况。',
     icon: DataAnalysis
   },
   {

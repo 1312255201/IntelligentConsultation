@@ -2745,6 +2745,19 @@ function resolveConsultationAction(value) {
   const action = trimText(value)
   return ['basic', 'archive', 'patient_action', 'assistant', 'reply', 'handle', 'conclusion', 'followup', 'feedback'].includes(action) ? action : ''
 }
+function currentDoctorConsultationPath(path = route.path) {
+  return ['/doctor/consultation', '/doctor/medical-record', '/doctor/prescription'].includes(path)
+    ? path
+    : '/doctor/consultation'
+}
+function resolveDefaultConsultationAction(path = route.path) {
+  if (path === '/doctor/medical-record') return 'conclusion'
+  if (path === '/doctor/prescription') return 'handle'
+  return ''
+}
+function resolveRouteConsultationAction(value, path = route.path) {
+  return resolveConsultationAction(value) || resolveDefaultConsultationAction(path)
+}
 function clearFocusedDetailSection() {
   focusedDetailSection.value = ''
   if (detailSectionFocusTimer) {
@@ -2847,7 +2860,7 @@ function openAdjacentDetail(step = 1) {
   if (currentIndex < 0) return
   const nextRecord = filteredRecords.value[currentIndex + step]
   if (!nextRecord?.id) return
-  openDetail(nextRecord.id, resolveConsultationAction(route.query.action))
+  openDetail(nextRecord.id, resolveRouteConsultationAction(route.query.action))
 }
 
 function buildAdjacentDetailPlan(step = 1) {
@@ -2973,7 +2986,7 @@ function isSameConsultationRouteQuery(nextQuery = {}) {
 function syncListQuery(detailId = null, action = '') {
   const nextQuery = consultationRouteQuery(detailId, action)
   if (isSameConsultationRouteQuery(nextQuery)) return
-  router.replace({ path: '/doctor/consultation', query: nextQuery })
+  router.replace({ path: currentDoctorConsultationPath(), query: nextQuery })
 }
 function applyRouteFilters() {
   const messageValue = trimText(route.query.messageFilter)
@@ -3124,7 +3137,7 @@ function autoOpen() {
   if (id && records.value.some(item => item.id === id) && (!detail.value || detail.value.id !== id)) openDetail(id, route.query.action)
 }
 function openDetail(id, routeAction = '') {
-  const detailAction = resolveConsultationAction(routeAction)
+  const detailAction = resolveRouteConsultationAction(routeAction)
   flushDoctorLocalDraftBeforeReset()
   detailVisible.value = true
   detailLoading.value = true
@@ -5603,7 +5616,7 @@ watch(
   [ownerFilter, statusFilter, messageFilter, dispatchFilter, followUpFilter, feedbackFilter, patientActionFilter, riskFilter, sortMode],
   () => {
     const detailId = detailVisible.value ? (detail.value?.id || Number(route.query.id || 0) || null) : null
-    const detailAction = detailVisible.value ? resolveConsultationAction(route.query.action) : ''
+    const detailAction = detailVisible.value ? resolveRouteConsultationAction(route.query.action) : ''
     syncListQuery(detailId, detailAction)
   }
 )
@@ -5624,9 +5637,9 @@ watch(
   (values, oldValues = []) => {
     applyRouteFilters()
     const routeId = Number(values[0] || 0)
-    const routeAction = resolveConsultationAction(values[1])
+    const routeAction = resolveRouteConsultationAction(values[1])
     const previousRouteId = Number(oldValues[0] || 0)
-    const previousRouteAction = resolveConsultationAction(oldValues[1])
+    const previousRouteAction = resolveRouteConsultationAction(oldValues[1])
     if (!routeId) {
       if (detailVisible.value) detailVisible.value = false
       return
@@ -5644,6 +5657,17 @@ watch(
   },
   { immediate: true }
 )
+watch(() => route.path, (path, oldPath) => {
+  if (path === oldPath) return
+  if (!detailVisible.value || !detail.value?.id) return
+  if (!['/doctor/consultation', '/doctor/medical-record', '/doctor/prescription'].includes(path)) return
+  const routeAction = resolveRouteConsultationAction(route.query.action, path)
+  if (routeAction) {
+    jumpToDetailSection(routeAction, detail.value.id, { behavior: 'auto', syncQuery: false })
+  } else {
+    clearFocusedDetailSection()
+  }
+})
 watch(() => conclusionForm.isConsistentWithAi, value => { if (value !== 0) clearAiMismatchReview() })
 watch(() => conclusionForm.needFollowUp, value => { if (value !== 1) conclusionForm.followUpWithinDays = null })
 watch(() => followUpForm.needRevisit, value => { if (value !== 1) followUpForm.nextFollowUpDate = '' })

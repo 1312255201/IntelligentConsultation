@@ -2296,6 +2296,12 @@ watch(() => [route.query.id, route.query.action], () => {
   autoOpenRecordDetail()
 })
 
+watch(() => route.path, (path, oldPath) => {
+  if (path === oldPath) return
+  applyRouteRecordFilters()
+  autoOpenRecordDetail()
+})
+
 watch(() => feedbackForm.manualCorrectDepartmentId, (value) => {
   if (!feedbackForm.manualCorrectDoctorId) return
   const currentDoctor = (feedbackOptions.value?.doctors || []).find(item => item.id === feedbackForm.manualCorrectDoctorId)
@@ -2318,8 +2324,8 @@ watch(() => checkResultUpdateForm.suggestionId, (value) => {
 
 watch([recordKeyword, recordStatusFilter, recordProgressFilter, recordFollowUpFilter], () => {
   if (syncingRecordRoute.value) return
-  const routeState = normalizeRecordRouteQuery(route.query)
-  const nextState = normalizeRecordRouteQuery(buildRecordRouteQuery())
+  const routeState = normalizeRecordRouteQuery(route.query, route.path)
+  const nextState = normalizeRecordRouteQuery(buildRecordRouteQuery(), route.path)
   if (sameRecordRouteQuery(routeState, nextState)) return
   router.replace({ path: route.path, query: buildRecordRouteQuery() })
 })
@@ -2332,14 +2338,18 @@ function loadData() {
   loadFeedbackOptions()
 }
 
-function normalizeRecordRouteQuery(query = {}) {
+function resolveDefaultRecordProgress(path = route.path) {
+  return path === '/index/feedback' ? 'pending_feedback' : 'all'
+}
+
+function normalizeRecordRouteQuery(query = {}, path = route.path) {
   const keyword = typeof query.keyword === 'string' ? query.keyword.trim() : ''
   const status = typeof query.status === 'string' && ['submitted', 'triaged', 'processing', 'completed'].includes(query.status)
     ? query.status
     : ''
   const progress = typeof query.progress === 'string' && ['doctor_replied', 'waiting_doctor', 'doctor_processing', 'pending_feedback', 'completed'].includes(query.progress)
     ? query.progress
-    : 'all'
+    : resolveDefaultRecordProgress(path)
   const followUp = typeof query.followUp === 'string' && ['pending', 'due_today', 'overdue'].includes(query.followUp)
     ? query.followUp
     : 'all'
@@ -2349,6 +2359,14 @@ function normalizeRecordRouteQuery(query = {}) {
 function resolveConsultationAction(value) {
   const action = typeof value === 'string' ? value.trim() : ''
   return ['conversation', 'payment', 'followup', 'feedback', 'archive', 'doctor_handle', 'doctor_conclusion', 'guidance_ack', 'check_result', 'medication_feedback', 'followup_update'].includes(action) ? action : ''
+}
+
+function resolveDefaultConsultationAction(path = route.path) {
+  return path === '/index/feedback' ? 'feedback' : ''
+}
+
+function resolveRouteConsultationAction(value, path = route.path) {
+  return resolveConsultationAction(value) || resolveDefaultConsultationAction(path)
 }
 
 function buildRecordRouteQuery({ includeId = true, action = null } = {}) {
@@ -2370,7 +2388,7 @@ function buildRecordRouteQuery({ includeId = true, action = null } = {}) {
 }
 
 function applyRouteRecordFilters() {
-  const query = normalizeRecordRouteQuery(route.query)
+  const query = normalizeRecordRouteQuery(route.query, route.path)
   recordKeyword.value = query.keyword
   recordStatusFilter.value = query.status
   recordProgressFilter.value = query.progress
@@ -3024,7 +3042,7 @@ function handleConversationVisibilityChange() {
 
 function autoOpenRecordDetail() {
   const id = Number(route.query.id || 0)
-  const action = resolveConsultationAction(route.query.action)
+  const action = resolveRouteConsultationAction(route.query.action)
   if (!id) return
   if (detailVisible.value && detailRecord.value?.id === id && !detailLoading.value) {
     if (action) focusDetailActionSection(action, id)
@@ -3076,7 +3094,7 @@ function openRecordDetailById(recordId, options = {}) {
       applyDetailRecordPayload(data)
       loadConsultationMessages(recordId, { preserveScroll: false })
       startConversationPolling()
-      const focusAction = resolveConsultationAction(action || route.query.action)
+      const focusAction = resolveRouteConsultationAction(action || route.query.action)
       if (focusAction) focusDetailActionSection(focusAction, recordId)
     } catch (error) {
       console.error(error)
@@ -3099,8 +3117,8 @@ function openRecordDetailById(recordId, options = {}) {
 
 function openRecordDetail(row, options = {}) {
   const { syncRoute = true, action = '' } = options
-  const actionValue = resolveConsultationAction(action)
-  if (syncRoute && (Number(route.query.id || 0) !== row.id || resolveConsultationAction(route.query.action) !== actionValue)) {
+  const actionValue = resolveRouteConsultationAction(action)
+  if (syncRoute && (Number(route.query.id || 0) !== row.id || resolveRouteConsultationAction(route.query.action) !== actionValue)) {
     router.replace({
       path: route.path,
       query: { ...buildRecordRouteQuery({ includeId: false, action: actionValue }), id: row.id }
@@ -3127,7 +3145,7 @@ function openRecordDetail(row, options = {}) {
       applyDetailRecordPayload(data)
       loadConsultationMessages(row.id, { preserveScroll: false })
       startConversationPolling()
-      const focusAction = actionValue || resolveConsultationAction(route.query.action)
+      const focusAction = actionValue || resolveRouteConsultationAction(route.query.action)
       if (focusAction) focusDetailActionSection(focusAction, row.id)
     } catch (error) {
       console.error(error)

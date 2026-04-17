@@ -75,6 +75,26 @@ const router = createRouter({
           component: () => import('@/views/index/ConsultationPage.vue')
         },
         {
+          path: 'case',
+          name: 'index-case',
+          component: () => import('@/views/index/ConsultationPage.vue')
+        },
+        {
+          path: 'doctor-directory',
+          name: 'index-doctor-directory',
+          component: () => import('@/views/index/DoctorDirectoryPage.vue')
+        },
+        {
+          path: 'prescription',
+          name: 'index-prescription',
+          component: () => import('@/views/index/PrescriptionPage.vue')
+        },
+        {
+          path: 'feedback',
+          name: 'index-feedback',
+          component: () => import('@/views/index/ConsultationPage.vue')
+        },
+        {
           path: 'reminder',
           name: 'index-reminder',
           component: () => import('@/views/index/ConsultationReminderPage.vue')
@@ -112,6 +132,26 @@ const router = createRouter({
           component: () => import('@/views/doctor/DoctorConsultationPage.vue')
         },
         {
+          path: 'medical-record',
+          name: 'doctor-medical-record',
+          component: () => import('@/views/doctor/DoctorConsultationPage.vue')
+        },
+        {
+          path: 'prescription',
+          name: 'doctor-prescription',
+          component: () => import('@/views/doctor/DoctorConsultationPage.vue')
+        },
+        {
+          path: 'advice',
+          name: 'doctor-advice',
+          component: () => import('@/views/doctor/DoctorAdvicePage.vue')
+        },
+        {
+          path: 'knowledge',
+          name: 'doctor-knowledge',
+          component: () => import('@/views/doctor/DoctorKnowledgePage.vue')
+        },
+        {
           path: 'schedule',
           name: 'doctor-schedule',
           component: () => import('@/views/doctor/DoctorSchedulePage.vue')
@@ -131,11 +171,41 @@ const router = createRouter({
     {
       path: '/admin',
       component: () => import('@/views/AdminView.vue'),
-      redirect: '/admin/homepage',
+      redirect: '/admin/account',
       children: [
         {
-          path: 'homepage',
-          name: 'admin-homepage',
+          path: 'account',
+          name: 'admin-account',
+          component: () => import('@/views/admin/AdminAccountPage.vue')
+        },
+        {
+          path: 'user',
+          name: 'admin-user',
+          component: () => import('@/views/admin/AdminUserPage.vue')
+        },
+        {
+          path: 'order',
+          name: 'admin-order',
+          component: () => import('@/views/admin/AdminOrderPage.vue')
+        },
+        {
+          path: 'resource',
+          name: 'admin-resource',
+          component: () => import('@/views/admin/AdminResourceOverviewPage.vue')
+        },
+        {
+          path: 'operation-log',
+          name: 'admin-operation-log',
+          component: () => import('@/views/admin/AdminOperationLogPage.vue')
+        },
+        {
+          path: 'global-config',
+          name: 'admin-global-config',
+          component: () => import('@/views/admin/AdminConfigCenterPage.vue')
+        },
+        {
+          path: 'platform',
+          name: 'admin-platform',
           component: () => import('@/views/admin/HomepageSettingPage.vue')
         },
         {
