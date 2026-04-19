@@ -441,18 +441,18 @@ onMounted(() => {
 
 <style scoped>
 :global(:root) {
-  --ws-bg: #F0F4F8;
+  --ws-bg: #F4F7FB;
   --ws-panel: #FFFFFF;
-  --ws-border: #E2E8F0;
-  --ws-text: #1C274C;
-  --ws-muted: #64748B;
-  --ws-primary: #0265DC;
-  --ws-sidebar-bg: #0A1930;
-  --ws-sidebar-text: #8FA5C8;
-  --ws-sidebar-hover: rgba(255, 255, 255, 0.08);
-  --ws-sidebar-active-bg: #0265DC;
+  --ws-border: #EAEEF3;
+  --ws-text: #2C3E50;
+  --ws-muted: #7E8C99;
+  --ws-primary: #3DA19F;
+  --ws-sidebar-bg: #293846;
+  --ws-sidebar-text: #9FB2C4;
+  --ws-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --ws-sidebar-active-bg: #3DA19F;
   --ws-sidebar-active-text: #FFFFFF;
-  --ws-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  --ws-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
 }
 
 .workspace-shell {
@@ -470,7 +470,7 @@ onMounted(() => {
 .side-panel {
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0A1930 0%, #112F5C 100%);
+  background: linear-gradient(180deg, #293846 0%, #344859 100%);
   border-radius: 24px;
   color: #fff;
   box-shadow: 0 10px 40px rgba(10, 25, 48, 0.15);
@@ -488,7 +488,7 @@ onMounted(() => {
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #0265DC, #4A90E2);
+  background: linear-gradient(135deg, #3DA19F, #6CCCCA);
   color: white;
   display: flex;
   align-items: center;
@@ -496,7 +496,7 @@ onMounted(() => {
   font-size: 20px;
   font-weight: 800;
   letter-spacing: 1px;
-  box-shadow: 0 8px 16px rgba(2, 101, 220, 0.3);
+  box-shadow: 0 6px 14px rgba(61, 161, 159, 0.25);
 }
 
 .brand-text { display: flex; flex-direction: column; }
@@ -545,7 +545,7 @@ onMounted(() => {
   background: var(--ws-sidebar-active-bg) !important;
   color: var(--ws-sidebar-active-text);
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(2, 101, 220, 0.4);
+  box-shadow: 0 3px 10px rgba(61, 161, 159, 0.25);
 }
 
 .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
