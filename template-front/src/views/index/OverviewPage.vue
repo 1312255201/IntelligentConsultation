@@ -52,7 +52,7 @@
         <strong>{{ pendingFollowUpCount }}</strong>
       </article>
       <article class="stat-card">
-        <span>待服务评价</span>
+        <span>待评价</span>
         <strong>{{ pendingServiceFeedbackCount }}</strong>
       </article>
       <article class="stat-card stat-card-warning">
@@ -95,7 +95,7 @@
               <span>{{ item.categoryName || '未分类' }}</span>
               <span>{{ recordProgressLabel(item) }}</span>
               <span v-if="isPendingFollowUpRecord(item)">{{ followUpLine(item) }}</span>
-              <span v-if="isPendingServiceFeedbackRecord(item)">待服务评价</span>
+              <span v-if="isPendingServiceFeedbackRecord(item)">待评价</span>
             </div>
           </button>
         </div>
@@ -171,7 +171,7 @@
               <span>{{ item.triageLevelName || triageActionLabel(item.triageActionType) }}</span>
               <span v-if="recordHasUnreadDoctorReply(item)">医生新回复 {{ getMessageSummary(item).unreadCount }} 条</span>
               <span v-if="isPendingFollowUpRecord(item)">{{ followUpTagLabel(item) }}</span>
-              <span v-if="isPendingServiceFeedbackRecord(item)">待服务评价</span>
+              <span v-if="isPendingServiceFeedbackRecord(item)">待评价</span>
             </div>
             <div class="recent-actions">
               <el-button text type="primary" @click="openConsultationRecord(item, reminderQuery(item))">查看详情</el-button>
@@ -496,7 +496,7 @@ function serviceFeedbackTimeText(record) {
 
 function primaryReminderLabel(record) {
   const state = followUpState(record)
-  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
+  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待评价'
   if (state === 'overdue') return '逾期随访'
   if (state === 'due_today') return '今日到期'
   if (recordHasUnreadDoctorReply(record)) return '医生新回复'

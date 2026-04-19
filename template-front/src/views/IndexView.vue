@@ -62,27 +62,15 @@ const menuItems = [
   },
   {
     index: '/index/consultation',
-    title: '在线问诊',
-    description: '选择问诊分类、填写前置信息并提交当前诉求。',
+    title: '我的问诊记录',
+    description: '发起新的在线问诊，并统一查看历史病例、随访与服务评价。',
     icon: Service
-  },
-  {
-    index: '/index/case',
-    title: '个人病例查询',
-    description: '查看个人问诊记录、病历归档、随访和服务评价。',
-    icon: Files
   },
   {
     index: '/index/prescription',
     title: '个人处方查询',
     description: '查看处方明细、用法用量和禁忌提醒。',
     icon: DocumentChecked
-  },
-  {
-    index: '/index/feedback',
-    title: '服务评价与反馈',
-    description: '提交服务评价、导诊反馈、检查回传和用药反馈。',
-    icon: Star
   },
   {
     index: '/index/reminder',

@@ -34,7 +34,7 @@
         <strong>{{ pendingFollowUpCount }}</strong>
       </article>
       <article class="stat-card">
-        <span>待服务评价</span>
+        <span>待评价</span>
         <strong>{{ pendingServiceFeedbackCount }}</strong>
       </article>
 
@@ -42,7 +42,7 @@
         <div class="reminder-head">
           <div>
             <span class="panel-kicker">Feedback</span>
-            <h3>待服务评价</h3>
+            <h3>待评价</h3>
             <p>医生完成处理后，可在这里快速补充服务评分、问题是否解决和本次问诊体验。</p>
           </div>
           <el-tag type="info" effect="light">{{ pendingServiceFeedbackCount }}</el-tag>
@@ -66,9 +66,9 @@
             </div>
           </button>
         </div>
-        <el-empty v-else description="当前没有待服务评价的问诊" />
+        <el-empty v-else description="当前没有待评价的问诊" />
         <div class="reminder-foot">
-          <el-button text @click="applyRecordQuickFilter({ progress: 'pending_feedback' })">只看待服务评价</el-button>
+          <el-button text @click="applyRecordQuickFilter({ progress: 'pending_feedback' })">只看待评价</el-button>
         </div>
       </article>
     </section>
@@ -433,7 +433,7 @@
           <el-option label="已完成" value="completed" />
         </el-select>
         <el-select v-model="recordProgressFilter" style="width: 170px">
-          <el-option label="待服务评价" value="pending_feedback" />
+          <el-option label="待评价" value="pending_feedback" />
           <el-option label="全部进度" value="all" />
           <el-option label="医生新回复" value="doctor_replied" />
           <el-option label="待医生处理" value="waiting_doctor" />

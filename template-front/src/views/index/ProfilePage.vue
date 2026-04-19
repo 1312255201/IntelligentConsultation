@@ -23,7 +23,7 @@
       </div>
 
       <div class="hero-info">
-        <span class="section-tag">Account Profile</span>
+        <span class="section-tag">账户信息</span>
         <h2>{{ profile.username || '当前用户' }}</h2>
         <el-descriptions :column="1" border>
           <el-descriptions-item label="用户名">

@@ -37,7 +37,7 @@
           <strong>{{ pendingFollowUpCount }}</strong>
         </article>
         <article class="stat-card">
-          <span>待服务评价</span>
+          <span>待评价</span>
           <strong>{{ pendingServiceFeedbackCount }}</strong>
         </article>
         <article class="stat-card stat-card-warning">
@@ -52,7 +52,7 @@
         <article class="queue-card">
           <div class="queue-card-head">
             <div>
-              <strong>待服务评价</strong>
+              <strong>待评价</strong>
               <p>医生完成处理后，可在这里快速进入问诊详情，为本次线上问诊补充服务评分与结果反馈。</p>
             </div>
             <el-tag type="info" effect="light">{{ pendingServiceFeedbackCount }}</el-tag>
@@ -76,9 +76,9 @@
               </div>
             </button>
           </div>
-          <el-empty v-else description="当前没有待服务评价提醒" />
+          <el-empty v-else description="当前没有待评价提醒" />
           <div class="queue-foot">
-            <el-button text @click="openConsultationList({ progress: 'pending_feedback' })">只看待服务评价</el-button>
+            <el-button text @click="openConsultationList({ progress: 'pending_feedback' })">只看待评价</el-button>
           </div>
         </article>
       </div>
@@ -235,7 +235,7 @@
             <span>{{ item.categoryName || '未分类' }}</span>
             <span>{{ recordProgressLabel(item) }}</span>
             <span v-if="isPendingFollowUpRecord(item)">{{ followUpLine(item) }}</span>
-            <span v-if="isPendingServiceFeedbackRecord(item)">待服务评价</span>
+            <span v-if="isPendingServiceFeedbackRecord(item)">待评价</span>
           </div>
 
           <div class="feed-actions">
@@ -525,7 +525,7 @@ function feedbackReminderQuery(record) {
 
 function primaryReminderLabel(record) {
   const state = followUpState(record)
-  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待服务评价'
+  if (['none', 'done'].includes(state) && !recordHasUnreadDoctorReply(record) && isPendingServiceFeedbackRecord(record)) return '待评价'
   if (state === 'overdue') return '逾期随访'
   if (state === 'due_today') return '今日到期'
   if (recordHasUnreadDoctorReply(record)) return '医生新回复'

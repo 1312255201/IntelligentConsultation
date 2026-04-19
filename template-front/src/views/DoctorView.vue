@@ -77,5 +77,5 @@ const menuItems = [
   }
 ]
 
-const footerText = '当前医生端已经形成“工作台 -> 在线接诊 -> 病历书写 -> 处方开具 -> 医嘱与知识沉淀”的主链路，可直接覆盖接诊、病历、处方、随访与知识维护。'
+const footerText = '医生您好，请仔细甄别AI提示，牢记AI作用范围，只是辅助诊断'
 </script>
