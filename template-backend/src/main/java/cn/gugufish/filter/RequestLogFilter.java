@@ -39,7 +39,7 @@ public class RequestLogFilter extends OncePerRequestFilter {
     @Resource
     OperationLogService operationLogService;
 
-    private final Set<String> ignores = Set.of("/swagger-ui", "/v3/api-docs");
+    private final Set<String> ignores = Set.of("/swagger-ui", "/v3/api-docs", "/images");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)

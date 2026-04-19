@@ -16,6 +16,7 @@ public final class Const {
 
     public static final String ATTR_USER_ID = "userId";
     public static final String MQ_MAIL = "mail";
+    public final static String MQ_ERROR = "error";
 
     public static final String ROLE_DEFAULT = "user";
     public static final String ROLE_ADMIN = "admin";
