@@ -37,7 +37,9 @@
         <span>待评价</span>
         <strong>{{ pendingServiceFeedbackCount }}</strong>
       </article>
+    </section>
 
+    <section class="reminder-grid">
       <article class="reminder-card">
         <div class="reminder-head">
           <div>
@@ -71,9 +73,7 @@
           <el-button text @click="applyRecordQuickFilter({ progress: 'pending_feedback' })">只看待评价</el-button>
         </div>
       </article>
-    </section>
 
-    <section class="reminder-grid">
       <article class="reminder-card">
         <div class="reminder-head">
           <div>

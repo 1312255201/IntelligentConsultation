@@ -81,5 +81,5 @@ const menuItems = [
   }
 ]
 
-const footerText = '当前患者端已经形成“AI 导诊 -> 医生查询 -> 在线问诊 -> 病例与处方查询 -> 服务反馈”的完整链路。'
+const footerText = '欢迎你使用我们的智慧医疗问诊平台，祝您身体健康'
 </script>

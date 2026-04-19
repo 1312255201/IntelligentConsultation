@@ -1,25 +1,42 @@
 <template>
   <div class="doctor-page">
     <el-alert v-if="doctor.bound !== 1" :title="doctor.bindingMessage || '当前账号尚未绑定有效医生档案。'" type="warning" :closable="false" />
+    <section class="card workspace-mode-card">
+      <div class="workspace-mode-copy">
+        <span class="section-tag">{{ consultationViewConfig.kicker }}</span>
+        <h2>{{ consultationViewConfig.heading }}</h2>
+        <p>{{ consultationViewConfig.description }}</p>
+        <div class="chips">
+          <span>{{ consultationViewConfig.summary }}</span>
+          <span v-if="consultationViewConfig.defaultFilterLabel">{{ consultationViewConfig.defaultFilterLabel }}</span>
+          <span>当前列表 {{ filteredRecords.length }} 条</span>
+        </div>
+      </div>
+      <div class="head-actions">
+        <el-button
+          v-for="action in consultationQuickActions"
+          :key="action.key"
+          :type="action.type || 'default'"
+          :plain="action.type !== 'primary'"
+          @click="applyListPreset(action.filters)"
+        >
+          {{ action.label }}
+        </el-button>
+        <el-button v-if="hasNonDefaultListFilters" @click="resetListToModeDefault">恢复默认视图</el-button>
+      </div>
+    </section>
     <section class="stats">
-      <article class="card stat"><span>科室问诊</span><strong>{{ records.length }}</strong></article>
-      <article class="card stat"><span>待认领</span><strong>{{ unclaimedCount }}</strong></article>
-      <article class="card stat"><span>我认领的</span><strong>{{ mineCount }}</strong></article>
-      <article class="card stat"><span>系统推荐给我</span><strong>{{ recommendedToMeCount }}</strong></article>
-      <article class="card stat"><span>消息未读</span><strong>{{ unreadRecordCount }}</strong></article>
-      <article class="card stat"><span>待患者查看</span><strong>{{ patientUnreadDoctorReplyRecordCount }}</strong></article>
-      <article class="card stat"><span>待回复</span><strong>{{ pendingReplyCount }}</strong></article>
-      <article class="card stat"><span>待随访</span><strong>{{ pendingFollowUpCount }}</strong></article>
-      <article class="card stat"><span>已逾期随访</span><strong>{{ overdueFollowUpCount }}</strong></article>
-      <article class="card stat"><span>待关注评价</span><strong>{{ attentionServiceFeedbackCount }}</strong></article>
-      <article class="card stat"><span>高优先级</span><strong>{{ riskCount }}</strong></article>
+      <article v-for="item in consultationStatCards" :key="item.label" class="card stat">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </article>
     </section>
 
     <section class="card block">
       <div class="head">
         <div>
-          <h3>科室问诊列表</h3>
-          <p>先认领，再处理，避免多人同时处理同一条问诊记录。</p>
+          <h3>{{ consultationViewConfig.listTitle }}</h3>
+          <p>{{ consultationViewConfig.listDescription }}</p>
         </div>
         <div class="toolbar">
           <el-input v-model="keyword" clearable placeholder="搜索就诊人、分类、主诉或状态" style="width:240px" />
@@ -35,19 +52,19 @@
             <el-option label="处理中" value="processing" />
             <el-option label="已完成" value="completed" />
           </el-select>
-          <el-select v-model="messageFilter" style="width:160px">
+          <el-select v-if="consultationFilterVisibility.message" v-model="messageFilter" style="width:160px">
             <el-option label="全部沟通" value="all" />
             <el-option label="有未读消息" value="unread" />
             <el-option label="等待医生回复" value="waiting_reply" />
             <el-option label="暂无沟通" value="no_message" />
           </el-select>
-          <el-select v-model="dispatchFilter" style="width:170px">
+          <el-select v-if="consultationFilterVisibility.dispatch" v-model="dispatchFilter" style="width:170px">
             <el-option label="全部分配" value="all" />
             <el-option label="系统推荐给我" value="recommended_to_me" />
             <el-option label="等待首推医生" value="waiting_accept" />
             <el-option label="已被其他医生接手" value="claimed_by_other" />
           </el-select>
-          <el-select v-model="followUpFilter" style="width:170px">
+          <el-select v-if="consultationFilterVisibility.followUp" v-model="followUpFilter" style="width:170px">
             <el-option label="全部随访" value="all" />
             <el-option label="待随访" value="pending" />
             <el-option label="今日到期" value="due_today" />
@@ -60,7 +77,7 @@
             <el-option label="低分评价" value="low_score" />
             <el-option label="未解决评价" value="unresolved" />
           </el-select>
-          <el-select v-model="patientActionFilter" style="width:190px">
+          <el-select v-if="consultationFilterVisibility.patientAction" v-model="patientActionFilter" style="width:190px">
             <el-option label="全部患者动作" value="all" />
             <el-option label="待患者查看回复" value="unread_reply" />
             <el-option label="已补充恢复更新" value="followup_update" />
@@ -70,7 +87,7 @@
             <el-option label="已提交服务评价" value="service_feedback" />
             <el-option label="等待患者随访反馈" value="followup_waiting" />
           </el-select>
-          <el-select v-model="riskFilter" style="width:160px">
+          <el-select v-if="consultationFilterVisibility.risk" v-model="riskFilter" style="width:160px">
             <el-option label="全部优先级" value="all" />
             <el-option label="高优先级" value="high_priority" />
             <el-option label="普通优先级" value="normal" />
@@ -101,7 +118,7 @@
         <el-table-column label="状态" min-width="100">
           <template #default="{ row }"><el-tag :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="智能分配" min-width="200">
+        <el-table-column v-if="consultationFilterVisibility.dispatch" label="智能分配" min-width="200">
           <template #default="{ row }">
             <div class="message-summary-cell">
               <el-tag :type="smartDispatchTagType(row.smartDispatch)" effect="light">{{ smartDispatchStatusLabel(row.smartDispatch) }}</el-tag>
@@ -109,7 +126,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="沟通进展" min-width="170">
+        <el-table-column v-if="consultationFilterVisibility.message" :label="consultationViewConfig.messageColumnLabel" min-width="170">
           <template #default="{ row }">
             <div class="message-summary-cell">
               <el-tag :type="messageProgressType(row)" effect="light">{{ messageProgressLabel(row) }}</el-tag>
@@ -119,7 +136,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="最近消息" min-width="260">
+        <el-table-column v-if="consultationFilterVisibility.message" :label="consultationViewConfig.latestMessageColumnLabel" min-width="260">
           <template #default="{ row }">
             <div class="message-brief">
               <strong>{{ messagePreview(row) }}</strong>
@@ -127,7 +144,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="患者后续动作" min-width="230">
+        <el-table-column v-if="consultationFilterVisibility.patientAction" :label="consultationViewConfig.patientActionColumnLabel" min-width="230">
           <template #default="{ row }">
             <div class="patient-action-cell">
               <el-tag :type="patientActionTagType(row)" effect="light">{{ patientActionLabel(row) }}</el-tag>
@@ -135,7 +152,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="随访提醒" min-width="180">
+        <el-table-column v-if="consultationFilterVisibility.followUp" label="随访提醒" min-width="180">
           <template #default="{ row }">
             <div class="message-summary-cell">
               <el-tag :type="followUpTagType(row)" effect="light">{{ followUpTagLabel(row) }}</el-tag>
@@ -157,14 +174,20 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-button link type="primary" @click="openDetail(row.id)">详情</el-button>
+              <el-button link type="primary" @click="openDetail(row.id)">{{ consultationViewConfig.primaryActionLabel }}</el-button>
               <el-button v-if="canClaim(row)" link type="success" @click="submitAssignment('claim', row.id)">认领</el-button>
               <el-button v-if="canRelease(row)" link type="warning" @click="submitAssignment('release', row.id)">释放</el-button>
             </div>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :description="consultationListEmptyDescription">
+            <el-button type="primary" @click="hasNonDefaultListFilters ? resetListToModeDefault() : refreshAll()">
+              {{ hasNonDefaultListFilters ? '恢复默认视图' : '刷新列表' }}
+            </el-button>
+          </el-empty>
+        </template>
       </el-table>
-      <el-empty v-if="!loading && !records.length" description="当前科室暂无问诊记录" />
     </section>
 
     <el-drawer v-model="detailVisible" title="问诊详情" size="70%" destroy-on-close>
@@ -1608,6 +1631,7 @@ import {
   followUpTagLabel,
   followUpTagType,
   formatDoctorReminderDate as formatDate,
+  buildDoctorReminderSummary,
   getDoctorMessageSummary as getMessageSummary,
   hasUnreadMessages,
   isAttentionServiceFeedbackRecord,
@@ -1836,6 +1860,150 @@ const pendingFollowUpCount = computed(() => records.value.filter(isPendingFollow
 const overdueFollowUpCount = computed(() => records.value.filter(item => followUpState(item) === 'overdue').length)
 const attentionServiceFeedbackCount = computed(() => records.value.filter(item => isAttentionServiceFeedbackRecord(item, doctor.doctorId)).length)
 const riskCount = computed(() => records.value.filter(isRiskConsultation).length)
+const myProcessingCount = computed(() => records.value.filter(item => ownerType(item) === 'mine' && item.status === 'processing').length)
+const myStructuredConclusionCount = computed(() => records.value.filter(item => ownerType(item) === 'mine' && hasStructuredConclusionRecord(item)).length)
+const myPendingConclusionCount = computed(() => records.value
+  .filter(item => ownerType(item) === 'mine' && item.status !== 'completed' && !hasStructuredConclusionRecord(item))
+  .length)
+const myPrescriptionCount = computed(() => records.value.filter(item => ownerType(item) === 'mine' && hasPrescriptionRecord(item)).length)
+const myCheckSuggestionCount = computed(() => records.value.filter(item => ownerType(item) === 'mine' && hasCheckSuggestionRecord(item)).length)
+const myMedicationFeedbackCount = computed(() => records.value
+  .filter(item => ownerType(item) === 'mine' && patientActionState(item) === 'medication_feedback')
+  .length)
+const consultationViewMode = computed(() => {
+  if (route.path === '/doctor/medical-record') return 'medical-record'
+  if (route.path === '/doctor/prescription') return 'prescription'
+  return 'consultation'
+})
+const consultationFilterVisibility = computed(() => {
+  if (consultationViewMode.value === 'medical-record') {
+    return { message: true, dispatch: false, followUp: true, patientAction: false, risk: false }
+  }
+  if (consultationViewMode.value === 'prescription') {
+    return { message: false, dispatch: false, followUp: false, patientAction: true, risk: true }
+  }
+  return { message: true, dispatch: true, followUp: true, patientAction: true, risk: true }
+})
+const consultationViewConfig = computed(() => {
+  if (consultationViewMode.value === 'medical-record') {
+    return {
+      kicker: 'Medical Record Studio',
+      heading: '电子病历书写',
+      description: '默认聚焦我认领且正在处理的问诊，优先补齐结构化结论、病情判断和患者指导。',
+      summary: '适合集中完成病历摘要、结论标签和随访判断。',
+      defaultFilterLabel: '默认筛选：我认领的 + 处理中',
+      listTitle: '病历书写列表',
+      listDescription: '优先处理本人已认领问诊，减少在全科室列表中反复切换造成的干扰。',
+      messageColumnLabel: '病情沟通',
+      latestMessageColumnLabel: '最近沟通摘要',
+      patientActionColumnLabel: '患者动作',
+      primaryActionLabel: '查看病历',
+      emptyDescription: '当前默认病历视图下暂无待书写记录，可恢复筛选后查看全部问诊。'
+    }
+  }
+  if (consultationViewMode.value === 'prescription') {
+    return {
+      kicker: 'Prescription Desk',
+      heading: '处方开具与检查建议',
+      description: '默认聚焦我认领且正在处理的问诊，优先处理检查建议、处方录入、用药反馈和风险提醒。',
+      summary: '适合集中完成处方预览、禁忌校验和检查建议维护。',
+      defaultFilterLabel: '默认筛选：我认领的 + 处理中',
+      listTitle: '处方处理列表',
+      listDescription: '优先查看本人正在推进的问诊，减少在接诊与处方工作之间来回跳转。',
+      messageColumnLabel: '沟通进展',
+      latestMessageColumnLabel: '最近消息',
+      patientActionColumnLabel: '用药/患者动作',
+      primaryActionLabel: '查看处方区',
+      emptyDescription: '当前默认处方视图下暂无待处理记录，可恢复筛选后查看全部问诊。'
+    }
+  }
+  return {
+    kicker: 'Consultation Workspace',
+    heading: '在线接诊问诊',
+    description: '面向科室全量问诊，优先认领、回复患者消息，并持续推进接诊处理与服务闭环。',
+    summary: '适合查看全科室接诊池、沟通进度与随访状态。',
+    defaultFilterLabel: '',
+    listTitle: '科室问诊列表',
+    listDescription: '先认领，再处理，避免多人同时处理同一条问诊记录。',
+    messageColumnLabel: '沟通进展',
+    latestMessageColumnLabel: '最近消息',
+    patientActionColumnLabel: '患者后续动作',
+    primaryActionLabel: '详情',
+    emptyDescription: '当前科室暂无问诊记录'
+  }
+})
+const consultationStatCards = computed(() => {
+  if (consultationViewMode.value === 'medical-record') {
+    return [
+      { label: '我认领的', value: mineCount.value },
+      { label: '处理中', value: myProcessingCount.value },
+      { label: '已形成结论', value: myStructuredConclusionCount.value },
+      { label: '待补结论', value: myPendingConclusionCount.value },
+      { label: '待随访', value: pendingFollowUpCount.value },
+      { label: '待关注评价', value: attentionServiceFeedbackCount.value }
+    ]
+  }
+  if (consultationViewMode.value === 'prescription') {
+    return [
+      { label: '我认领的', value: mineCount.value },
+      { label: '已开处方', value: myPrescriptionCount.value },
+      { label: '已写检查建议', value: myCheckSuggestionCount.value },
+      { label: '用药反馈', value: myMedicationFeedbackCount.value },
+      { label: '高优先级', value: riskCount.value },
+      { label: '待关注评价', value: attentionServiceFeedbackCount.value }
+    ]
+  }
+  return [
+    { label: '科室问诊', value: records.value.length },
+    { label: '待认领', value: unclaimedCount.value },
+    { label: '我认领的', value: mineCount.value },
+    { label: '患者新消息', value: unreadRecordCount.value },
+    { label: '待回复', value: pendingReplyCount.value },
+    { label: '高优先级', value: riskCount.value }
+  ]
+})
+const consultationQuickActions = computed(() => {
+  if (consultationViewMode.value === 'medical-record') {
+    return [
+      { key: 'default', label: '我的病历', type: 'primary', filters: buildModeDefaultFilters(route.path) },
+      { key: 'processing', label: '处理中', filters: { ...buildModeDefaultFilters(route.path), statusFilter: 'processing' } },
+      { key: 'followup', label: '待随访', filters: { ...buildModeDefaultFilters(route.path), followUpFilter: 'pending', sortMode: 'follow_up_due' } },
+      { key: 'feedback', label: '待关注评价', filters: { ...buildModeDefaultFilters(route.path), feedbackFilter: 'attention' } }
+    ]
+  }
+  if (consultationViewMode.value === 'prescription') {
+    return [
+      { key: 'default', label: '我的处方区', type: 'primary', filters: buildModeDefaultFilters(route.path) },
+      { key: 'medication', label: '用药反馈', filters: { ...buildModeDefaultFilters(route.path), patientActionFilter: 'medication_feedback' } },
+      { key: 'risk', label: '高优先级', filters: { ...buildModeDefaultFilters(route.path), riskFilter: 'high_priority' } },
+      { key: 'feedback', label: '待关注评价', filters: { ...buildModeDefaultFilters(route.path), feedbackFilter: 'attention' } }
+    ]
+  }
+  return [
+    { key: 'all', label: '全部接诊', type: 'primary', filters: buildModeDefaultFilters(route.path) },
+    { key: 'unclaimed', label: '待认领', filters: { ...buildModeDefaultFilters(route.path), ownerFilter: 'unclaimed' } },
+    { key: 'unread', label: '患者新消息', filters: { ...buildModeDefaultFilters(route.path), ownerFilter: 'mine', messageFilter: 'unread' } },
+    { key: 'risk', label: '高优先级', filters: { ...buildModeDefaultFilters(route.path), riskFilter: 'high_priority' } }
+  ]
+})
+const hasNonDefaultListFilters = computed(() => {
+  const defaults = buildModeDefaultFilters(route.path)
+  return !!trimText(keyword.value)
+    || ownerFilter.value !== defaults.ownerFilter
+    || statusFilter.value !== defaults.statusFilter
+    || messageFilter.value !== defaults.messageFilter
+    || dispatchFilter.value !== defaults.dispatchFilter
+    || followUpFilter.value !== defaults.followUpFilter
+    || feedbackFilter.value !== defaults.feedbackFilter
+    || patientActionFilter.value !== defaults.patientActionFilter
+    || riskFilter.value !== defaults.riskFilter
+    || sortMode.value !== defaults.sortMode
+})
+const consultationListEmptyDescription = computed(() => {
+  if (!records.value.length) return consultationViewConfig.value.emptyDescription
+  if (hasNonDefaultListFilters.value) return '当前筛选下暂无匹配问诊，可恢复默认视图后继续查看。'
+  return consultationViewConfig.value.emptyDescription
+})
 const detailMessageSummary = computed(() => getMessageSummary(detail.value))
 const messageSyncText = computed(() => {
   if (messageSyncStatus.value === 'failed') {
@@ -2959,6 +3127,46 @@ function refreshAll() {
 function refreshDoctorWorkspaceContext(showLoading = false) {
   accountContext?.refreshDoctorWorkspaceSummary?.(showLoading)
 }
+function buildModeDefaultFilters(path = route.path) {
+  const base = {
+    ownerFilter: 'all',
+    statusFilter: '',
+    messageFilter: 'all',
+    dispatchFilter: 'all',
+    followUpFilter: 'all',
+    feedbackFilter: 'all',
+    patientActionFilter: 'all',
+    riskFilter: 'all',
+    sortMode: 'recent'
+  }
+  if (path === '/doctor/medical-record' || path === '/doctor/prescription') {
+    return {
+      ...base,
+      ownerFilter: 'mine',
+      statusFilter: 'processing'
+    }
+  }
+  return base
+}
+function applyListPreset(filters = {}) {
+  const nextFilters = {
+    ...buildModeDefaultFilters(route.path),
+    ...(filters || {})
+  }
+  keyword.value = ''
+  ownerFilter.value = nextFilters.ownerFilter
+  statusFilter.value = nextFilters.statusFilter
+  messageFilter.value = nextFilters.messageFilter
+  dispatchFilter.value = nextFilters.dispatchFilter
+  followUpFilter.value = nextFilters.followUpFilter
+  feedbackFilter.value = nextFilters.feedbackFilter
+  patientActionFilter.value = nextFilters.patientActionFilter
+  riskFilter.value = nextFilters.riskFilter
+  sortMode.value = nextFilters.sortMode
+}
+function resetListToModeDefault() {
+  applyListPreset(buildModeDefaultFilters(route.path))
+}
 function currentListQuery() {
   const query = {}
   if (ownerFilter.value !== 'all') query.ownerFilter = ownerFilter.value
@@ -2989,6 +3197,7 @@ function syncListQuery(detailId = null, action = '') {
   router.replace({ path: currentDoctorConsultationPath(), query: nextQuery })
 }
 function applyRouteFilters() {
+  const defaults = buildModeDefaultFilters(route.path)
   const messageValue = trimText(route.query.messageFilter)
   const ownerValue = trimText(route.query.ownerFilter)
   const statusValue = trimText(route.query.status)
@@ -2999,17 +3208,17 @@ function applyRouteFilters() {
   const riskValue = trimText(route.query.riskFilter)
   const sortValue = trimText(route.query.sortMode)
 
-  messageFilter.value = ['all', 'unread', 'waiting_reply', 'no_message'].includes(messageValue) ? messageValue : 'all'
-  ownerFilter.value = ['all', 'unclaimed', 'mine', 'others'].includes(ownerValue) ? ownerValue : 'all'
-  statusFilter.value = ['submitted', 'triaged', 'processing', 'completed'].includes(statusValue) ? statusValue : ''
-  dispatchFilter.value = ['all', 'recommended_to_me', 'waiting_accept', 'claimed_by_other'].includes(dispatchValue) ? dispatchValue : 'all'
-  followUpFilter.value = ['all', 'pending', 'due_today', 'overdue'].includes(followUpValue) ? followUpValue : 'all'
-  feedbackFilter.value = ['all', 'attention', 'has_feedback', 'low_score', 'unresolved'].includes(feedbackValue) ? feedbackValue : 'all'
+  messageFilter.value = ['all', 'unread', 'waiting_reply', 'no_message'].includes(messageValue) ? messageValue : defaults.messageFilter
+  ownerFilter.value = ['all', 'unclaimed', 'mine', 'others'].includes(ownerValue) ? ownerValue : defaults.ownerFilter
+  statusFilter.value = ['submitted', 'triaged', 'processing', 'completed'].includes(statusValue) ? statusValue : defaults.statusFilter
+  dispatchFilter.value = ['all', 'recommended_to_me', 'waiting_accept', 'claimed_by_other'].includes(dispatchValue) ? dispatchValue : defaults.dispatchFilter
+  followUpFilter.value = ['all', 'pending', 'due_today', 'overdue'].includes(followUpValue) ? followUpValue : defaults.followUpFilter
+  feedbackFilter.value = ['all', 'attention', 'has_feedback', 'low_score', 'unresolved'].includes(feedbackValue) ? feedbackValue : defaults.feedbackFilter
   patientActionFilter.value = ['all', 'unread_reply', 'followup_update', 'check_result_update', 'medication_feedback', 'guidance_ack', 'service_feedback', 'followup_waiting'].includes(patientActionValue)
     ? patientActionValue
-    : 'all'
-  riskFilter.value = ['all', 'high_priority', 'normal'].includes(riskValue) ? riskValue : 'all'
-  sortMode.value = ['recent', 'follow_up_due'].includes(sortValue) ? sortValue : 'recent'
+    : defaults.patientActionFilter
+  riskFilter.value = ['all', 'high_priority', 'normal'].includes(riskValue) ? riskValue : defaults.riskFilter
+  sortMode.value = ['recent', 'follow_up_due'].includes(sortValue) ? sortValue : defaults.sortMode
 }
 function loadReplyTemplates() {
   templateLoading.value = true
@@ -3123,7 +3332,15 @@ function loadDoctor() {
 function loadRecords(callback) {
   loading.value = true
   get('/api/doctor/consultation/list', data => {
-    records.value = Array.isArray(data) ? data.map(item => normalizeDoctorReminderRecord(item)) : []
+    const normalizedRecords = Array.isArray(data) ? data.map(item => normalizeDoctorReminderRecord(item)) : []
+    records.value = normalizedRecords
+    const currentDoctorId = Number(doctor.doctorId || accountContext?.doctorWorkspaceSummary?.doctorId || 0)
+    if (currentDoctorId > 0) {
+      accountContext?.patchDoctorWorkspaceSummary?.({
+        ...(accountContext?.doctorWorkspaceSummary || {}),
+        ...buildDoctorReminderSummary(normalizedRecords, currentDoctorId)
+      })
+    }
     loading.value = false
     callback?.()
     autoOpen()
@@ -5471,6 +5688,28 @@ function submitServiceFeedbackHandle() {
 function ownerType(record) {
   return resolveOwnerType(record, doctor.doctorId)
 }
+function hasStructuredConclusionRecord(record) {
+  const conclusion = record?.doctorConclusion
+  if (!conclusion) return false
+  return !!(
+    trimText(conclusion.conditionLevel)
+    || trimText(conclusion.disposition)
+    || trimText(conclusion.diagnosisDirection)
+    || ensureArray(conclusion.conclusionTags).length
+    || ensureArray(conclusion.aiMismatchReasons).length
+    || trimText(conclusion.aiMismatchRemark)
+    || trimText(conclusion.patientInstruction)
+    || Number(conclusion.followUpWithinDays || 0) > 0
+    || conclusion.needFollowUp === 1
+    || conclusion.isConsistentWithAi !== null
+  )
+}
+function hasPrescriptionRecord(record) {
+  return ensureArray(record?.prescriptions).length > 0
+}
+function hasCheckSuggestionRecord(record) {
+  return ensureArray(record?.checkSuggestions).length > 0
+}
 function canClaim(record) { return !!record && doctor.bound === 1 && record.status !== 'completed' && ownerType(record) === 'unclaimed' }
 function canRelease(record) {
   const assignment = record?.doctorAssignment
@@ -5659,6 +5898,7 @@ watch(
 )
 watch(() => route.path, (path, oldPath) => {
   if (path === oldPath) return
+  applyRouteFilters()
   if (!detailVisible.value || !detail.value?.id) return
   if (!['/doctor/consultation', '/doctor/medical-record', '/doctor/prescription'].includes(path)) return
   const routeAction = resolveRouteConsultationAction(route.query.action, path)
@@ -5739,6 +5979,35 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.workspace-mode-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px 26px;
+}
+
+.workspace-mode-copy h2 {
+  margin: 12px 0 8px;
+  font-size: 30px;
+}
+
+.workspace-mode-copy p {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.7;
+}
+
+.section-tag {
+  display: inline-flex;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #27646d;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .stats {
@@ -6779,9 +7048,17 @@ onMounted(() => {
   .conclusion-compare-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .workspace-mode-card {
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 760px) {
+  .workspace-mode-card {
+    padding: 22px;
+  }
+
   .stats,
   .grid,
   .prescription-grid,

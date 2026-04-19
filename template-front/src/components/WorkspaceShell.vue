@@ -228,6 +228,10 @@ function patchWorkspaceSummary(nextSummary = {}) {
 }
 
 function resolveDoctorActionableCount(summary = {}) {
+  const explicitCount = Number(summary.actionableConsultationCount)
+  if (Number.isFinite(explicitCount) && explicitCount >= 0) {
+    return explicitCount
+  }
   const counts = [
     Number(summary.unclaimedConsultationCount || 0),
     Number(summary.unreadConsultationCount || 0),
@@ -456,6 +460,7 @@ onMounted(() => {
 }
 
 .workspace-shell {
+  height: 100vh;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -464,12 +469,14 @@ onMounted(() => {
   gap: 16px;
   font-family: 'Inter', -apple-system, sans-serif;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Sidebar Elements */
 .side-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   background: linear-gradient(180deg, #293846 0%, #344859 100%);
   border-radius: 24px;
   color: #fff;
@@ -505,6 +512,7 @@ onMounted(() => {
 
 .side-menu-container {
   flex: 1;
+  min-height: 0;
   padding: 0 12px;
 }
 
@@ -579,6 +587,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+  min-height: 0;
 }
 
 .workspace-header {
@@ -650,6 +659,7 @@ onMounted(() => {
 
 .workspace-body {
   flex: 1;
+  min-height: 0;
   background: var(--ws-panel);
   border-radius: 24px;
   box-shadow: var(--ws-shadow);
@@ -663,7 +673,9 @@ onMounted(() => {
 .body-wrapper {
   padding: 32px;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* Transitions */

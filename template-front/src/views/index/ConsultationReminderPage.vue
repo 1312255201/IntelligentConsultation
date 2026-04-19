@@ -48,7 +48,19 @@
           <span>逾期随访</span>
           <strong>{{ overdueFollowUpCount }}</strong>
         </article>
+      </div>
+    </section>
 
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <h3>优先提醒</h3>
+          <p>把医生回复、待处理和随访事项集中到一个页面，方便你按优先级逐条处理。</p>
+        </div>
+        <el-button text @click="openConsultationList()">查看全部问诊记录</el-button>
+      </div>
+
+      <div class="queue-grid">
         <article class="queue-card">
           <div class="queue-card-head">
             <div>
@@ -57,9 +69,9 @@
             </div>
             <el-tag type="info" effect="light">{{ pendingServiceFeedbackCount }}</el-tag>
           </div>
-          <div v-if="pendingServiceFeedbackRecords.length" class="queue-list">
+          <div v-if="pendingServiceFeedbackPreviewRecords.length" class="queue-list">
             <button
-              v-for="item in pendingServiceFeedbackRecords"
+              v-for="item in pendingServiceFeedbackPreviewRecords"
               :key="`feedback-${item.id}`"
               type="button"
               class="queue-item"
@@ -81,19 +93,7 @@
             <el-button text @click="openConsultationList({ progress: 'pending_feedback' })">只看待评价</el-button>
           </div>
         </article>
-      </div>
-    </section>
 
-    <section class="panel-card">
-      <div class="panel-head">
-        <div>
-          <h3>优先提醒</h3>
-          <p>把医生回复、待处理和随访事项集中到一个页面，方便你按优先级逐条处理。</p>
-        </div>
-        <el-button text @click="openConsultationList()">查看全部问诊记录</el-button>
-      </div>
-
-      <div class="queue-grid">
         <article class="queue-card">
           <div class="queue-card-head">
             <div>
@@ -278,6 +278,7 @@ const pendingServiceFeedbackRecords = computed(() => reminderRecords.value
   .filter(isPendingServiceFeedbackRecord)
   .slice()
   .sort((left, right) => compareDateDesc(serviceFeedbackBaseTime(left), serviceFeedbackBaseTime(right))))
+const pendingServiceFeedbackPreviewRecords = computed(() => pendingServiceFeedbackRecords.value.slice(0, 4))
 const unreadReplyPreviewRecords = computed(() => unreadReplyRecords.value.slice(0, 4))
 const waitingDoctorPreviewRecords = computed(() => waitingDoctorRecords.value.slice(0, 4))
 const followUpPreviewRecords = computed(() => followUpRecords.value.slice(0, 4))

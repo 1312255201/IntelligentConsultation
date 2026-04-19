@@ -120,6 +120,45 @@ export function normalizeDoctorReminderRecords(records = []) {
   return ensureArray(records).map(item => normalizeDoctorReminderRecord(item))
 }
 
+export function buildDoctorReminderSummary(records = [], doctorId = null) {
+  const normalizedRecords = normalizeDoctorReminderRecords(records)
+  const unclaimedRecords = normalizedRecords.filter(item => item.status !== 'completed' && ownerType(item, doctorId) === 'unclaimed')
+  const recommendedRecords = normalizedRecords.filter(item => isRecommendedConsultation(item, doctorId))
+  const unreadRecords = normalizedRecords.filter(hasUnreadMessages)
+  const waitingReplyRecords = normalizedRecords.filter(waitingDoctorReply)
+  const pendingFollowUpRecords = normalizedRecords.filter(isPendingFollowUpRecord)
+  const dueTodayFollowUpCount = pendingFollowUpRecords.filter(item => followUpState(item) === 'due_today').length
+  const overdueFollowUpCount = pendingFollowUpRecords.filter(item => followUpState(item) === 'overdue').length
+  const attentionServiceFeedbackRecords = normalizedRecords.filter(item => isAttentionServiceFeedbackRecord(item, doctorId))
+  const actionableConsultationCount = normalizedRecords.reduce((set, item) => {
+    if (
+      ownerType(item, doctorId) === 'unclaimed'
+      || isRecommendedConsultation(item, doctorId)
+      || hasUnreadMessages(item)
+      || waitingDoctorReply(item)
+      || isAttentionServiceFeedbackRecord(item, doctorId)
+      || isPendingFollowUpRecord(item)
+    ) {
+      const id = Number(item?.id || 0)
+      if (id > 0) set.add(id)
+    }
+    return set
+  }, new Set()).size
+
+  return {
+    unclaimedConsultationCount: unclaimedRecords.length,
+    highPriorityUnclaimedCount: unclaimedRecords.filter(isRiskConsultation).length,
+    unreadConsultationCount: unreadRecords.length,
+    waitingReplyConsultationCount: waitingReplyRecords.length,
+    pendingFollowUpCount: pendingFollowUpRecords.length,
+    dueTodayFollowUpCount,
+    overdueFollowUpCount,
+    recommendedConsultationCount: recommendedRecords.length,
+    attentionServiceFeedbackCount: attentionServiceFeedbackRecords.length,
+    actionableConsultationCount
+  }
+}
+
 export function getDoctorMessageSummary(record) {
   return normalizeDoctorMessageSummary(record?.messageSummary)
 }

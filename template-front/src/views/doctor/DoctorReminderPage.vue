@@ -129,8 +129,8 @@
             </div>
           </article>
         </div>
-        <el-empty v-else description="当前筛选下没有需要处理的待办">
-          <el-button type="primary" @click="feedFilter = 'all'">查看全部待办</el-button>
+        <el-empty v-else :description="filteredFeedEmptyDescription">
+          <el-button type="primary" @click="handleFeedEmptyAction">{{ hasOtherActionableRecords ? '查看全部待办' : '刷新待办' }}</el-button>
         </el-empty>
       </section>
     </template>
@@ -146,6 +146,7 @@ import {
   compareDateAsc, compareDateDesc, compareRecentDoctorRecord, followUpDueDate, followUpLine,
   followUpReminderText, followUpState, followUpTagLabel, formatDoctorReminderDate,
   doctorMessagePreview,
+  buildDoctorReminderSummary,
   getDoctorMessageSummary, hasUnreadMessages, isAttentionServiceFeedbackRecord, isPendingFollowUpRecord,
   isRecommendedConsultation, isRiskConsultation, messageProgressLabel, normalizeDoctorReminderRecords,
   ownerType, serviceFeedbackLabel, serviceFeedbackReminderText, serviceFeedbackState, serviceFeedbackTime,
@@ -198,6 +199,13 @@ const filteredFeedRecords = computed(() => actionableRecords.value.filter(item =
   if (feedFilter.value === 'overdue') return followUpState(item) === 'overdue'
   return true
 }))
+const hasOtherActionableRecords = computed(() => feedFilter.value !== 'all' && actionableRecordCount.value > 0 && filteredFeedRecords.value.length <= 0)
+const filteredFeedEmptyDescription = computed(() => {
+  if (hasOtherActionableRecords.value) {
+    return `当前筛选下暂无待办，其余分类仍有 ${actionableRecordCount.value} 条可处理问诊`
+  }
+  return '当前筛选下没有需要处理的待办'
+})
 
 const heroSummary = computed(() => {
   if (!records.value.length) return '当前科室还没有可处理的问诊待办，新的认领、消息和随访事项会统一汇总到这里。'
@@ -213,13 +221,25 @@ const heroSummary = computed(() => {
 function loadRecords() {
   loading.value = true
   get('/api/doctor/consultation/list', data => {
-    records.value = normalizeDoctorReminderRecords(data || [])
-    accountContext?.refreshDoctorWorkspaceSummary?.()
+    const normalizedRecords = normalizeDoctorReminderRecords(data || [])
+    records.value = normalizedRecords
+    accountContext?.patchDoctorWorkspaceSummary?.({
+      ...(doctorSummary.value || {}),
+      ...buildDoctorReminderSummary(normalizedRecords, doctorId.value)
+    })
     loading.value = false
   }, message => {
     loading.value = false
     ElMessage.warning(message || '医生待办记录加载失败')
   })
+}
+
+function handleFeedEmptyAction() {
+  if (hasOtherActionableRecords.value) {
+    feedFilter.value = 'all'
+    return
+  }
+  loadRecords()
 }
 
 function submitAssignment(type, record, openAfterSuccess = false) {
