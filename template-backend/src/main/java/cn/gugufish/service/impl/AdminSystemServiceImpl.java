@@ -12,6 +12,7 @@ import cn.gugufish.entity.dto.PatientProfile;
 import cn.gugufish.entity.vo.request.AdminAccountPasswordResetVO;
 import cn.gugufish.entity.vo.request.AdminAccountRoleUpdateVO;
 import cn.gugufish.entity.vo.response.AdminAccountManageVO;
+import cn.gugufish.entity.vo.response.AdminOperationLogPageVO;
 import cn.gugufish.entity.vo.response.AdminOperationLogVO;
 import cn.gugufish.entity.vo.response.AdminOrderManageVO;
 import cn.gugufish.entity.vo.response.AdminUserManageVO;
@@ -26,10 +27,13 @@ import cn.gugufish.mapper.PatientMedicalHistoryMapper;
 import cn.gugufish.mapper.PatientProfileMapper;
 import cn.gugufish.service.AdminSystemService;
 import cn.gugufish.utils.Const;
+import cn.gugufish.utils.OperationLogAuditUtils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -241,13 +245,53 @@ public class AdminSystemServiceImpl implements AdminSystemService {
     }
 
     @Override
-    public List<AdminOperationLogVO> listOperationLogs() {
-        return operationLogMapper.selectList(Wrappers.<OperationLog>query()
-                        .orderByDesc("id")
-                        .last("limit 2000"))
-                .stream()
+    public AdminOperationLogPageVO listOperationLogs(int pageNo, int pageSize, String keyword, String method, Integer status, boolean includeLowValue) {
+        int safePageNo = Math.max(pageNo, 1);
+        int safePageSize = Math.max(10, Math.min(pageSize, 100));
+        var wrapper = Wrappers.<OperationLog>lambdaQuery().orderByDesc(OperationLog::getId);
+
+        if (StringUtils.hasText(keyword)) {
+            String search = keyword.trim();
+            wrapper.and(query -> query
+                    .like(OperationLog::getRequestUrl, search)
+                    .or()
+                    .like(OperationLog::getUsername, search)
+                    .or()
+                    .like(OperationLog::getRemoteIp, search));
+        }
+        if (StringUtils.hasText(method)) {
+            wrapper.eq(OperationLog::getRequestMethod, method.trim().toUpperCase());
+        }
+        if (status != null) {
+            if (status == 200) {
+                wrapper.eq(OperationLog::getResponseCode, 200);
+            } else if (status == -1) {
+                wrapper.ne(OperationLog::getResponseCode, 200);
+            } else {
+                wrapper.eq(OperationLog::getResponseCode, status);
+            }
+        }
+        if (!includeLowValue) {
+            wrapper.apply("NOT (UPPER(request_method) = {0} AND (request_url LIKE {1} OR request_url LIKE {2} OR request_url LIKE {3} OR request_url LIKE {4} OR request_url LIKE {5} OR request_url = {6}))",
+                    "GET", "%/list", "%/summary", "%/overview", "%/options", "%/status", "/api/user/me");
+            wrapper.apply("UPPER(request_method) <> {0}", "OPTIONS");
+            wrapper.apply("request_url NOT LIKE {0}", "/swagger-ui%");
+            wrapper.apply("request_url NOT LIKE {0}", "/v3/api-docs%");
+            wrapper.apply("request_url NOT LIKE {0}", "/images%");
+            wrapper.ne(OperationLog::getRequestUrl, "/favicon.ico");
+            wrapper.ne(OperationLog::getRequestUrl, "/error");
+        }
+
+        Page<OperationLog> page = operationLogMapper.selectPage(new Page<>(safePageNo, safePageSize), wrapper);
+        AdminOperationLogPageVO result = new AdminOperationLogPageVO();
+        result.setRecords(page.getRecords().stream()
+                .filter(item -> includeLowValue || !OperationLogAuditUtils.isLowValueRequest(item.getRequestMethod(), item.getRequestUrl()))
                 .map(item -> item.asViewObject(AdminOperationLogVO.class))
-                .toList();
+                .toList());
+        result.setTotal(page.getTotal());
+        result.setPageNo(safePageNo);
+        result.setPageSize(safePageSize);
+        return result;
     }
 
     @Override

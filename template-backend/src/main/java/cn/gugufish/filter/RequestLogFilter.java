@@ -3,6 +3,7 @@ package cn.gugufish.filter;
 import cn.gugufish.entity.dto.OperationLog;
 import cn.gugufish.service.OperationLogService;
 import cn.gugufish.utils.Const;
+import cn.gugufish.utils.OperationLogAuditUtils;
 import cn.gugufish.utils.SnowflakeIdGenerator;
 import com.alibaba.fastjson2.JSONObject;
 import jakarta.annotation.Resource;
@@ -44,7 +45,7 @@ public class RequestLogFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        if (this.isIgnoreUrl(request.getServletPath())) {
+        if (this.isIgnoreRequest(request)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -64,6 +65,11 @@ public class RequestLogFilter extends OncePerRequestFilter {
             if (url.startsWith(ignore)) return true;
         }
         return false;
+    }
+
+    private boolean isIgnoreRequest(HttpServletRequest request) {
+        return this.isIgnoreUrl(request.getServletPath())
+                || OperationLogAuditUtils.isInfrastructureRequest(request.getMethod(), request.getServletPath());
     }
 
     public void logRequestEnd(HttpServletRequest request, ContentCachingResponseWrapper wrapper, long startTime) {

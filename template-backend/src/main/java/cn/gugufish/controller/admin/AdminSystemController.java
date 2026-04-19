@@ -4,6 +4,7 @@ import cn.gugufish.entity.RestBean;
 import cn.gugufish.entity.vo.request.AdminAccountPasswordResetVO;
 import cn.gugufish.entity.vo.request.AdminAccountRoleUpdateVO;
 import cn.gugufish.entity.vo.response.AdminAccountManageVO;
+import cn.gugufish.entity.vo.response.AdminOperationLogPageVO;
 import cn.gugufish.entity.vo.response.AdminOperationLogVO;
 import cn.gugufish.entity.vo.response.AdminOrderManageVO;
 import cn.gugufish.entity.vo.response.AdminUserManageVO;
@@ -16,6 +17,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -63,8 +65,13 @@ public class AdminSystemController {
 
     @GetMapping("/operation-log/list")
     @Operation(summary = "查询操作日志")
-    public RestBean<List<AdminOperationLogVO>> listOperationLogs() {
-        return RestBean.success(adminSystemService.listOperationLogs());
+    public RestBean<AdminOperationLogPageVO> listOperationLogs(@RequestParam(defaultValue = "1") int pageNo,
+                                                               @RequestParam(defaultValue = "20") int pageSize,
+                                                               @RequestParam(required = false) String keyword,
+                                                               @RequestParam(required = false) String method,
+                                                               @RequestParam(required = false) Integer status,
+                                                               @RequestParam(defaultValue = "false") boolean includeLowValue) {
+        return RestBean.success(adminSystemService.listOperationLogs(pageNo, pageSize, keyword, method, status, includeLowValue));
     }
 
     private <T> RestBean<T> messageHandle(Supplier<String> action) {

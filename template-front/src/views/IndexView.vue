@@ -63,7 +63,7 @@ const menuItems = [
   {
     index: '/index/consultation',
     title: '我的问诊记录',
-    description: '发起新的在线问诊，并统一查看历史病例、随访与服务评价。',
+    description: '发起新的在线问诊，并统一查看历史病历、随访与服务评价。',
     icon: Service
   },
   {

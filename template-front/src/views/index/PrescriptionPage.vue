@@ -5,7 +5,7 @@
         <h3>个人处方查询</h3>
         <p>集中查看当前账号下的全部电子处方、用法用量和禁忌提醒，并支持快速跳转回对应问诊记录继续反馈。</p>
       </div>
-      <el-button type="primary" @click="router.push('/index/consultation')">查看病例详情</el-button>
+      <el-button type="primary" @click="router.push('/index/consultation')">查看病历详情</el-button>
     </section>
 
     <section class="stat-grid">

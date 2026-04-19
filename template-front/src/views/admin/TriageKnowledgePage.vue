@@ -267,7 +267,7 @@ const knowledgeTypeOptions = [
 const sourceTypeOptions = [
   { value: 'manual', label: '人工整理' },
   { value: 'guideline', label: '指南规范' },
-  { value: 'case_review', label: '病例复盘' },
+  { value: 'case_review', label: '病历复盘' },
   { value: 'operation', label: '运营沉淀' }
 ]
 

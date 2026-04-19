@@ -35,7 +35,7 @@ const menuItems = [
   },
   {
     index: '/doctor/medical-record',
-    title: '电子病例书写',
+    title: '电子病历书写',
     description: '聚焦结构化病历、诊断结论和患者指导意见书写。',
     icon: Files
   },

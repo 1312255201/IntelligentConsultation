@@ -286,7 +286,7 @@ const riskLevelOptions = [
 
 const sourceTypeOptions = [
   { value: 'manual', label: '人工整理' },
-  { value: 'case_review', label: '病例复盘' },
+  { value: 'case_review', label: '病历复盘' },
   { value: 'doctor_summary', label: '医生总结' },
   { value: 'operation', label: '运营沉淀' }
 ]
