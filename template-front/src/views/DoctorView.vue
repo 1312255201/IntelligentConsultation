@@ -2,8 +2,8 @@
   <WorkspaceShell
     brand-mark="DR"
     brand-title="医生工作台"
-    brand-subtitle="Doctor Workspace"
-    page-kicker="Doctor Workspace"
+    brand-subtitle="医生工作区"
+    page-kicker="医生工作区"
     :footer-text="footerText"
     :menu-items="menuItems"
   />
@@ -77,5 +77,5 @@ const menuItems = [
   }
 ]
 
-const footerText = '医生您好，请仔细甄别AI提示，牢记AI作用范围，只是辅助诊断'
+const footerText = '医生您好，请仔细甄别智能提示，牢记智能辅助作用范围，只是辅助诊断'
 </script>

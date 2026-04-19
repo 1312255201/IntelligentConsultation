@@ -73,7 +73,7 @@
               </div>
             </div>
 
-            <p class="remark-text">{{ item.remark || '该就诊人档案可用于后续 AI 导诊、问诊和预约流程。' }}</p>
+            <p class="remark-text">{{ item.remark || '该就诊人档案可用于后续智能导诊、问诊和预约流程。' }}</p>
 
             <div class="action-row">
               <el-button link @click="goHealthPage(item)">健康档案</el-button>

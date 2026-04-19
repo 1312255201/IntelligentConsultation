@@ -2,7 +2,7 @@
   <div class="reminder-page" v-loading="loading">
     <section class="hero-card">
       <div class="hero-copy">
-        <span class="section-tag">Reminder Center</span>
+        <span class="section-tag">提醒中心</span>
         <h2>消息与提醒中心</h2>
         <p>{{ heroSummary }}</p>
         <div class="chip-row">
@@ -204,7 +204,7 @@
       <div class="panel-head">
         <div>
           <h3>提醒流</h3>
-          <p>按优先级串联所有需要你处理的问诊，并可一键进入问诊详情或 AI 导诊工作区。</p>
+          <p>按优先级串联所有需要你处理的问诊，并可一键进入问诊详情或 智能导诊工作区。</p>
         </div>
         <el-radio-group v-model="feedFilter" size="small">
           <el-radio-button label="feedback">待评价</el-radio-button>
@@ -240,7 +240,7 @@
 
           <div class="feed-actions">
             <el-button type="primary" plain @click="openConsultationRecord(item, reminderQuery(item))">查看问诊</el-button>
-            <el-button text @click="openTriageWorkspace(item.id)">AI 导诊</el-button>
+            <el-button text @click="openTriageWorkspace(item.id)">智能导诊</el-button>
           </div>
         </article>
       </div>
@@ -308,7 +308,7 @@ const heroSummary = computed(() => {
     && pendingFollowUpCount.value <= 0) {
     return `当前有 ${pendingServiceFeedbackCount.value} 条问诊已完成医生处理，建议补充服务评分和问题是否解决。`
   }
-  if (!records.value.length) return '当前还没有历史问诊记录，可以先发起一次问诊并进入 AI 导诊工作区。'
+  if (!records.value.length) return '当前还没有历史问诊记录，可以先发起一次问诊并进入 智能导诊工作区。'
   if (overdueFollowUpCount.value > 0) return `当前有 ${overdueFollowUpCount.value} 条问诊已进入逾期随访，建议优先回看医生结论并尽快继续跟进。`
   if (unreadDoctorReplyCount.value > 0) return `医生刚回复了 ${unreadDoctorReplyCount.value} 条问诊，建议先查看最新回复并决定是否继续补充信息。`
   if (waitingDoctorHandleCount.value > 0) return `仍有 ${waitingDoctorHandleCount.value} 条问诊在等待医生进一步处理，你可以继续补充症状变化、检查结果或恢复情况。`

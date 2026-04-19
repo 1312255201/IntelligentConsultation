@@ -9,15 +9,15 @@
           <div class="brand-mark"><el-icon><Monitor /></el-icon></div>
           <div class="brand-text">
             <strong>智慧医疗问诊系统</strong>
-            <span>Intelligent Consultation</span>
+            <span>智能问诊平台</span>
           </div>
         </div>
         
         <div class="intro-content">
-          <span class="intro-kicker">Welcome to the Platform</span>
+          <span class="intro-kicker">欢迎使用平台</span>
           <h1>开启您的专属<br/><span class="text-highlight">智慧医疗服务</span></h1>
           <p class="intro-desc">
-            无论您是需要日常的健康咨询、寻找权威的三甲专家解答，还是希望通过前沿的大模型进行AI辅助分诊，我们都将全天候为您提供最专业、可靠的就医保障。
+            无论您是需要日常的健康咨询、寻找权威的三甲专家解答，还是希望通过前沿的大模型进行智能辅助分诊，我们都将全天候为您提供最专业、可靠的就医保障。
           </p>
           
           <div class="feature-list">
@@ -31,7 +31,7 @@
             <div class="feature-item">
               <div class="feature-icon"><el-icon><Cpu /></el-icon></div>
               <div class="feature-text">
-                <strong>AI 智能导诊辅助</strong>
+                <strong>智能导诊辅助</strong>
                 <span>基于医疗大模型的精准排查，秒级推荐初诊科室。</span>
               </div>
             </div>

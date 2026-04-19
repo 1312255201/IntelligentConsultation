@@ -13,7 +13,7 @@
             {{ summary.doctorName?.slice(0, 1) || 'D' }}
           </el-avatar>
           <div class="profile-copy">
-            <span class="section-tag">Doctor Profile</span>
+            <span class="section-tag">医生档案</span>
             <h2>{{ summary.doctorName }}</h2>
             <p>{{ profileTitle }}</p>
             <div class="chip-row">
@@ -360,7 +360,7 @@
           <div class="panel-head">
             <div>
               <h3>服务标签</h3>
-              <p>这些标签来自管理员维护，可作为后续 AI 导诊和医生展示的基础信息。</p>
+              <p>这些标签来自管理员维护，可作为后续 智能导诊和医生展示的基础信息。</p>
             </div>
           </div>
           <div v-if="summary.serviceTags?.length" class="chip-row">

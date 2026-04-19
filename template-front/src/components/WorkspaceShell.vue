@@ -82,8 +82,8 @@
             {{ userInitial }}
           </el-avatar>
           <div class="user-text">
-            <strong>{{ profile.username || 'Loading...' }}</strong>
-            <span>{{ profile.email || 'Fetching user profile' }}</span>
+            <strong>{{ profile.username || '加载中...' }}</strong>
+            <span>{{ profile.email || '正在获取账号信息' }}</span>
           </div>
           <el-tag v-if="profile.role" type="success" effect="light" round class="role-tag">
             {{ profile.role }}
@@ -159,7 +159,7 @@ const props = defineProps({
   },
   pageKicker: {
     type: String,
-    default: 'Workspace'
+    default: '工作区'
   },
   menuItems: {
     type: Array,

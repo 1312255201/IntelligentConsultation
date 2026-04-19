@@ -3,7 +3,7 @@
     <section class="hero-card">
       <div>
         <h3>全局配置管理</h3>
-        <p>统一查看平台展示、智能分配和 AI 导诊核心配置，减少后台配置入口分散带来的维护成本。</p>
+        <p>统一查看平台展示、智能分配和 智能导诊核心配置，减少后台配置入口分散带来的维护成本。</p>
       </div>
       <el-button type="primary" @click="loadSummary">刷新配置概览</el-button>
     </section>
@@ -22,10 +22,10 @@
         <el-button link type="primary" @click="router.push('/admin/consultation-dispatch')">进入分配策略</el-button>
       </article>
       <article class="config-card">
-        <span class="config-kicker">AI 导诊</span>
-        <strong>{{ ai.enabled === 1 ? '已启用 AI 导诊' : '已关闭 AI 导诊' }}</strong>
-        <p>Prompt 版本：{{ ai.promptVersion || '未配置' }}；候选医生上限：{{ ai.doctorCandidateLimit || 0 }}。</p>
-        <el-button link type="primary" @click="router.push('/admin/consultation-ai')">进入 AI 配置</el-button>
+        <span class="config-kicker">智能导诊</span>
+        <strong>{{ ai.enabled === 1 ? '已启用 智能导诊' : '已关闭 智能导诊' }}</strong>
+        <p>提示词版本：{{ ai.promptVersion || '未配置' }}；候选医生上限：{{ ai.doctorCandidateLimit || 0 }}。</p>
+        <el-button link type="primary" @click="router.push('/admin/consultation-ai')">进入 智能配置</el-button>
       </article>
     </section>
 
@@ -41,8 +41,8 @@
           <p>智能分配配置会直接影响推荐医生排序和接诊超时判断。</p>
         </article>
         <article class="quick-item">
-          <strong>AI 行为</strong>
-          <p>AI 配置决定导诊开关、Prompt 版本和候选医生数量。</p>
+          <strong>智能行为</strong>
+          <p>智能配置决定导诊开关、提示词版本和候选医生数量。</p>
         </article>
       </div>
     </section>

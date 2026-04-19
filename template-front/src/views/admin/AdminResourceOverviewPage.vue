@@ -65,7 +65,7 @@ const quickSteps = [
   { title: '2. 再建医生与排班', description: '医生资源和排班能力是问诊接诊的前提。', path: '/admin/doctor' },
   { title: '3. 配问诊分类与模板', description: '让用户能正常提交结构化问诊资料。', path: '/admin/consultation-category' },
   { title: '4. 配药品与规则', description: '支撑处方开具、禁忌提示和用药反馈。', path: '/admin/medicine' },
-  { title: '5. 沉淀知识与案例', description: '补强 AI 导诊解释、人工复盘和答辩展示。', path: '/admin/triage-knowledge' }
+  { title: '5. 沉淀知识与案例', description: '补强智能导诊解释、人工复盘和答辩展示。', path: '/admin/triage-knowledge' }
 ]
 
 function loadSummary() {

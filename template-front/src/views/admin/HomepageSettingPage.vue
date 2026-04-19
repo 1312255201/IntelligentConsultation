@@ -291,7 +291,7 @@
             </div>
           </el-upload>
           <div class="cover-actions">
-            <span>建议使用清晰横图，大小不超过 3MB。</span>
+            <span>建议使用清晰横图，大小控制在 3 兆以内。</span>
             <el-button v-if="caseForm.cover" link type="danger" @click="caseForm.cover = ''">
               移除封面
             </el-button>

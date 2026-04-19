@@ -19,7 +19,7 @@
             <span class="avatar-tip">点击更换头像</span>
           </div>
         </el-upload>
-        <p>支持 JPG、PNG、WEBP，文件大小不超过 200KB。</p>
+        <p>支持常见图片格式，文件大小不超过 200 千字节。</p>
       </div>
 
       <div class="hero-info">

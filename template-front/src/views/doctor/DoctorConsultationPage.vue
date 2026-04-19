@@ -223,7 +223,7 @@
               <div class="chips">
                 <span v-if="detailRecordPositionLabel">{{ detailRecordPositionLabel }}</span>
                 <span v-if="filteredRecords.length">当前筛选 {{ filteredRecords.length }} 条</span>
-                <span v-if="filteredRecords.length > 1">快捷键 Alt + 左右方向键</span>
+                <span v-if="filteredRecords.length > 1">可用组合快捷键配合左右方向键切换</span>
               </div>
             </div>
             <div class="detail-nav-toolbar">
@@ -565,7 +565,7 @@
             <div class="message-composer">
               <div class="template-banner ai-message-banner">
                 <div>
-                  <strong>AI 沟通建议</strong>
+                  <strong>智能沟通建议</strong>
                   <p>{{ messageAiSceneHint }}</p>
                 </div>
                 <div class="template-tools">
@@ -577,7 +577,7 @@
                       :value="item.value"
                     />
                   </el-select>
-                  <el-button plain :loading="messageAiDraftLoading" :disabled="!canSendMessage" @click="generateMessageAiDraft">AI 生成建议</el-button>
+                  <el-button plain :loading="messageAiDraftLoading" :disabled="!canSendMessage" @click="generateMessageAiDraft">智能生成建议</el-button>
                   <el-button v-if="hasMessageAiDraft" type="primary" plain :disabled="!canSendMessage" @click="applyMessageAiDraft('replace')">覆盖带入</el-button>
                   <el-button v-if="hasMessageAiDraft" plain :disabled="!canSendMessage" @click="applyMessageAiDraft('append')">追加带入</el-button>
                 </div>
@@ -588,7 +588,7 @@
                 <div class="chips">
                   <span>{{ messageAiSceneLabel(messageAiDraft.sceneType || messageAiScene) }}</span>
                   <span>{{ messageAiDraft.fallback === 1 ? '规则兜底草稿' : messageAiDraftSourceLabel }}</span>
-                  <span v-if="messageAiDraft.promptVersion">Prompt {{ messageAiDraft.promptVersion }}</span>
+                  <span v-if="messageAiDraft.promptVersion">提示词版本 {{ messageAiDraft.promptVersion }}</span>
                 </div>
                 <div v-if="messageAiDraft.riskFlags.length" class="ai-draft-tags danger">
                   <span v-for="item in messageAiDraft.riskFlags" :key="`message-draft-${item}`">{{ item }}</span>
@@ -626,7 +626,7 @@
                     :disabled="!canSendMessage || !hasMessageAiDraft || !selectedMessageTemplate"
                     @click="composeMessageAiWithTemplate"
                   >
-                    AI+模板合成带入
+                    智能内容与模板合成带入
                   </el-button>
                   <el-button link type="primary" @click="openReplyTemplateManager">管理沟通模板</el-button>
                 </div>
@@ -717,8 +717,8 @@
           <section v-if="canApplyAiDraft" class="card panel">
             <div class="head">
               <div>
-                <h3>AI 接诊草稿</h3>
-                <p>可将 AI 导诊建议带入医生处理表单作为草稿，再继续人工修订，不会自动提交。</p>
+                <h3>智能接诊草稿</h3>
+                <p>可将 智能导诊建议带入医生处理表单作为草稿，再继续人工修订，不会自动提交。</p>
               </div>
               <div class="head-actions">
                 <div class="chips">
@@ -767,11 +767,11 @@
             </div>
             <div class="template-banner ai-message-banner">
               <div>
-                <strong>AI 处理草稿</strong>
+                <strong>智能处理草稿</strong>
                 <p>结合导诊结果、沟通记录和已保存处理内容，为本次医生处理生成一份可编辑草稿。</p>
               </div>
               <div class="template-tools">
-                <el-button plain :loading="handleAiDraftLoading" :disabled="!canEdit || !!handleAiRegeneratingField" @click="generateHandleAiDraft">生成 AI 草稿</el-button>
+                <el-button plain :loading="handleAiDraftLoading" :disabled="!canEdit || !!handleAiRegeneratingField" @click="generateHandleAiDraft">生成 智能草稿</el-button>
                 <el-button v-if="hasHandleAiDraft" type="primary" plain :disabled="!canEdit || handleAiBusy" @click="applyGeneratedHandleDraft">带入处理草稿</el-button>
                 <el-button v-if="hasHandleAiDraft" plain :disabled="!canEdit || handleAiBusy" @click="applyGeneratedHandleConclusion">带入结构化结论</el-button>
               </div>
@@ -798,7 +798,7 @@
                 <span v-if="handleAiDraft.conditionLevel">{{ conditionLevelLabel(handleAiDraft.conditionLevel) }}</span>
                 <span v-if="handleAiDraft.disposition">{{ dispositionLabel(handleAiDraft.disposition) }}</span>
                 <span>{{ handleAiDraft.fallback === 1 ? '规则兜底草稿' : handleAiDraftSourceLabel }}</span>
-                <span v-if="handleAiDraft.promptVersion">Prompt {{ handleAiDraft.promptVersion }}</span>
+                <span v-if="handleAiDraft.promptVersion">提示词版本 {{ handleAiDraft.promptVersion }}</span>
               </div>
               <div v-if="handleAiDraft.conclusionTags.length" class="ai-draft-tags">
                 <span v-for="item in handleAiDraft.conclusionTags" :key="`handle-draft-tag-${item}`">{{ item }}</span>
@@ -889,8 +889,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'append')">追加填入</el-button>
-                  <el-button text :loading="handleAiRegeneratingField === 'doctorSummary'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'doctorSummary')" @click="generateHandleAiDraft('doctorSummary')">AI重写</el-button>
-                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('handle_summary') || !trimText(handleAiDraft.doctorSummary)" @click="composeAiFieldWithTemplate('handle_summary', 'summary', handleAiDraft.doctorSummary, { label: '处理摘要', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'doctorSummary'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'doctorSummary')" @click="generateHandleAiDraft('doctorSummary')">智能重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('handle_summary') || !trimText(handleAiDraft.doctorSummary)" @click="composeAiFieldWithTemplate('handle_summary', 'summary', handleAiDraft.doctorSummary, { label: '处理摘要', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：当前暂无紧急风险，建议继续线上处理并观察变化。" />
               </el-form-item>
@@ -901,8 +901,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'append')">追加填入</el-button>
-                  <el-button text :loading="handleAiRegeneratingField === 'medicalAdvice'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'medicalAdvice')" @click="generateHandleAiDraft('medicalAdvice')">AI重写</el-button>
-                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('medical_advice') || !trimText(handleAiDraft.medicalAdvice)" @click="composeAiFieldWithTemplate('medical_advice', 'medicalAdvice', handleAiDraft.medicalAdvice, { label: '处理建议', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'medicalAdvice'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'medicalAdvice')" @click="generateHandleAiDraft('medicalAdvice')">智能重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('medical_advice') || !trimText(handleAiDraft.medicalAdvice)" @click="composeAiFieldWithTemplate('medical_advice', 'medicalAdvice', handleAiDraft.medicalAdvice, { label: '处理建议', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.medicalAdvice" type="textarea" :rows="4" maxlength="4000" show-word-limit placeholder="填写生活建议、用药建议、复诊建议等。" />
               </el-form-item>
@@ -913,8 +913,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'append')">追加填入</el-button>
-                  <el-button text :loading="handleAiRegeneratingField === 'followUpPlan'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'followUpPlan')" @click="generateHandleAiDraft('followUpPlan')">AI重写</el-button>
-                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('follow_up_plan') || !trimText(handleAiDraft.followUpPlan)" @click="composeAiFieldWithTemplate('follow_up_plan', 'followUpPlan', handleAiDraft.followUpPlan, { label: '随访计划', applyTarget: 'handle_form' })">AI+模板拼装</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'followUpPlan'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'followUpPlan')" @click="generateHandleAiDraft('followUpPlan')">智能重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('follow_up_plan') || !trimText(handleAiDraft.followUpPlan)" @click="composeAiFieldWithTemplate('follow_up_plan', 'followUpPlan', handleAiDraft.followUpPlan, { label: '随访计划', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
                 </div>
                 <el-input v-model="handleForm.followUpPlan" maxlength="500" show-word-limit placeholder="例如：建议 3 天后复诊，如加重请线下就医。" />
               </el-form-item>
@@ -942,7 +942,7 @@
                         <el-button v-if="canEdit" link type="danger" @click="removeCheckSuggestionRow(index)">移除</el-button>
                       </div>
                       <div class="grid">
-                        <el-input v-model="item.itemName" maxlength="100" placeholder="检查项目，例如：血常规 / 胸部 CT / 病理活检" />
+                        <el-input v-model="item.itemName" maxlength="100" placeholder="检查项目，例如：血常规 / 胸部影像检查 / 病理活检" />
                         <el-select v-model="item.itemType" placeholder="选择检查类型">
                           <el-option v-for="option in checkSuggestionTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
                         </el-select>
@@ -1088,7 +1088,7 @@
             <div class="head">
               <div>
                 <h3>结构化结论</h3>
-                <p>作为后续 AI 对比分析和统计复盘的标准化数据。</p>
+                <p>作为后续智能对比分析和统计复盘的标准化数据。</p>
               </div>
               <div ref="detailConclusionPanelRef" class="detail-section-anchor"></div>
               <div v-if="detail.doctorConclusion" class="chips">
@@ -1100,7 +1100,7 @@
             <div v-if="hasAiConclusionReference" class="conclusion-compare">
               <div class="conclusion-compare-head">
                 <div>
-                  <strong>AI 建议 vs 医生结论</strong>
+                  <strong>智能建议与医生结论对比</strong>
                   <p>{{ conclusionCompareOverview.hint }}</p>
                 </div>
                 <div class="conclusion-compare-tags">
@@ -1111,7 +1111,7 @@
               </div>
               <div class="conclusion-compare-grid">
                 <article class="subcard conclusion-compare-card">
-                  <strong>AI 建议结论</strong>
+                  <strong>智能建议结论</strong>
                   <div class="compare-kv-list">
                     <div class="compare-kv"><label>病情等级</label><span>{{ aiConclusionReference.conditionLevel ? conditionLevelLabel(aiConclusionReference.conditionLevel) : '未提供' }}</span></div>
                     <div class="compare-kv"><label>处理去向</label><span>{{ aiConclusionReference.disposition ? dispositionLabel(aiConclusionReference.disposition) : '未提供' }}</span></div>
@@ -1134,7 +1134,7 @@
                     <div class="compare-kv"><label>处理去向</label><span>{{ conclusionForm.disposition ? dispositionLabel(conclusionForm.disposition) : '待填写' }}</span></div>
                     <div class="compare-kv"><label>诊断方向</label><span>{{ conclusionForm.diagnosisDirection || '待填写' }}</span></div>
                     <div class="compare-kv"><label>随访建议</label><span>{{ doctorFollowUpLabel || '待填写' }}</span></div>
-                    <div class="compare-kv"><label>AI 一致性</label><span>{{ manualAiConsistencyText }}</span></div>
+                    <div class="compare-kv"><label>智能一致性</label><span>{{ manualAiConsistencyText }}</span></div>
                   </div>
                   <div v-if="conclusionForm.conclusionTags.length" class="ai-draft-tags">
                     <span v-for="item in conclusionForm.conclusionTags" :key="item">{{ item }}</span>
@@ -1152,7 +1152,7 @@
                 <article v-for="item in conclusionCompareRows" :key="item.label" class="conclusion-compare-item">
                   <div>
                     <strong>{{ item.label }}</strong>
-                    <p>AI：{{ item.aiValue }}</p>
+                    <p>智能：{{ item.aiValue }}</p>
                     <p>医生：{{ item.doctorValue }}</p>
                   </div>
                   <span :class="['compare-tag', compareTagClass(item.status)]">{{ compareStatusLabel(item.status) }}</span>
@@ -1167,7 +1167,7 @@
                 <el-form-item label="处理去向">
                   <el-select v-model="conclusionForm.disposition" clearable><el-option v-for="item in dispositionOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
                 </el-form-item>
-                <el-form-item label="是否与 AI 一致">
+                <el-form-item label="是否与智能建议一致">
                   <el-select v-model="conclusionForm.isConsistentWithAi" clearable><el-option label="一致" :value="1" /><el-option label="不一致" :value="0" /></el-select>
                 </el-form-item>
                 <el-form-item label="是否需要随访">
@@ -1192,18 +1192,18 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('patient_instruction', 'patientInstruction', 'replace')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('patient_instruction', 'patientInstruction', 'append')">追加填入</el-button>
-                  <el-button text :loading="handleAiRegeneratingField === 'patientInstruction'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'patientInstruction')" @click="generateHandleAiDraft('patientInstruction')">AI重写</el-button>
-                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('patient_instruction') || !trimText(handleAiDraft.patientInstruction)" @click="composeAiFieldWithTemplate('patient_instruction', 'patientInstruction', handleAiDraft.patientInstruction, { label: '患者指导', applyTarget: 'conclusion_form' })">AI+模板拼装</el-button>
+                  <el-button text :loading="handleAiRegeneratingField === 'patientInstruction'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'patientInstruction')" @click="generateHandleAiDraft('patientInstruction')">智能重写</el-button>
+                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('patient_instruction') || !trimText(handleAiDraft.patientInstruction)" @click="composeAiFieldWithTemplate('patient_instruction', 'patientInstruction', handleAiDraft.patientInstruction, { label: '患者指导', applyTarget: 'conclusion_form' })">智能内容与模板拼装</el-button>
                 </div>
                 <el-input v-model="conclusionForm.patientInstruction" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：如出现持续高热或呼吸困难，请立即线下就医。" />
               </el-form-item>
-              <el-form-item v-if="conclusionForm.isConsistentWithAi === 0" label="与 AI 不一致原因">
+              <el-form-item v-if="conclusionForm.isConsistentWithAi === 0" label="与智能建议不一致原因">
                 <el-select v-model="conclusionForm.aiMismatchReasons" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择差异原因">
                   <el-option v-for="item in aiMismatchReasonOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
               </el-form-item>
               <el-form-item v-if="conclusionForm.isConsistentWithAi === 0" label="差异补充说明">
-                <el-input v-model="conclusionForm.aiMismatchRemark" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="补充记录医生为何调整 AI 建议，便于后续复盘和统计分析" />
+                <el-input v-model="conclusionForm.aiMismatchRemark" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="补充记录医生为何调整 智能建议，便于后续复盘和统计分析" />
               </el-form-item>
             </el-form>
             <div class="actions">
@@ -1298,11 +1298,11 @@
             </article>
             <div class="template-banner ai-message-banner">
               <div>
-                <strong>AI 随访草稿</strong>
+                <strong>智能随访草稿</strong>
                 <p>结合前次处理、既往随访和最近患者反馈，为当前回访生成一份可编辑草稿。</p>
               </div>
               <div class="template-tools">
-                <el-button plain :loading="followUpAiDraftLoading" :disabled="!canSubmitFollowUp || !!followUpAiRegeneratingField" @click="generateFollowUpAiDraft">生成 AI 草稿</el-button>
+                <el-button plain :loading="followUpAiDraftLoading" :disabled="!canSubmitFollowUp || !!followUpAiRegeneratingField" @click="generateFollowUpAiDraft">生成 智能草稿</el-button>
                 <el-button v-if="hasFollowUpAiDraft" type="primary" plain :disabled="!canSubmitFollowUp || followUpAiBusy" @click="applyGeneratedFollowUpDraft">带入随访草稿</el-button>
               </div>
               <div class="ai-rewrite-box">
@@ -1329,7 +1329,7 @@
                 <span v-if="followUpAiDraft.needRevisit === 1">需再次随访</span>
                 <span v-if="followUpAiDraft.nextFollowUpDate">下次 {{ followUpAiDraft.nextFollowUpDate }}</span>
                 <span>{{ followUpAiDraft.fallback === 1 ? '规则兜底草稿' : followUpAiDraftSourceLabel }}</span>
-                <span v-if="followUpAiDraft.promptVersion">Prompt {{ followUpAiDraft.promptVersion }}</span>
+                <span v-if="followUpAiDraft.promptVersion">提示词版本 {{ followUpAiDraft.promptVersion }}</span>
               </div>
               <div v-if="followUpAiDraft.riskFlags.length" class="ai-draft-tags danger">
                 <span v-for="item in followUpAiDraft.riskFlags" :key="`follow-up-draft-risk-${item}`">{{ item }}</span>
@@ -1362,8 +1362,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('followup_summary', 'summary', 'replace', 'followUp')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('followup_summary', 'summary', 'append', 'followUp')">追加填入</el-button>
-                  <el-button text :loading="followUpAiRegeneratingField === 'summary'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'summary')" @click="generateFollowUpAiDraft('summary')">AI重写</el-button>
-                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_summary') || !trimText(followUpAiDraft.summary)" @click="composeAiFieldWithTemplate('followup_summary', 'summary', followUpAiDraft.summary, { formType: 'followUp', label: '随访摘要', applyTarget: 'follow_up_form' })">AI+模板拼装</el-button>
+                  <el-button text :loading="followUpAiRegeneratingField === 'summary'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'summary')" @click="generateFollowUpAiDraft('summary')">智能重写</el-button>
+                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_summary') || !trimText(followUpAiDraft.summary)" @click="composeAiFieldWithTemplate('followup_summary', 'summary', followUpAiDraft.summary, { formType: 'followUp', label: '随访摘要', applyTarget: 'follow_up_form' })">智能内容与模板拼装</el-button>
                 </div>
                 <el-input v-model="followUpForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：患者发热较前缓解，夜间咳嗽仍存在但频次下降。" />
               </el-form-item>
@@ -1374,8 +1374,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('followup_advice', 'advice', 'replace', 'followUp')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('followup_advice', 'advice', 'append', 'followUp')">追加填入</el-button>
-                  <el-button text :loading="followUpAiRegeneratingField === 'advice'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'advice')" @click="generateFollowUpAiDraft('advice')">AI重写</el-button>
-                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_advice') || !trimText(followUpAiDraft.advice)" @click="composeAiFieldWithTemplate('followup_advice', 'advice', followUpAiDraft.advice, { formType: 'followUp', label: '随访建议', applyTarget: 'follow_up_form' })">AI+模板拼装</el-button>
+                  <el-button text :loading="followUpAiRegeneratingField === 'advice'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'advice')" @click="generateFollowUpAiDraft('advice')">智能重写</el-button>
+                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_advice') || !trimText(followUpAiDraft.advice)" @click="composeAiFieldWithTemplate('followup_advice', 'advice', followUpAiDraft.advice, { formType: 'followUp', label: '随访建议', applyTarget: 'follow_up_form' })">智能内容与模板拼装</el-button>
                 </div>
                 <el-input v-model="followUpForm.advice" type="textarea" :rows="3" maxlength="1000" show-word-limit placeholder="例如：继续按既定方案观察，如 48 小时后仍反复发热建议线下复诊。" />
               </el-form-item>
@@ -1386,8 +1386,8 @@
                   </el-select>
                   <el-button text @click="applyTemplateToField('followup_next_step', 'nextStep', 'replace', 'followUp')">覆盖填入</el-button>
                   <el-button text @click="applyTemplateToField('followup_next_step', 'nextStep', 'append', 'followUp')">追加填入</el-button>
-                  <el-button text :loading="followUpAiRegeneratingField === 'nextStep'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'nextStep')" @click="generateFollowUpAiDraft('nextStep')">AI重写</el-button>
-                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_next_step') || !trimText(followUpAiDraft.nextStep)" @click="composeAiFieldWithTemplate('followup_next_step', 'nextStep', followUpAiDraft.nextStep, { formType: 'followUp', label: '下一步安排', applyTarget: 'follow_up_form' })">AI+模板拼装</el-button>
+                  <el-button text :loading="followUpAiRegeneratingField === 'nextStep'" :disabled="!canSubmitFollowUp || followUpAiDraftLoading || (!!followUpAiRegeneratingField && followUpAiRegeneratingField !== 'nextStep')" @click="generateFollowUpAiDraft('nextStep')">智能重写</el-button>
+                  <el-button text :disabled="!canSubmitFollowUp || followUpAiBusy || !selectedReplyTemplate('followup_next_step') || !trimText(followUpAiDraft.nextStep)" @click="composeAiFieldWithTemplate('followup_next_step', 'nextStep', followUpAiDraft.nextStep, { formType: 'followUp', label: '下一步安排', applyTarget: 'follow_up_form' })">智能内容与模板拼装</el-button>
                 </div>
                 <el-input v-model="followUpForm.nextStep" maxlength="500" show-word-limit placeholder="例如：3 天后再次平台随访，必要时安排线下检查。" />
               </el-form-item>
@@ -1414,7 +1414,7 @@
           </section>
 
           <section class="card panel">
-            <h3>AI 分诊结果</h3>
+            <h3>智能分诊结果</h3>
             <div v-if="detail.triageResult" class="subcard">
               <div class="chips">
                 <span>{{ detail.triageResult.triageLevelName || '待评估' }}</span>
@@ -1423,17 +1423,17 @@
               </div>
               <p class="copy">{{ detail.triageResult.reasonText || '暂无分诊说明' }}</p>
             </div>
-            <el-empty v-else description="暂无 AI 分诊结果" />
+            <el-empty v-else description="暂无 智能分诊结果" />
           </section>
 
           <section class="card panel">
             <div class="head">
               <div>
-                <h3>AI 导诊上下文</h3>
-                <p>医生接诊前可直接查看 AI 导诊解释、候选医生和完整导诊留痕，减少接手成本。</p>
+                <h3>智能导诊上下文</h3>
+                <p>医生接诊前可直接查看 智能导诊解释、候选医生和完整导诊留痕，减少接手成本。</p>
               </div>
               <div v-if="detail.triageSession" class="chips">
-                <span>Session {{ detail.triageSession.sessionNo || '-' }}</span>
+                <span>会话编号 {{ detail.triageSession.sessionNo || '-' }}</span>
                 <span>{{ triageSessionStatusLabel(detail.triageSession.status) }}</span>
                 <span>{{ detail.triageSession.messageCount || 0 }} 条消息</span>
               </div>
@@ -1503,7 +1503,7 @@
                 <small>{{ formatDate(message.createTime) }}</small>
               </article>
             </div>
-            <el-empty v-else description="暂无 AI 导诊留痕" />
+            <el-empty v-else description="暂无 智能导诊留痕" />
           </section>
 
           <section class="card panel">
@@ -1887,7 +1887,7 @@ const consultationFilterVisibility = computed(() => {
 const consultationViewConfig = computed(() => {
   if (consultationViewMode.value === 'medical-record') {
     return {
-      kicker: 'Medical Record Studio',
+      kicker: '病历书写区',
       heading: '电子病历书写',
       description: '默认聚焦我认领且正在处理的问诊，优先补齐结构化结论、病情判断和患者指导。',
       summary: '适合集中完成病历摘要、结论标签和随访判断。',
@@ -1903,7 +1903,7 @@ const consultationViewConfig = computed(() => {
   }
   if (consultationViewMode.value === 'prescription') {
     return {
-      kicker: 'Prescription Desk',
+      kicker: '处方工作区',
       heading: '处方开具与检查建议',
       description: '默认聚焦我认领且正在处理的问诊，优先处理检查建议、处方录入、用药反馈和风险提醒。',
       summary: '适合集中完成处方预览、禁忌校验和检查建议维护。',
@@ -1918,7 +1918,7 @@ const consultationViewConfig = computed(() => {
     }
   }
   return {
-    kicker: 'Consultation Workspace',
+    kicker: '接诊工作区',
     heading: '在线接诊问诊',
     description: '面向科室全量问诊，优先认领、回复患者消息，并持续推进接诊处理与服务闭环。',
     summary: '适合查看全科室接诊池、沟通进度与随访状态。',
@@ -2297,17 +2297,17 @@ const hasFollowUpAiDraft = computed(() => !!(
   || followUpAiDraft.riskFlags.length
 ))
 const messageAiDraftSourceLabel = computed(() => ({
-  deepseek: 'DeepSeek 草稿',
+  deepseek: '模型草稿',
   fallback: '规则草稿'
-})[`${messageAiDraft.source || ''}`.toLowerCase()] || 'AI 草稿')
+})[`${messageAiDraft.source || ''}`.toLowerCase()] || '智能草稿')
 const handleAiDraftSourceLabel = computed(() => ({
-  deepseek: 'DeepSeek 草稿',
+  deepseek: '模型草稿',
   fallback: '规则草稿'
-})[`${handleAiDraft.source || ''}`.toLowerCase()] || 'AI 草稿')
+})[`${handleAiDraft.source || ''}`.toLowerCase()] || '智能草稿')
 const followUpAiDraftSourceLabel = computed(() => ({
-  deepseek: 'DeepSeek 草稿',
+  deepseek: '模型草稿',
   fallback: '规则草稿'
-})[`${followUpAiDraft.source || ''}`.toLowerCase()] || 'AI 草稿')
+})[`${followUpAiDraft.source || ''}`.toLowerCase()] || '智能草稿')
 const handleAiBusy = computed(() => handleAiDraftLoading.value || !!handleAiRegeneratingField.value)
 const followUpAiBusy = computed(() => followUpAiDraftLoading.value || !!followUpAiRegeneratingField.value)
 const currentMessageTemplateMeta = computed(() => messageTemplateSceneMetaMap[normalizeMessageAiScene(messageAiScene.value)] || messageTemplateSceneMetaMap.opening)
@@ -2554,15 +2554,15 @@ const conclusionCompareRows = computed(() => {
 })
 const conclusionCompareOverview = computed(() => {
   if (!conclusionCompareRows.value.length) {
-    return { status: 'pending', label: '待开始对比', hint: '当前还缺少可对比字段，可先一键带入 AI 草稿或手动填写医生结论。' }
+    return { status: 'pending', label: '待开始对比', hint: '当前还缺少可对比字段，可先一键带入 智能草稿或手动填写医生结论。' }
   }
   if (conclusionCompareRows.value.some(item => item.status === 'mismatch')) {
-    return { status: 'mismatch', label: '存在差异', hint: 'AI 建议与医生当前结论存在不一致项，建议在提交前再确认一次。' }
+    return { status: 'mismatch', label: '存在差异', hint: '智能建议与医生当前结论存在不一致项，建议在提交前再确认一次。' }
   }
   if (conclusionCompareRows.value.some(item => item.status === 'pending')) {
     return { status: 'partial', label: '待补充', hint: '已有部分字段可以对比，但仍有医生结论未填写。' }
   }
-  return { status: 'match', label: '当前一致', hint: '当前已填写的核心结论与 AI 建议保持一致。' }
+  return { status: 'match', label: '当前一致', hint: '当前已填写的核心结论与 智能建议保持一致。' }
 })
 const canSubmitFollowUp = computed(() => doctor.bound === 1
   && detail.value?.status === 'completed'
@@ -2732,7 +2732,7 @@ const workflowAssistantItems = computed(() => {
       : conclusionDrafted
         ? '当前已有未提交的结论草稿，建议在完成处理前补齐并确认。'
         : canEdit.value
-          ? '建议补齐病情等级、处理去向、患者指导和 AI 一致性说明。'
+          ? '建议补齐病情等级、处理去向、患者指导和 智能一致性说明。'
           : assignmentHint.value,
     tone: conclusionSaved ? 'success' : conclusionDrafted ? 'warning' : canEdit.value ? 'warning' : 'danger',
     action: detail.value?.id ? 'conclusion' : '',
@@ -4737,10 +4737,10 @@ function generateMessageAiDraft() {
       ElMessage.warning('当前没有生成可用的回复建议')
       return
     }
-    ElMessage.success(messageAiDraft.fallback === 1 ? '已生成规则兜底草稿' : 'AI 回复建议已生成')
+    ElMessage.success(messageAiDraft.fallback === 1 ? '已生成规则兜底草稿' : '智能回复建议已生成')
   }, message => {
     messageAiDraftLoading.value = false
-    ElMessage.warning(message || 'AI 回复建议生成失败')
+    ElMessage.warning(message || '智能回复建议生成失败')
   })
 }
 function applyMessageAiDraft(mode = 'replace') {
@@ -4750,7 +4750,7 @@ function applyMessageAiDraft(mode = 'replace') {
   const current = trimText(messageDraft.content)
   messageDraft.content = mode === 'append' && current ? `${current}\n${content}` : content
   applyMessageAiUsage(messageAiDraft.logId, mode)
-  ElMessage.success(mode === 'append' ? '已将 AI 建议追加到消息输入框' : '已将 AI 建议带入消息输入框')
+  ElMessage.success(mode === 'append' ? '已将 智能建议追加到消息输入框' : '已将 智能建议带入消息输入框')
 }
 function currentMessageTemplateTrackingMeta() {
   if (!selectedMessageTemplate.value) return null
@@ -4894,12 +4894,12 @@ function applyWorkflowMessageDraft(mode = 'replace') {
 function composeMessageAiWithTemplate() {
   if (!canSendMessage.value) return ElMessage.warning(messageSendHint.value || '当前暂无发送权限')
   const aiContent = trimText(messageAiDraft.content)
-  if (!aiContent) return ElMessage.warning('请先生成 AI 沟通建议')
+  if (!aiContent) return ElMessage.warning('请先生成 智能沟通建议')
   const templateContent = trimText(selectedMessageTemplate.value?.content)
   if (!templateContent) return ElMessage.warning('请先选择沟通模板')
   messageDraft.content = joinUniqueSegments([aiContent, templateContent])
   applyMessageAiUsage(messageAiDraft.logId, 'compose', currentMessageTemplateTrackingMeta())
-  ElMessage.success('已将 AI 建议与沟通模板拼装后带入消息输入框')
+  ElMessage.success('已将 智能建议与沟通模板拼装后带入消息输入框')
 }
 function normalizeTextArray(values) {
   return Array.isArray(values) ? values.map(item => trimText(item)).filter(Boolean) : []
@@ -5246,16 +5246,16 @@ function generateHandleAiDraft(fieldKey = '') {
     }
     ElMessage.success(handleAiDraft.fallback === 1
       ? (hasRewriteContext ? '已结合当前草稿生成规则兜底处理草稿' : '已生成规则兜底处理草稿')
-      : (hasRewriteContext ? '已基于当前草稿继续生成 AI 处理草稿' : 'AI 处理草稿已生成'))
+      : (hasRewriteContext ? '已基于当前草稿继续生成 智能处理草稿' : '智能处理草稿已生成'))
   }, message => {
     handleAiDraftLoading.value = false
     handleAiRegeneratingField.value = ''
-    ElMessage.warning(message || 'AI 处理草稿生成失败')
+    ElMessage.warning(message || '智能处理草稿生成失败')
   })
 }
 function applyGeneratedHandleDraft() {
   if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
-  if (!hasHandleAiDraft.value) return ElMessage.warning('请先生成 AI 处理草稿')
+  if (!hasHandleAiDraft.value) return ElMessage.warning('请先生成 智能处理草稿')
   let changed = 0
   changed += mergeTextField(handleForm, 'summary', handleAiDraft.doctorSummary)
   changed += mergeTextField(handleForm, 'medicalAdvice', handleAiDraft.medicalAdvice)
@@ -5263,11 +5263,11 @@ function applyGeneratedHandleDraft() {
   changed += mergeTextField(conclusionForm, 'patientInstruction', handleAiDraft.patientInstruction)
   if (!changed) return ElMessage.info('当前处理表单已有相同内容，可继续人工调整')
   applyFormAiUsage(handleAiUsage, handleAiDraft.logId, 'handle_form')
-  ElMessage.success('已将 AI 处理草稿带入表单')
+  ElMessage.success('已将 智能处理草稿带入表单')
 }
 function applyGeneratedHandleConclusion() {
   if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
-  if (!hasHandleAiDraft.value) return ElMessage.warning('请先生成 AI 处理草稿')
+  if (!hasHandleAiDraft.value) return ElMessage.warning('请先生成 智能处理草稿')
   let changed = 0
   changed += assignField(conclusionForm, 'conditionLevel', handleAiDraft.conditionLevel || conclusionForm.conditionLevel)
   changed += assignField(conclusionForm, 'disposition', handleAiDraft.disposition || conclusionForm.disposition)
@@ -5281,7 +5281,7 @@ function applyGeneratedHandleConclusion() {
   }
   if (!changed) return ElMessage.info('当前结构化结论已有相同内容，可继续人工调整')
   applyFormAiUsage(handleAiUsage, handleAiDraft.logId, 'conclusion_form')
-  ElMessage.success('已将 AI 结构化结论带入表单')
+  ElMessage.success('已将智能结构化结论带入表单')
 }
 function generateFollowUpAiDraft(fieldKey = '') {
   const recordId = detail.value?.id
@@ -5318,16 +5318,16 @@ function generateFollowUpAiDraft(fieldKey = '') {
     }
     ElMessage.success(followUpAiDraft.fallback === 1
       ? (hasRewriteContext ? '已结合当前草稿生成规则兜底随访草稿' : '已生成规则兜底随访草稿')
-      : (hasRewriteContext ? '已基于当前草稿继续生成 AI 随访草稿' : 'AI 随访草稿已生成'))
+      : (hasRewriteContext ? '已基于当前草稿继续生成 智能随访草稿' : '智能随访草稿已生成'))
   }, message => {
     followUpAiDraftLoading.value = false
     followUpAiRegeneratingField.value = ''
-    ElMessage.warning(message || 'AI 随访草稿生成失败')
+    ElMessage.warning(message || '智能随访草稿生成失败')
   })
 }
 function applyGeneratedFollowUpDraft() {
   if (!canSubmitFollowUp.value) return ElMessage.warning(followUpHint.value)
-  if (!hasFollowUpAiDraft.value) return ElMessage.warning('请先生成 AI 随访草稿')
+  if (!hasFollowUpAiDraft.value) return ElMessage.warning('请先生成 智能随访草稿')
   let changed = 0
   changed += assignField(followUpForm, 'followUpType', followUpAiDraft.followUpType)
   changed += assignField(followUpForm, 'patientStatus', followUpAiDraft.patientStatus)
@@ -5338,7 +5338,7 @@ function applyGeneratedFollowUpDraft() {
   changed += assignField(followUpForm, 'nextFollowUpDate', followUpAiDraft.needRevisit === 1 ? followUpAiDraft.nextFollowUpDate : '')
   if (!changed) return ElMessage.info('当前随访表单已有相同内容，可继续人工调整')
   applyFormAiUsage(followUpAiUsage, followUpAiDraft.logId, 'follow_up_form')
-  ElMessage.success('已将 AI 随访草稿带入表单')
+  ElMessage.success('已将 智能随访草稿带入表单')
 }
 function sendConsultationMessage() {
   const recordId = detail.value?.id
@@ -5403,7 +5403,7 @@ function composeAiFieldWithTemplate(sceneType, fieldKey, aiValue, options = {}) 
     applyTarget = formType === 'followUp' ? 'follow_up_form' : 'handle_form'
   } = options
   const aiContent = trimText(aiValue)
-  if (!aiContent) return ElMessage.warning(`当前还没有可用于${label}的 AI 草稿`)
+  if (!aiContent) return ElMessage.warning(`当前还没有可用于${label}的 智能草稿`)
   const template = selectedReplyTemplate(sceneType)
   if (!template?.content) return ElMessage.warning('请先选择模板')
   const form = formType === 'followUp' ? followUpForm : fieldKey in handleForm ? handleForm : conclusionForm
@@ -5417,7 +5417,7 @@ function composeAiFieldWithTemplate(sceneType, fieldKey, aiValue, options = {}) 
     applyMode: 'compose',
     template: currentFormTemplateTrackingMeta(sceneType)
   })
-  ElMessage.success(`已将 AI 草稿与模板拼装后带入${label}`)
+  ElMessage.success(`已将 智能草稿与模板拼装后带入${label}`)
 }
 function applyAiDraftToHandle() {
   if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
@@ -5426,7 +5426,7 @@ function applyAiDraftToHandle() {
   changed += mergeTextField(handleForm, 'medicalAdvice', aiDraftMedicalAdvice.value)
   changed += mergeTextField(handleForm, 'followUpPlan', aiDraftFollowUpPlan.value)
   if (!changed) return ElMessage.info('当前医生处理表单已有内容，可继续手动补充或调整')
-  ElMessage.success('已将 AI 建议带入医生处理草稿')
+  ElMessage.success('已将 智能建议带入医生处理草稿')
 }
 function applyAiDraftToConclusion() {
   if (!canEdit.value) return ElMessage.warning(assignmentHint.value)
@@ -5438,13 +5438,13 @@ function applyAiDraftToConclusion() {
   changed += assignField(conclusionForm, 'followUpWithinDays', aiSuggestedNeedFollowUp.value === 1 ? aiSuggestedFollowUpWithinDays.value : null)
   changed += mergeTextField(conclusionForm, 'patientInstruction', aiDraftPatientInstruction.value)
   if (!changed) return ElMessage.info('当前结构化结论已具备内容，可继续人工修订')
-  ElMessage.success('已将 AI 建议带入结构化结论')
+  ElMessage.success('已将 智能建议带入结构化结论')
 }
 function buildAiDraftSummary() {
   const segments = []
   const insight = latestAiInsight.value
   if (insight?.summary) segments.push(insight.summary)
-  if (detail.value?.triageResult?.reasonText) segments.push(`AI/规则结论：${detail.value.triageResult.reasonText}`)
+  if (detail.value?.triageResult?.reasonText) segments.push(`智能/规则结论：${detail.value.triageResult.reasonText}`)
   if (aiSuggestedRiskFlags.value.length) segments.push(`风险关注：${aiSuggestedRiskFlags.value.join('、')}`)
   if (insight?.doctorRecommendationReason) segments.push(`推荐依据：${insight.doctorRecommendationReason}`)
   return abbreviateText(joinUniqueSegments(segments), 480)
@@ -5473,7 +5473,7 @@ function buildAiDraftFollowUpPlan() {
   } else if (aiSuggestedDisposition.value === 'online_followup') {
     segments.push('建议继续线上随访，必要时补充检查结果后复评。')
   }
-  if (insight?.recommendedVisitType) segments.push(`AI 当前建议方式：${insight.recommendedVisitType}`)
+  if (insight?.recommendedVisitType) segments.push(`智能当前建议方式：${insight.recommendedVisitType}`)
   return abbreviateText(joinUniqueSegments(segments), 320)
 }
 function buildAiDraftPatientInstruction() {
@@ -5559,10 +5559,10 @@ function submitHandle(status, options = {}) {
   if (status === 'completed' && !`${handleForm.medicalAdvice || ''}`.trim()) return ElMessage.warning('完成处理时请填写处理建议')
   if (status === 'completed' && !conclusionForm.conditionLevel) return ElMessage.warning('完成处理时请填写病情等级')
   if (status === 'completed' && !conclusionForm.disposition) return ElMessage.warning('完成处理时请填写处理去向')
-  if (status === 'completed' && conclusionForm.isConsistentWithAi === null) return ElMessage.warning('完成处理时请填写是否与 AI 一致')
+  if (status === 'completed' && conclusionForm.isConsistentWithAi === null) return ElMessage.warning('完成处理时请填写是否与智能建议一致')
   if (status === 'completed' && conclusionForm.needFollowUp === 1 && !conclusionForm.followUpWithinDays) return ElMessage.warning('需要随访时请填写建议随访时效')
   if (status === 'completed' && conclusionForm.isConsistentWithAi === 0 && !conclusionForm.aiMismatchReasons.length && !`${conclusionForm.aiMismatchRemark || ''}`.trim()) {
-    return ElMessage.warning('与 AI 不一致时请至少选择一个差异原因或填写补充说明')
+    return ElMessage.warning('与智能建议不一致时请至少选择一个差异原因或填写补充说明')
   }
   const prescriptionValidationMessage = validatePrescriptionRowsForSubmit()
   if (prescriptionValidationMessage) return ElMessage.warning(prescriptionValidationMessage)
@@ -5798,7 +5798,7 @@ function handleStatusLabel(value) { return value === 'completed' ? '处理完成
 function statusTagType(value) { return ({ submitted: 'info', triaged: 'primary', processing: 'warning', completed: 'success' })[value] || 'info' }
 function triageActionLabel(value) { return ({ emergency: '立即急诊', offline: '尽快线下就医', followup: '复诊随访', online: '线上继续' })[value] || '继续关注' }
 function triageSessionStatusLabel(value) { return ({ completed: '已完成', in_progress: '进行中', closed: '已关闭' })[value] || value || '-' }
-function messageRoleLabel(value) { return ({ user: '患者', assistant: 'AI 导诊', system: '系统', rule_engine: '规则引擎' })[value] || value || '-' }
+function messageRoleLabel(value) { return ({ user: '患者', assistant: '智能导诊', system: '系统', rule_engine: '规则引擎' })[value] || value || '-' }
 function messageTypeLabel(value) {
   if (value === 'medication_feedback') return '用药反馈'
   if (value === 'followup_update') return '恢复更新'
@@ -5810,15 +5810,15 @@ function messageTypeLabel(value) {
     triage_result: '分诊结果',
     rule_summary: '规则摘要',
     rule_hit: '命中详情',
-    ai_triage_summary: 'AI 导诊建议',
-    ai_followup_questions: 'AI 建议补充',
+    ai_triage_summary: '智能导诊建议',
+    ai_followup_questions: '智能建议补充',
     ai_user_followup: '患者补充',
-    ai_chat_reply: 'AI 导诊回复'
+    ai_chat_reply: '智能导诊回复'
   })[value] || value || '-'
 }
 function conditionLevelLabel(value) { return ({ low: '轻度', medium: '中度', high: '较高风险', critical: '危急' })[value] || '未填写' }
 function dispositionLabel(value) { return ({ observe: '继续观察', online_followup: '线上随访', offline_visit: '线下就医', emergency: '立即急诊' })[value] || '未填写' }
-function aiConsistencyLabel(value) { return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断' }
+function aiConsistencyLabel(value) { return value === 1 ? '与智能建议一致' : value === 0 ? '与智能建议不一致' : '未判断' }
 function compareStatusLabel(value) { return ({ match: '一致', mismatch: '不一致', partial: '待补充', pending: '待判断' })[value] || '待判断' }
 function compareTagClass(value) { return ({ match: 'is-match', mismatch: 'is-mismatch', partial: 'is-partial', pending: 'is-pending' })[value] || 'is-pending' }
 function followUpTypeLabel(value) { return ({ platform: '平台随访', phone: '电话随访', offline: '线下随访', other: '其他方式' })[value] || '其他方式' }

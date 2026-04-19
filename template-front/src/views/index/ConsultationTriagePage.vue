@@ -23,8 +23,8 @@
       <aside class="record-panel" v-loading="loading">
         <div class="panel-head">
           <div>
-            <span class="panel-kicker">Sessions</span>
-            <h3>AI 导诊会话</h3>
+            <span class="panel-kicker">会话记录</span>
+            <h3>智能导诊会话</h3>
           </div>
           <el-button text @click="loadRecords">刷新</el-button>
         </div>
@@ -61,7 +61,7 @@
           </button>
         </div>
 
-        <el-empty v-else description="当前还没有可查看的 AI 导诊记录">
+        <el-empty v-else description="当前还没有可查看的 智能导诊记录">
           <el-button type="primary" @click="router.push('/index/consultation')">去发起问诊</el-button>
         </el-empty>
       </aside>
@@ -70,8 +70,8 @@
         <template v-if="detailRecord">
           <div class="panel-head">
             <div>
-              <span class="panel-kicker">Workspace</span>
-              <h3>{{ detailRecord.patientName }} 的 AI 导诊工作区</h3>
+              <span class="panel-kicker">工作区</span>
+              <h3>{{ detailRecord.patientName }} 的 智能导诊工作区</h3>
               <p>{{ detailRecord.categoryName }}{{ detailRecord.departmentName ? ` / ${detailRecord.departmentName}` : '' }}</p>
             </div>
             <div class="detail-actions">
@@ -218,7 +218,7 @@
 
           <section class="card-section composer-card">
             <div class="section-head">
-              <strong>继续 AI 导诊</strong>
+              <strong>继续智能导诊</strong>
               <span>{{ triageAiSendHint }}</span>
             </div>
             <el-input
@@ -228,7 +228,7 @@
               maxlength="1000"
               show-word-limit
               :disabled="!canSendTriageAiMessage"
-              placeholder="补充症状变化、持续时间、体温、检查结果或你最关心的问题，AI 会继续导诊。"
+              placeholder="补充症状变化、持续时间、体温、检查结果或你最关心的问题，智能导诊会继续分析。"
             />
             <div class="composer-actions">
               <span class="composer-tip">当前导诊消息会完整保留，后续医生也能继续参考。</span>
@@ -238,7 +238,7 @@
                 :disabled="!canSendTriageAiMessage"
                 @click="sendTriageAiMessage"
               >
-                发送给 AI
+                发送给智能导诊
               </el-button>
             </div>
           </section>
@@ -300,7 +300,7 @@ const triageAiSendHint = computed(() => {
   if (!detailRecord.value?.triageSession) return '当前记录还没有生成导诊会话。'
   if (detailRecord.value.triageActionType === 'emergency') return '当前已有高风险提示，如症状继续加重请优先急诊就医。'
   if (detailRecord.value.triageActionType === 'offline') return '可以继续补充变化情况，但线下就医仍然是当前优先建议。'
-  return 'AI 会结合已有问诊答案和导诊历史继续分析。'
+  return '智能导诊会结合已有问诊答案和导诊历史继续分析。'
 })
 
 function loadRecords() {
@@ -383,7 +383,7 @@ function sendTriageAiMessage() {
   const content = `${triageAiDraft.content || ''}`.trim()
   if (!recordId || !detailRecord.value?.triageSession) return
   if (!content) {
-    ElMessage.warning('请先输入想继续补充给 AI 的内容')
+    ElMessage.warning('请先输入想继续补充给智能导诊的内容')
     return
   }
 
@@ -394,11 +394,11 @@ function sendTriageAiMessage() {
   }, () => {
     triageAiSending.value = false
     resetTriageAiDraft()
-    ElMessage.success('AI 导诊已更新本轮分析')
+    ElMessage.success('智能导诊已更新本轮分析')
     refreshDetail()
   }, (message) => {
     triageAiSending.value = false
-    ElMessage.warning(message || 'AI 导诊响应失败')
+    ElMessage.warning(message || '智能导诊响应失败')
   })
 }
 
@@ -423,7 +423,7 @@ function statusLabel(value) {
 function messageRoleLabel(value) {
   return {
     user: '患者',
-    assistant: 'AI 导诊',
+    assistant: '智能导诊',
     system: '系统',
     rule_engine: '规则引擎'
   }[value] || value || '-'
@@ -436,10 +436,10 @@ function messageTypeLabel(value) {
     triage_result: '分诊结果',
     rule_summary: '规则摘要',
     rule_hit: '命中详情',
-    ai_triage_summary: 'AI 导诊建议',
-    ai_followup_questions: 'AI 建议补充',
+    ai_triage_summary: '智能导诊建议',
+    ai_followup_questions: '智能建议补充',
     ai_user_followup: '患者补充',
-    ai_chat_reply: 'AI 导诊回复'
+    ai_chat_reply: '智能导诊回复'
   }[value] || value || '-'
 }
 

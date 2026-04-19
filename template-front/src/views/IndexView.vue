@@ -2,8 +2,8 @@
   <WorkspaceShell
     brand-mark="IC"
     brand-title="智慧医疗问诊系统"
-    brand-subtitle="Patient Workspace"
-    page-kicker="Clinical Workspace"
+    brand-subtitle="患者工作区"
+    page-kicker="问诊工作区"
     :footer-text="footerText"
     :menu-items="menuItems"
   />
@@ -50,8 +50,8 @@ const menuItems = [
   },
   {
     index: '/index/triage',
-    title: 'AI 智能导诊',
-    description: '集中查看 AI 导诊会话、结果归档和推荐医生。',
+    title: '智能导诊',
+    description: '集中查看 智能导诊会话、结果归档和推荐医生。',
     icon: ChatDotRound
   },
   {

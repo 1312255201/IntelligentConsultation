@@ -9,7 +9,7 @@
           </div>
           <div class="logo-text">
             <strong>智慧医疗问诊系统</strong>
-            <span>Intelligent Consultation</span>
+            <span>智能问诊平台</span>
           </div>
         </div>
         <nav class="nav-links">
@@ -101,7 +101,7 @@
       <section class="overview-section">
         <div class="overview-grid">
           <div class="overview-main glass-card">
-            <span class="section-tag">Platform Overview</span>
+            <span class="section-tag">平台概览</span>
             <h2>{{ landing.config.introTitle }}</h2>
             <p>{{ landing.config.introContent }}</p>
             <div v-if="landing.config.servicePhone" class="contact-pill">
@@ -125,7 +125,7 @@
       <section id="departments" class="content-section">
         <div class="section-header">
           <div class="header-titles">
-            <span class="section-tag">Medical Departments</span>
+            <span class="section-tag">医疗科室</span>
             <h2 class="section-title">重点服务科室</h2>
             <p class="section-subtitle">围绕常见问诊需求与健康管理场景，精准对接各类重点服务。</p>
           </div>
@@ -160,7 +160,7 @@
       <section id="doctors" class="content-section bg-subtle">
         <div class="section-header">
           <div class="header-titles">
-            <span class="section-tag">Expert Team</span>
+            <span class="section-tag">专家团队</span>
             <h2 class="section-title">推荐专家团队</h2>
             <p class="section-subtitle">由三甲医院资深主任领衔，为您提供最专业可靠的诊疗建议。</p>
           </div>
@@ -207,7 +207,7 @@
       <section id="cases" class="content-section">
         <div class="section-header">
           <div class="header-titles">
-            <span class="section-tag">Success Cases</span>
+            <span class="section-tag">康复案例</span>
             <h2 class="section-title">经典康复案例</h2>
             <p class="section-subtitle">真实的诊疗记录与方案参考，帮助您深入了解治疗思路。</p>
           </div>
@@ -242,10 +242,10 @@
         <el-empty v-else description="案例内容持续更新中" />
       </section>
 
-      <!-- Process -->
+      <!-- 服务流程 -->
       <section id="process" class="process-section">
         <div class="process-header">
-          <span class="section-tag text-light">Process</span>
+          <span class="section-tag text-light">服务流程</span>
           <h2 class="section-title text-white">智慧就医，化繁为简</h2>
           <p class="section-subtitle text-light-muted" style="margin: 0 auto;">简单四步，即可享受专业、便捷的在线医疗服务体系。</p>
         </div>
@@ -265,7 +265,7 @@
       <section class="cta-banner">
         <div class="cta-banner-bg"></div>
         <div class="cta-content">
-          <span class="section-tag text-light">Start Now</span>
+          <span class="section-tag text-light">立即开始</span>
           <h2>开启您的专属健康之旅</h2>
           <p>无论日常咨询还是疑难求助，我们时刻为您提供专业支持。</p>
         </div>
@@ -645,7 +645,7 @@ onMounted(() => loadLanding())
 .case-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 20px; border-top: 1px solid var(--border-light); }
 .case-doc { font-size: 14px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
 
-/* Process */
+/* 服务流程 */
 .process-section { padding: 80px 40px; background: linear-gradient(145deg, #293846, #344859); border-radius: 32px; text-align: center; color: white; }
 .process-header { margin-bottom: 60px; }
 .text-light { color: var(--accent-color); }

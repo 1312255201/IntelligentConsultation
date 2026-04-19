@@ -28,7 +28,7 @@
         <div class="panel-head">
           <div>
             <h3>就诊人选择</h3>
-            <p>按就诊人分别维护病史信息，后续 AI 导诊会结合这里的数据做更稳妥的建议。</p>
+            <p>按就诊人分别维护病史信息，后续智能导诊会结合这里的数据做更稳妥的建议。</p>
           </div>
           <el-button text @click="loadPage">刷新</el-button>
         </div>
@@ -157,7 +157,7 @@
 
         <div class="form-footer">
           <span class="helper-text">
-            当前健康档案主要服务于后续 AI 导诊、问诊前置资料与医生接诊摘要生成。
+            当前健康档案主要服务于后续智能导诊、问诊前置资料与医生接诊摘要生成。
           </span>
           <el-button type="primary" :loading="submitting" @click="saveHistory">保存健康档案</el-button>
         </div>

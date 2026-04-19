@@ -2,8 +2,8 @@
   <WorkspaceShell
     brand-mark="AD"
     brand-title="系统后台管理中心"
-    brand-subtitle="Administration Console"
-    page-kicker="Admin Workspace"
+    brand-subtitle="后台管理中心"
+    page-kicker="后台工作区"
     :menu-items="menuItems"
   />
 </template>
@@ -152,7 +152,7 @@ const menuItems = [
   },
   {
     index: 'ai-triage-group',
-    title: 'AI与导诊策略库',
+    title: '智能导诊策略库',
     icon: Connection,
     children: [
       {
@@ -170,7 +170,7 @@ const menuItems = [
       {
         index: '/admin/triage-knowledge',
         title: '导诊医学知识图谱',
-        description: '管理支撑大模型 AI 导诊引擎使用的外部指南库和事实医学说明。',
+        description: '管理支撑大模型 智能导诊引擎使用的外部指南库和事实医学说明。',
         icon: Guide
       },
       {
@@ -187,7 +187,7 @@ const menuItems = [
       },
       {
         index: '/admin/consultation-ai',
-        title: 'AI底层基石配置',
+        title: '智能底层配置',
         description: '实时监控导诊大模型接口延迟情况、生成参数配置控制和患者交互安全审计总览。',
         icon: DataAnalysis
       }

@@ -2,15 +2,15 @@
   <div class="ai-config-page" v-loading="loading">
     <section class="hero-card">
       <div class="hero-copy">
-        <span class="section-tag">AI Governance</span>
-        <h2>AI 导诊配置与状态</h2>
-        <p>{{ overview.runtimeStatus || '当前正在读取 AI 导诊运行状态。' }}</p>
+        <span class="section-tag">智能导诊治理</span>
+        <h2>智能导诊配置与状态</h2>
+        <p>{{ overview.runtimeStatus || '当前正在读取 智能导诊运行状态。' }}</p>
         <div class="chip-row">
           <span>{{ availabilityLabel(overview.runtimeAvailable, '运行可用', '当前不可用') }}</span>
           <span>{{ availabilityLabel(overview.triageEnabled, '总开关已启用', '总开关已关闭') }}</span>
-          <span>{{ availabilityLabel(overview.providerEnabled, 'DeepSeek 接入已启用', 'DeepSeek 接入未启用') }}</span>
-          <span>{{ availabilityLabel(overview.apiKeyConfigured, 'API Key 已配置', 'API Key 未配置') }}</span>
-          <span v-if="overview.promptVersion">Prompt {{ overview.promptVersion }}</span>
+          <span>{{ availabilityLabel(overview.providerEnabled, '模型接入已启用', '模型接入未启用') }}</span>
+          <span>{{ availabilityLabel(overview.apiKeyConfigured, '接口密钥 已配置', '接口密钥 未配置') }}</span>
+          <span v-if="overview.promptVersion">提示词版本 {{ overview.promptVersion }}</span>
         </div>
         <div class="hero-actions">
           <el-button type="primary" @click="loadOverview">刷新状态</el-button>
@@ -21,38 +21,38 @@
 
       <div class="hero-side">
         <article class="hero-metric">
-          <span>AI 运行态</span>
+          <span>智能运行态</span>
           <strong :class="statusToneClass(overview.runtimeAvailable)">
-            {{ overview.runtimeAvailable ? 'Ready' : 'Fallback' }}
+            {{ overview.runtimeAvailable ? '可用' : '降级' }}
           </strong>
           <p>{{ runtimeModeSummary }}</p>
           </article>
         <article class="hero-metric hero-metric-accent">
-          <span>最近 AI 输出</span>
+          <span>最近智能输出</span>
           <strong>{{ formatDate(overview.latestAiMessageTime, true) }}</strong>
-          <p>{{ totalAiMessages }} 条 AI 导诊消息已经写入导诊留痕。</p>
+          <p>{{ totalAiMessages }} 条 智能导诊消息已经写入导诊留痕。</p>
         </article>
       </div>
     </section>
 
     <section class="status-grid">
       <article class="status-card">
-        <span>AI 导诊总开关</span>
+        <span>智能导诊总开关</span>
         <strong>{{ availabilityLabel(overview.triageEnabled) }}</strong>
         <el-tag :type="statusTagType(overview.triageEnabled)" effect="light">{{ statusTagLabel(overview.triageEnabled) }}</el-tag>
       </article>
       <article class="status-card">
-        <span>DeepSeek Chat 接入</span>
+        <span>模型对话接入</span>
         <strong>{{ availabilityLabel(overview.providerEnabled) }}</strong>
         <el-tag :type="statusTagType(overview.providerEnabled)" effect="light">{{ statusTagLabel(overview.providerEnabled) }}</el-tag>
       </article>
       <article class="status-card">
-        <span>API Key</span>
+        <span>接口密钥</span>
         <strong>{{ availabilityLabel(overview.apiKeyConfigured) }}</strong>
         <el-tag :type="statusTagType(overview.apiKeyConfigured)" effect="light">{{ statusTagLabel(overview.apiKeyConfigured) }}</el-tag>
       </article>
       <article class="status-card">
-        <span>ChatModel Bean</span>
+        <span>对话模型实例</span>
         <strong>{{ availabilityLabel(overview.modelBeanReady) }}</strong>
         <el-tag :type="statusTagType(overview.modelBeanReady)" effect="light">{{ statusTagLabel(overview.modelBeanReady) }}</el-tag>
       </article>
@@ -61,8 +61,8 @@
     <section class="panel-card" v-loading="configLoading">
       <div class="panel-head">
         <div>
-          <h3>AI 配置中心</h3>
-          <p>这里保存的是会直接影响 AI 导诊运行的业务配置。保存后，新产生的导诊摘要、追问建议和 Prompt 留痕会立即使用最新配置。</p>
+          <h3>智能配置中心</h3>
+          <p>这里保存的是会直接影响 智能导诊运行的业务配置。保存后，新产生的导诊摘要、追问建议和 提示词版本 留痕会立即使用最新配置。</p>
         </div>
         <div class="hero-actions">
           <el-button @click="loadAiConfig">刷新配置</el-button>
@@ -74,13 +74,13 @@
       <div class="config-grid">
         <article class="config-note">
           <strong>配置说明</strong>
-          <p>当前可编辑的是 AI 导诊总开关、Prompt 版本和推荐医生候选上限。</p>
-          <p>模型提供方、Base URL、温度、Token 等运行参数仍然从环境变量读取，方便区分“业务配置”和“部署配置”。</p>
+          <p>当前可编辑的是 智能导诊总开关、提示词版本和推荐医生候选上限。</p>
+          <p>模型提供方、服务地址、温度参数、访问令牌等运行参数仍然从环境变量读取，方便区分“业务配置”和“部署配置”。</p>
           <p>最近一次保存：{{ formatDate(aiConfigSnapshot.updateTime, true) }}</p>
         </article>
 
         <el-form label-position="top" class="config-form-grid">
-          <el-form-item label="AI 导诊总开关">
+          <el-form-item label="智能导诊总开关">
             <el-switch
               v-model="aiConfigForm.enabled"
               :active-value="1"
@@ -98,7 +98,7 @@
               style="width: 100%"
             />
           </el-form-item>
-          <el-form-item label="Prompt 版本" class="config-form-item-full">
+          <el-form-item label="提示词版本" class="config-form-item-full">
             <el-input
               v-model="aiConfigForm.promptVersion"
               maxlength="100"
@@ -114,7 +114,7 @@
       <div class="panel-head">
         <div>
           <h3>最近配置变更</h3>
-          <p>每次保存 AI 导诊配置后都会自动记录一条变更历史，方便回溯 Prompt 版本切换、开关变更和候选上限调整。</p>
+          <p>每次保存 智能导诊配置后都会自动记录一条变更历史，方便回溯 提示词版本切换、开关变更和候选上限调整。</p>
         </div>
         <div class="hero-actions">
           <el-button @click="loadAiConfigHistory">刷新记录</el-button>
@@ -130,13 +130,13 @@
           </div>
           <p class="copy"><strong>变更摘要：</strong>{{ item.changeSummary || '本次未识别到差异摘要' }}</p>
           <div class="audit-tag-row">
-            <span>Prompt：{{ item.promptVersionBefore || '未设置' }} -> {{ item.promptVersionAfter || '未设置' }}</span>
+            <span>提示词版本：{{ item.promptVersionBefore || '未设置' }} -> {{ item.promptVersionAfter || '未设置' }}</span>
             <span>候选上限：{{ item.doctorCandidateLimitBefore ?? '未设置' }} -> {{ item.doctorCandidateLimitAfter ?? '未设置' }}</span>
-            <span v-if="item.operatorAccountId">账号ID：{{ item.operatorAccountId }}</span>
+            <span v-if="item.operatorAccountId">账号编号：{{ item.operatorAccountId }}</span>
           </div>
         </article>
       </div>
-      <el-empty v-else :description="configHistoryLoading ? '正在加载配置变更历史。' : '当前还没有 AI 配置变更记录。'" />
+      <el-empty v-else :description="configHistoryLoading ? '正在加载配置变更历史。' : '当前还没有 智能配置变更记录。'" />
     </section>
 
     <section class="content-grid">
@@ -144,19 +144,19 @@
         <div class="panel-head">
           <div>
             <h3>当前模型参数</h3>
-            <p>这里展示当前 Spring AI + DeepSeek 已解析到的运行参数，便于排查环境差异。</p>
+            <p>这里展示当前智能对话模型已解析到的运行参数，便于排查环境差异。</p>
           </div>
         </div>
 
         <el-descriptions :column="2" border class="detail-descriptions">
-          <el-descriptions-item label="模型供应商">{{ overview.providerName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Prompt 版本">{{ overview.promptVersion || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Base URL">{{ overview.providerBaseUrl || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="模型供应商">{{ providerNameLabel(overview.providerName) || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="提示词版本">{{ overview.promptVersion || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="服务地址">{{ overview.providerBaseUrl || '-' }}</el-descriptions-item>
           <el-descriptions-item label="模型名称">{{ overview.modelName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Temperature">{{ overview.temperature ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Max Tokens">{{ overview.maxTokens ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="温度参数">{{ overview.temperature ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="最大输出长度">{{ overview.maxTokens ?? '-' }}</el-descriptions-item>
           <el-descriptions-item label="医生候选上限">{{ overview.doctorCandidateLimit ?? '-' }}</el-descriptions-item>
-          <el-descriptions-item label="最近 AI 输出">{{ formatDate(overview.latestAiMessageTime) }}</el-descriptions-item>
+          <el-descriptions-item label="最近智能输出">{{ formatDate(overview.latestAiMessageTime) }}</el-descriptions-item>
         </el-descriptions>
 
         <div class="env-board">
@@ -174,8 +174,8 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
       <article class="panel-card">
         <div class="panel-head">
           <div>
-            <h3>AI 导诊产出概况</h3>
-            <p>快速确认 AI 已覆盖多少导诊流程，以及首轮增强与继续追问是否持续产出。</p>
+            <h3>智能导诊产出概况</h3>
+            <p>快速确认智能导诊已覆盖多少导诊流程，以及首轮增强与继续追问是否持续产出。</p>
           </div>
         </div>
 
@@ -197,15 +197,15 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
             <strong>{{ overview.triageResultCount || 0 }}</strong>
           </article>
           <article class="metric-card metric-card-accent">
-            <span>AI 导诊总结</span>
+            <span>智能导诊总结</span>
             <strong>{{ overview.aiSummaryMessageCount || 0 }}</strong>
           </article>
           <article class="metric-card">
-            <span>AI 追问建议</span>
+            <span>智能追问建议</span>
             <strong>{{ overview.aiFollowupQuestionCount || 0 }}</strong>
           </article>
           <article class="metric-card">
-            <span>AI 对话回复</span>
+            <span>智能对话回复</span>
             <strong>{{ overview.aiChatReplyCount || 0 }}</strong>
           </article>
           <article class="metric-card">
@@ -219,8 +219,8 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
     <section class="panel-card usage-panel" v-loading="doctorMessageUsageLoading">
       <div class="panel-head">
         <div>
-          <h3>医生端 AI 沟通草稿使用</h3>
-          <p>跟踪医生侧 AI 沟通草稿从生成、带入到发送的完整链路，方便后续评估场景效果和模板拼装采纳情况。</p>
+          <h3>医生端智能沟通草稿使用</h3>
+          <p>跟踪医生侧智能沟通草稿从生成、带入到发送的完整链路，方便后续评估场景效果和模板拼装采纳情况。</p>
         </div>
         <div class="hero-actions">
           <el-button plain @click="loadDoctorMessageUsage">刷新使用概览</el-button>
@@ -231,7 +231,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
         <article class="metric-card metric-card-accent">
           <span>累计生成</span>
           <strong>{{ doctorMessageUsage.generatedCount || 0 }}</strong>
-          <p>医生端 AI 沟通草稿总生成次数</p>
+          <p>医生端智能沟通草稿总生成次数</p>
         </article>
         <article class="metric-card">
           <span>已带入</span>
@@ -246,10 +246,10 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
         <article class="metric-card">
           <span>模板拼装</span>
           <strong>{{ doctorMessageUsage.templateUsedCount || 0 }}</strong>
-          <p>已出现 AI + 模板联合带入</p>
+          <p>已出现智能内容与模板联合带入</p>
         </article>
         <article class="metric-card">
-          <span>DeepSeek 生成</span>
+          <span>模型生成</span>
           <strong>{{ doctorMessageUsage.deepseekCount || 0 }}</strong>
           <p>真实模型生成的沟通草稿</p>
         </article>
@@ -307,14 +307,14 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           </div>
         </article>
       </div>
-      <el-empty v-else :description="doctorMessageUsageLoading ? '正在加载医生端 AI 沟通草稿使用概况。' : '当前还没有医生端 AI 沟通草稿使用记录。'" />
+      <el-empty v-else :description="doctorMessageUsageLoading ? '正在加载医生端智能沟通草稿使用概况。' : '当前还没有医生端智能沟通草稿使用记录。'" />
     </section>
 
     <section class="panel-card usage-panel" v-loading="doctorFormUsageLoading">
       <div class="panel-head">
         <div>
-          <h3>医生端 AI 处理/随访草稿使用</h3>
-          <p>跟踪医生处理表单和随访表单中的 AI 草稿从生成、带入到最终保存的闭环，便于继续优化医生 AI 助理效果。</p>
+          <h3>医生端智能处理/随访草稿使用</h3>
+          <p>跟踪医生处理表单和随访表单中的 智能草稿从生成、带入到最终保存的闭环，便于继续优化医生智能助理效果。</p>
         </div>
         <div class="hero-actions">
           <el-button plain @click="loadDoctorFormUsage">刷新使用概览</el-button>
@@ -325,7 +325,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
         <article class="metric-card metric-card-accent">
           <span>累计生成</span>
           <strong>{{ doctorFormUsage.generatedCount || 0 }}</strong>
-          <p>医生处理/随访 AI 草稿总生成次数</p>
+          <p>医生处理/随访 智能草稿总生成次数</p>
         </article>
         <article class="metric-card">
           <span>整份生成</span>
@@ -348,12 +348,12 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           <p>带入率 {{ rateText(doctorFormUsage.applyRate) }}</p>
         </article>
         <article class="metric-card">
-          <span>纯 AI 带入</span>
+          <span>纯智能带入</span>
           <strong>{{ doctorFormUsage.pureAiAppliedCount || 0 }}</strong>
           <p>未与模板拼装的直接采纳</p>
         </article>
         <article class="metric-card">
-          <span>AI+模板拼装</span>
+          <span>智能内容与模板拼装</span>
           <strong>{{ doctorFormUsage.templateUsedCount || 0 }}</strong>
           <p>处理/随访字段拼装带入</p>
         </article>
@@ -368,7 +368,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           <p>续写保存率 {{ rateText(doctorFormUsage.contextRewriteSaveRate) }}</p>
         </article>
         <article class="metric-card">
-          <span>DeepSeek 生成</span>
+          <span>模型生成</span>
           <strong>{{ doctorFormUsage.deepseekCount || 0 }}</strong>
           <p>真实模型生成的表单草稿</p>
         </article>
@@ -384,22 +384,22 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
         <span v-if="doctorFormUsage.fullGeneratedCount">整份生成 {{ doctorFormUsage.fullGeneratedCount }} 条</span>
         <span v-if="doctorFormUsage.fieldRegenerateCount">字段重写 {{ doctorFormUsage.fieldRegenerateCount }} 条</span>
         <span v-if="doctorFormUsage.contextRewriteCount">上下文续写 {{ doctorFormUsage.contextRewriteCount }} 条</span>
-        <span v-if="doctorFormUsage.pureAiAppliedCount">纯 AI 带入 {{ doctorFormUsage.pureAiAppliedCount }} 条</span>
-        <span v-if="doctorFormUsage.templateUsedCount">AI+模板拼装 {{ doctorFormUsage.templateUsedCount }} 条</span>
+        <span v-if="doctorFormUsage.pureAiAppliedCount">纯智能带入 {{ doctorFormUsage.pureAiAppliedCount }} 条</span>
+        <span v-if="doctorFormUsage.templateUsedCount">智能内容与模板拼装 {{ doctorFormUsage.templateUsedCount }} 条</span>
         <span v-if="doctorFormUsage.savedCount">已形成表单保存采纳 {{ doctorFormUsage.savedCount }} 条</span>
       </div>
 
       <div v-if="doctorFormUsage.sceneBreakdown?.length" class="audit-tag-row">
         <span v-for="item in doctorFormUsage.sceneBreakdown" :key="`doctor-form-scene-${item.sceneType}`">
-          {{ item.sceneLabel }} 生成{{ item.generatedCount }} / 整份{{ item.fullGeneratedCount || 0 }} / 重写{{ item.fieldRegenerateCount || 0 }} / 纯AI{{ item.pureAiAppliedCount || 0 }} / 拼装{{ item.templateUsedCount || 0 }} / 保存{{ item.savedCount }}
+          {{ item.sceneLabel }} 生成{{ item.generatedCount }} / 整份{{ item.fullGeneratedCount || 0 }} / 重写{{ item.fieldRegenerateCount || 0 }} / 纯智能{{ item.pureAiAppliedCount || 0 }} / 拼装{{ item.templateUsedCount || 0 }} / 保存{{ item.savedCount }}
         </span>
       </div>
 
       <div v-if="doctorFormUsage.promptBreakdown?.length" class="field-breakdown-panel">
         <div class="field-breakdown-head">
           <div>
-            <h4>Prompt 版本与续写效果</h4>
-            <p>观察不同 Prompt 版本在整份生成、字段重写和基于当前草稿续写场景中的真实保存效果。</p>
+            <h4>提示词版本与续写效果</h4>
+            <p>观察不同 提示词版本在整份生成、字段重写和基于当前草稿续写场景中的真实保存效果。</p>
           </div>
           <div class="audit-toolbar field-breakdown-toolbar">
             <el-select v-model="doctorFormPromptSortKey" size="small" style="width: 180px">
@@ -427,14 +427,14 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
             </div>
           </article>
         </div>
-        <el-empty v-else description="当前还没有 Prompt 版本治理记录。" />
+        <el-empty v-else description="当前还没有 提示词版本治理记录。" />
       </div>
 
       <div v-if="doctorFormUsage.fieldBreakdown?.length" class="field-breakdown-panel">
         <div class="field-breakdown-head">
           <div>
             <h4>字段治理排行</h4>
-            <p>按字段重写、模板拼装、带入和保存链路观察 AI 草稿的真实落地情况。</p>
+            <p>按字段重写、模板拼装、带入和保存链路观察 智能草稿的真实落地情况。</p>
           </div>
           <div class="audit-toolbar field-breakdown-toolbar">
             <el-select v-model="doctorFormFieldSceneFilter" size="small" style="width: 140px">
@@ -512,7 +512,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
               <span>续写 {{ item.contextRewriteCount || 0 }} / {{ rateText(item.contextRewriteSaveRate) }}</span>
               <span>带入 {{ item.appliedCount || 0 }} / {{ rateText(item.applyRate) }}</span>
               <span>保存 {{ item.savedCount || 0 }} / {{ rateText(item.saveRate) }}</span>
-              <span v-if="item.templateId">模板ID {{ item.templateId }}</span>
+              <span v-if="item.templateId">模板编号 {{ item.templateId }}</span>
             </div>
           </article>
         </div>
@@ -537,7 +537,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           <div class="audit-tag-row">
             <span>{{ doctorFormGenerationLabel(item) }}</span>
             <span>{{ doctorFormSourceLabel(item) }}</span>
-            <span v-if="item.promptVersion">Prompt {{ doctorFormPromptVersionLabel(item.promptVersion) }}</span>
+            <span v-if="item.promptVersion">提示词版本 {{ doctorFormPromptVersionLabel(item.promptVersion) }}</span>
             <span v-if="item.draftContextUsed === 1">基于当前草稿续写</span>
             <span>带入 {{ item.applyCount || 0 }} 次</span>
             <span v-if="item.lastApplyMode">{{ doctorFormApplyModeLabel(item.lastApplyMode) }}</span>
@@ -559,14 +559,14 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           </div>
         </article>
       </div>
-      <el-empty v-else :description="doctorFormUsageLoading ? '正在加载医生端 AI 处理/随访草稿使用概况。' : '当前还没有医生端 AI 处理/随访草稿使用记录。'" />
+      <el-empty v-else :description="doctorFormUsageLoading ? '正在加载医生端智能处理/随访草稿使用概况。' : '当前还没有医生端智能处理/随访草稿使用记录。'" />
     </section>
 
     <section class="panel-card queue-panel" v-loading="queueLoading">
       <div class="panel-head">
         <div>
           <h3>高风险待复核队列</h3>
-          <p>优先聚合仍未完成医生复核，或医生已明确标记与 AI 存在差异的高风险样本，方便管理员先盯重点。</p>
+          <p>优先聚合仍未完成医生复核，或医生已明确标记与智能建议存在差异的高风险样本，方便管理员先盯重点。</p>
         </div>
         <div class="audit-toolbar">
           <el-input
@@ -578,7 +578,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           />
           <el-button type="primary" plain @click="loadReviewQueue">筛选</el-button>
           <el-button @click="resetReviewQueueFilters">重置</el-button>
-          <el-button plain :loading="queueExporting" @click="exportReviewQueue">Export CSV</el-button>
+          <el-button plain :loading="queueExporting" @click="exportReviewQueue">导出 CSV</el-button>
         </div>
       </div>
 
@@ -600,7 +600,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           </div>
 
           <p class="copy"><strong>高风险信号：</strong>{{ reviewQueueReasonText(item) }}</p>
-          <p class="copy"><strong>AI 判断：</strong>{{ queueAiSummaryText(item) }}</p>
+          <p class="copy"><strong>智能判断：</strong>{{ queueAiSummaryText(item) }}</p>
           <p class="copy"><strong>当前处理：</strong>{{ reviewQueueProgressText(item) }}</p>
           <p v-if="item.doctorReview?.compareText" class="copy"><strong>对比结果：</strong>{{ item.doctorReview.compareText }}</p>
 
@@ -632,8 +632,8 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
     <section class="panel-card audit-panel" v-loading="auditLoading">
       <div class="panel-head">
         <div>
-          <h3>最近 AI 导诊输出审计</h3>
-          <p>从导诊消息留痕中直接抽样最近 AI 输出，方便复盘 Prompt 版本、风险提示与推荐结果是否稳定。</p>
+          <h3>最近智能导诊输出审计</h3>
+          <p>从导诊消息留痕中直接抽样最近智能输出，方便复盘 提示词版本、风险提示与推荐结果是否稳定。</p>
         </div>
         <div class="audit-toolbar">
           <el-input
@@ -660,7 +660,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           />
           <el-button type="primary" plain @click="loadAuditList">筛选</el-button>
           <el-button @click="resetAuditFilters">重置</el-button>
-          <el-button plain :loading="auditExporting" @click="exportAuditList">Export CSV</el-button>
+          <el-button plain :loading="auditExporting" @click="exportAuditList">导出 CSV</el-button>
         </div>
       </div>
 
@@ -684,8 +684,8 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           </div>
 
           <p class="copy"><strong>问诊上下文：</strong>{{ auditContextText(item) }}</p>
-          <p v-if="item.insight?.summary" class="copy"><strong>AI 总结：</strong>{{ item.insight.summary }}</p>
-          <p v-if="showAuditReply(item)" class="copy"><strong>AI 回复：</strong>{{ item.insight.reply }}</p>
+          <p v-if="item.insight?.summary" class="copy"><strong>智能总结：</strong>{{ item.insight.summary }}</p>
+          <p v-if="showAuditReply(item)" class="copy"><strong>智能回复：</strong>{{ item.insight.reply }}</p>
           <p v-if="item.insight?.nextQuestions?.length" class="copy"><strong>建议补充：</strong>{{ item.insight.nextQuestions.join('；') }}</p>
           <p v-else-if="showAuditContent(item)" class="copy"><strong>消息内容：</strong>{{ abbreviateText(item.content, 220) }}</p>
           <p v-if="item.insight?.doctorRecommendationReason" class="copy"><strong>推荐依据：</strong>{{ item.insight.doctorRecommendationReason }}</p>
@@ -749,7 +749,7 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
         <div class="panel-head">
           <div>
             <h3>运行告警</h3>
-            <p>如果当前环境仍未真正启用 AI，这里会直接指出最可能的阻塞项。</p>
+            <p>如果当前环境仍未真正启用智能导诊，这里会直接指出最可能的阻塞项。</p>
           </div>
         </div>
 
@@ -762,29 +762,29 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
             :closable="false"
           />
         </div>
-        <el-empty v-else description="当前没有额外运行告警，AI 导诊配置看起来已经具备基本可用条件。" />
+        <el-empty v-else description="当前没有额外运行告警，智能导诊配置看起来已经具备基本可用条件。" />
       </article>
 
       <article class="panel-card">
         <div class="panel-head">
           <div>
             <h3>治理建议</h3>
-            <p>当前页面先聚焦“可见性”和“排障效率”，后续可以在这个入口继续扩展为 Prompt 版本与审计中心。</p>
+            <p>当前页面先聚焦“可见性”和“排障效率”，后续可以在这个入口继续扩展为 提示词版本与审计中心。</p>
           </div>
         </div>
 
         <div class="guideline-list">
           <article class="guideline-item">
             <strong>先确认运行态，再看业务效果</strong>
-            <p>如果 DeepSeek 接入未启用或 API Key 未配置，前台仍会继续走规则分诊兜底，所以要先确认这里的运行状态。</p>
+            <p>如果模型接入未启用或接口密钥未配置，前台仍会继续走规则分诊兜底，所以要先确认这里的运行状态。</p>
           </article>
           <article class="guideline-item">
             <strong>结合导诊记录中心复盘输出质量</strong>
-            <p>当 AI 已可用后，建议继续到“导诊记录中心”查看 AI 与医生结论偏差、用户反馈与命中规则留痕。</p>
+            <p>当智能功能已可用后，建议继续到“导诊记录中心”查看智能建议与医生结论偏差、用户反馈与命中规则留痕。</p>
           </article>
           <article class="guideline-item">
-            <strong>智能分配策略与 AI 导诊要一起看</strong>
-            <p>Prompt 版本、候选医生上限和智能分配权重会一起影响最终推荐效果，建议配合“智能分配策略”页共同调整。</p>
+            <strong>智能分配策略与 智能导诊要一起看</strong>
+            <p>提示词版本、候选医生上限和智能分配权重会一起影响最终推荐效果，建议配合“智能分配策略”页共同调整。</p>
           </article>
         </div>
       </article>
@@ -832,10 +832,10 @@ const auditItems = ref([])
 const REVIEW_QUEUE_LIMIT = 6
 const AUDIT_LIMIT = 12
 const auditMessageOptions = [
-  { label: '全部 AI 输出', value: 'all' },
-  { label: 'AI 导诊总结', value: 'ai_triage_summary' },
-  { label: 'AI 追问建议', value: 'ai_followup_questions' },
-  { label: 'AI 对话回复', value: 'ai_chat_reply' }
+  { label: '全部智能输出', value: 'all' },
+  { label: '智能导诊总结', value: 'ai_triage_summary' },
+  { label: '智能追问建议', value: 'ai_followup_questions' },
+  { label: '智能对话回复', value: 'ai_chat_reply' }
 ]
 
 const doctorFormFieldSortOptions = [
@@ -952,20 +952,20 @@ const displayDoctorFormTemplateBreakdown = computed(() => {
     })
 })
 const auditEmptyDescription = computed(() => {
-  if (auditLoading.value) return '正在加载最近 AI 导诊输出。'
-  if (auditKeyword.value.trim()) return '当前关键词和筛选条件下还没有最近 AI 导诊输出。'
-  if (highRiskOnly.value) return '当前抽样范围内还没有命中高风险提示的 AI 输出。'
-  return '当前筛选条件下还没有最近 AI 导诊输出。'
+  if (auditLoading.value) return '正在加载最近 智能导诊输出。'
+  if (auditKeyword.value.trim()) return '当前关键词和筛选条件下还没有最近 智能导诊输出。'
+  if (highRiskOnly.value) return '当前抽样范围内还没有命中高风险提示的智能输出。'
+  return '当前筛选条件下还没有最近 智能导诊输出。'
 })
 const queueEmptyDescription = computed(() => {
   if (queueLoading.value) return '正在加载高风险待复核队列。'
   if (reviewQueueKeyword.value.trim()) return '当前关键词下还没有命中的高风险待复核样本。'
-  return '当前最近高风险 AI 输出已基本完成医生复核，暂无额外待处理样本。'
+  return '当前最近高风险智能输出已基本完成医生复核，暂无额外待处理样本。'
 })
 
 const runtimeModeSummary = computed(() => {
   if (overview.value.runtimeAvailable) {
-    return '当前环境已具备 AI 导诊运行条件，患者提交问诊后可生成 AI 补充建议，并支持继续追问。'
+    return '当前环境已具备 智能导诊运行条件，患者提交问诊后可生成 智能补充建议，并支持继续追问。'
   }
   if (!overview.value.triageEnabled) {
     return '当前总开关已关闭，系统会继续使用规则分诊和现有问诊链路。'
@@ -979,7 +979,7 @@ watch(doctorFormFieldSceneFilter, () => {
 
 function createEmptyOverview() {
   return {
-    providerName: 'DeepSeek',
+    providerName: 'deepseek',
     providerBaseUrl: '',
     modelName: '',
     temperature: null,
@@ -1083,7 +1083,7 @@ function loadAiConfig() {
     configLoading.value = false
   }, message => {
     configLoading.value = false
-    ElMessage.warning(message || 'AI 配置加载失败')
+    ElMessage.warning(message || '智能配置加载失败')
   })
 }
 
@@ -1098,7 +1098,7 @@ function loadAiConfigHistory() {
     configHistoryLoading.value = false
   }, message => {
     configHistoryLoading.value = false
-    ElMessage.warning(message || 'AI 配置变更历史加载失败')
+    ElMessage.warning(message || '智能配置变更历史加载失败')
   })
 }
 
@@ -1109,19 +1109,19 @@ function saveAiConfig() {
     doctorCandidateLimit: Number(aiConfigForm.doctorCandidateLimit || 0)
   }
   if (!payload.promptVersion) {
-    ElMessage.warning('请输入 Prompt 版本')
+    ElMessage.warning('请输入 提示词版本')
     return
   }
   configSubmitting.value = true
   post('/api/admin/consultation-ai/config', payload, () => {
     configSubmitting.value = false
-    ElMessage.success('AI 配置已保存')
+    ElMessage.success('智能配置已保存')
     loadAiConfig()
     loadAiConfigHistory()
     loadOverview()
   }, message => {
     configSubmitting.value = false
-    ElMessage.warning(message || 'AI 配置保存失败')
+    ElMessage.warning(message || '智能配置保存失败')
   })
 }
 
@@ -1139,7 +1139,7 @@ function loadOverview() {
     loading.value = false
   }, message => {
     loading.value = false
-    ElMessage.warning(message || 'AI 导诊运行概览加载失败')
+    ElMessage.warning(message || '智能导诊运行概览加载失败')
   })
 }
 
@@ -1153,7 +1153,7 @@ function loadDoctorMessageUsage() {
     doctorMessageUsageLoading.value = false
   }, message => {
     doctorMessageUsageLoading.value = false
-    ElMessage.warning(message || '医生端 AI 沟通草稿使用概况加载失败')
+    ElMessage.warning(message || '医生端智能沟通草稿使用概况加载失败')
   })
 }
 
@@ -1167,7 +1167,7 @@ function loadDoctorFormUsage() {
     doctorFormUsageLoading.value = false
   }, message => {
     doctorFormUsageLoading.value = false
-    ElMessage.warning(message || '医生端 AI 处理/随访草稿使用概况加载失败')
+    ElMessage.warning(message || '医生端智能处理/随访草稿使用概况加载失败')
   })
 }
 
@@ -1223,7 +1223,7 @@ function loadAuditList() {
     auditLoading.value = false
   }, message => {
     auditLoading.value = false
-    ElMessage.warning(message || '最近 AI 导诊输出加载失败')
+    ElMessage.warning(message || '最近 智能导诊输出加载失败')
   })
 }
 
@@ -1246,11 +1246,11 @@ function exportAuditList() {
     ElMessage.success('CSV download started')
   }, message => {
     auditExporting.value = false
-    ElMessage.warning(message || 'AI audit export failed')
+    ElMessage.warning(message || '智能审计导出失败')
   }, error => {
     auditExporting.value = false
     console.error(error)
-    ElMessage.error('AI audit export failed')
+    ElMessage.error('智能审计导出失败')
   })
 }
 
@@ -1287,10 +1287,10 @@ function statusToneClass(value) {
 
 function auditTypeLabel(value) {
   return ({
-    ai_triage_summary: 'AI 导诊总结',
-    ai_followup_questions: 'AI 追问建议',
-    ai_chat_reply: 'AI 对话回复'
-  })[value] || value || 'AI 输出'
+    ai_triage_summary: '智能导诊总结',
+    ai_followup_questions: '智能追问建议',
+    ai_chat_reply: '智能对话回复'
+  })[value] || value || '智能输出'
 }
 
 function consultationStatusLabel(value) {
@@ -1313,9 +1313,16 @@ function triageActionLabel(value) {
 
 function sourceLabel(value) {
   return ({
-    deepseek: 'DeepSeek',
+    deepseek: '深度求索',
     fallback: '规则兜底'
   })[`${value || ''}`.toLowerCase()] || (value || '')
+}
+
+function providerNameLabel(value) {
+  const normalizedValue = `${value || ''}`.trim().toLowerCase()
+  if (!normalizedValue) return ''
+  if (normalizedValue === 'deepseek') return '深度求索'
+  return value
 }
 
 function rateText(value) {
@@ -1334,14 +1341,14 @@ function doctorMessageSceneLabel(value) {
 
 function doctorMessageSourceLabel(item) {
   if (item?.fallback === 1) return '规则兜底'
-  return sourceLabel(item?.source || 'deepseek') || 'AI 草稿'
+  return sourceLabel(item?.source || 'deepseek') || '智能草稿'
 }
 
 function doctorMessageApplyModeLabel(value) {
   return ({
     replace: '覆盖带入',
     append: '追加带入',
-    compose: 'AI+模板合成'
+    compose: '智能内容与模板合成'
   })[`${value || ''}`.toLowerCase()] || '已带入'
 }
 
@@ -1377,7 +1384,7 @@ function doctorFormGenerationLabel(item) {
 
 function doctorFormSourceLabel(item) {
   if (item?.fallback === 1) return '规则兜底'
-  return sourceLabel(item?.source || 'deepseek') || 'AI 草稿'
+  return sourceLabel(item?.source || 'deepseek') || '智能草稿'
 }
 
 function doctorFormApplyTargetLabel(value) {
@@ -1392,7 +1399,7 @@ function doctorFormApplyModeLabel(value) {
   return ({
     replace: '直接带入',
     append: '追加带入',
-    compose: 'AI+模板合成'
+    compose: '智能内容与模板合成'
   })[`${value || ''}`.toLowerCase()] || '已带入'
 }
 
@@ -1523,7 +1530,7 @@ function dispositionLabel(value) {
 }
 
 function aiConsistencyLabel(value) {
-  return value === 1 ? '医生标记与 AI 一致' : value === 0 ? '医生标记与 AI 不一致' : ''
+  return value === 1 ? '医生标记与智能建议一致' : value === 0 ? '医生标记与智能建议不一致' : ''
 }
 
 function doctorFollowUpText(conclusion) {
@@ -1661,15 +1668,15 @@ function reviewQueueTags(item) {
   if (item?.doctorReview?.aiConsistencyLabel) tags.push(item.doctorReview.aiConsistencyLabel)
   if (item?.insight?.shouldEscalateToHuman === 1) tags.push('建议医生接管')
   if (item?.insight?.suggestOfflineImmediately === 1) tags.push('建议尽快线下')
-  if (item?.insight?.recommendedVisitType) tags.push(`AI 建议：${item.insight.recommendedVisitType}`)
+  if (item?.insight?.recommendedVisitType) tags.push(`智能建议：${item.insight.recommendedVisitType}`)
   return [...tags, ...(item?.doctorReview?.mismatchReasonLabels || [])].slice(0, 6)
 }
 
 function reviewQueueReasonText(item) {
   const reasons = []
   if (item?.insight?.riskFlags?.length) reasons.push(`风险标签 ${item.insight.riskFlags.join('、')}`)
-  if (item?.insight?.shouldEscalateToHuman === 1) reasons.push('AI 建议尽快由医生接管')
-  if (item?.insight?.suggestOfflineImmediately === 1) reasons.push('AI 提醒尽快线下就医')
+  if (item?.insight?.shouldEscalateToHuman === 1) reasons.push('智能建议尽快由医生接管')
+  if (item?.insight?.suggestOfflineImmediately === 1) reasons.push('智能提醒尽快线下就医')
   if (item?.insight?.recommendedVisitType) reasons.push(`建议方式 ${item.insight.recommendedVisitType}`)
   return reasons.length ? reasons.join('；') : '当前样本已命中高风险判定，请优先人工复核。'
 }
@@ -1682,7 +1689,7 @@ function queueAiSummaryText(item) {
   if (item?.insight?.doctorRecommendationReason) segments.push(`推荐依据 ${item.insight.doctorRecommendationReason}`)
   if (item?.insight?.nextQuestions?.length) segments.push(`补充建议 ${item.insight.nextQuestions.join('；')}`)
   if (!segments.length && item?.content) segments.push(item.content)
-  return abbreviateText(segments.join('；'), 220) || '当前高风险样本暂无更多 AI 说明。'
+  return abbreviateText(segments.join('；'), 220) || '当前高风险样本暂无更多智能说明。'
 }
 
 function reviewQueueProgressText(item) {
@@ -1693,7 +1700,7 @@ function reviewQueueProgressText(item) {
     return item.doctorReview?.progressText || '医生已接手，但还没有形成最终结构化结论。'
   }
   if (item?.doctorReview?.isMismatch) {
-    return item.doctorReview?.progressText || '医生已完成处理，并明确指出与 AI 建议存在差异。'
+    return item.doctorReview?.progressText || '医生已完成处理，并明确指出与 智能建议存在差异。'
   }
   return item?.doctorReview?.progressText || '当前样本仍建议继续人工复核。'
 }
@@ -1714,7 +1721,7 @@ function auditMetaTags(item) {
   if (item.insight?.recommendedVisitType) tags.push(`建议方式：${item.insight.recommendedVisitType}`)
   if (item.insight?.recommendedDepartmentName) tags.push(`建议科室：${item.insight.recommendedDepartmentName}`)
   if (item.insight?.confidenceText) tags.push(`置信度：${item.insight.confidenceText}`)
-  if (item.insight?.promptVersion) tags.push(`Prompt：${item.insight.promptVersion}`)
+  if (item.insight?.promptVersion) tags.push(`提示词版本：${item.insight.promptVersion}`)
   if (item.insight?.source) tags.push(`来源：${sourceLabel(item.insight.source)}`)
   if (item.insight?.shouldEscalateToHuman === 1) tags.push('建议医生接管')
   if (item.insight?.suggestOfflineImmediately === 1) tags.push('建议尽快线下')

@@ -200,9 +200,9 @@
           <small>按已接手推荐单统计</small>
         </article>
         <article class="subcard summary-card">
-          <span>超 24h 待接手</span>
+          <span>超 24 小时待接手</span>
           <strong>{{ dispatchSummary.overdueWaitingCount }}</strong>
-          <small class="muted-copy">{{ `当前阈值 ${dispatchSummary.overdueThresholdHours || 24}h` }}</small>
+          <small class="muted-copy">{{ `当前阈值 ${dispatchSummary.overdueThresholdHours || 24} 小时` }}</small>
           <small>{{ dispatchSummary.waitingAcceptCount }} 单仍在等待首推医生</small>
         </article>
         <article class="subcard summary-card">
@@ -263,10 +263,10 @@
     <section class="card block">
       <div class="head">
         <div>
-          <h3>AI 采纳总览</h3>
-          <p>查看当前问诊记录中，AI 建议与医生最终结论的一致情况和最近差异样本。</p>
+          <h3>智能采纳总览</h3>
+          <p>查看当前问诊记录中，智能建议与医生最终结论的一致情况和最近差异样本。</p>
         </div>
-        <el-button :loading="summaryLoading" @click="loadAiSummary">刷新 AI 统计</el-button>
+        <el-button :loading="summaryLoading" @click="loadAiSummary">刷新智能统计</el-button>
       </div>
       <div class="summary-grid">
         <article class="subcard summary-card">
@@ -275,12 +275,12 @@
           <small>{{ aiSummary.coverageText || '-' }}</small>
         </article>
         <article class="subcard summary-card">
-          <span>与 AI 一致</span>
+          <span>与智能建议一致</span>
           <strong>{{ aiSummary.consistentCount }}</strong>
           <small>{{ aiSummary.consistentRateText || '-' }}</small>
         </article>
         <article class="subcard summary-card">
-          <span>与 AI 不一致</span>
+          <span>与智能建议不一致</span>
           <strong>{{ aiSummary.mismatchCount }}</strong>
           <small>优先复盘差异原因</small>
         </article>
@@ -295,7 +295,7 @@
           <div class="breakdown-head">
             <div>
               <strong>按科室拆分</strong>
-              <p>快速查看哪些科室的 AI 采纳率更高，哪些科室差异更集中。</p>
+              <p>快速查看哪些科室的智能采纳率更高，哪些科室差异更集中。</p>
             </div>
           </div>
           <el-table v-if="aiSummary.departmentBreakdown?.length" :data="aiSummary.departmentBreakdown" size="small" border>
@@ -306,13 +306,13 @@
             <el-table-column prop="mismatchCount" label="差异数" width="90" align="center" />
             <el-table-column prop="pendingCount" label="待判断" width="90" align="center" />
           </el-table>
-          <el-empty v-else description="当前暂无科室维度的 AI 采纳统计" />
+          <el-empty v-else description="当前暂无科室维度的智能采纳统计" />
         </article>
         <article class="subcard breakdown-card">
           <div class="breakdown-head">
             <div>
               <strong>按问诊分类拆分</strong>
-              <p>定位哪些问诊分类更容易出现 AI 与医生结论偏差，便于继续优化 Prompt 和规则。</p>
+              <p>定位哪些问诊分类更容易出现智能建议与医生结论偏差，便于继续优化提示词版本和规则。</p>
             </div>
           </div>
           <el-table v-if="aiSummary.categoryBreakdown?.length" :data="aiSummary.categoryBreakdown" size="small" border>
@@ -323,13 +323,13 @@
             <el-table-column prop="mismatchCount" label="差异数" width="90" align="center" />
             <el-table-column prop="pendingCount" label="待判断" width="90" align="center" />
           </el-table>
-          <el-empty v-else description="当前暂无分类维度的 AI 采纳统计" />
+          <el-empty v-else description="当前暂无分类维度的智能采纳统计" />
         </article>
         <article class="subcard breakdown-card">
           <div class="breakdown-head">
             <div>
               <strong>按医生拆分</strong>
-              <p>基于已提交的结构化结论，查看每位医生对 AI 建议的采纳情况和最常见差异原因。</p>
+              <p>基于已提交的结构化结论，查看每位医生对 智能建议的采纳情况和最常见差异原因。</p>
             </div>
           </div>
           <el-table v-if="aiSummary.doctorBreakdown?.length" :data="aiSummary.doctorBreakdown" size="small" border>
@@ -366,7 +366,7 @@
                   type="primary"
                   :disabled="!row.mismatchCount"
                   @click="openMismatchSampleDialog({
-                    title: `${row.doctorName || '医生'} 的 AI 偏差样本`,
+                    title: `${row.doctorName || '医生'} 的智能偏差样本`,
                     doctorName: row.doctorName || '',
                     sourceCount: row.mismatchCount
                   })"
@@ -376,13 +376,13 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-empty v-else description="当前暂无医生维度的 AI 采纳统计" />
+          <el-empty v-else description="当前暂无医生维度的智能采纳统计" />
         </article>
         <article class="subcard breakdown-card">
           <div class="breakdown-head">
             <div>
               <strong>差异原因汇总</strong>
-              <p>汇总医生标记的 AI 偏差原因，便于后续优化 Prompt、规则和接诊流程。</p>
+              <p>汇总医生标记的智能偏差原因，便于后续优化提示词、规则和接诊流程。</p>
             </div>
           </div>
           <div v-if="aiSummary.mismatchReasonBreakdown?.length" class="reason-list">
@@ -404,13 +404,13 @@
               </el-button>
             </article>
           </div>
-          <el-empty v-else description="当前暂无已沉淀的 AI 差异原因统计" />
+          <el-empty v-else description="当前暂无已沉淀的智能差异原因统计" />
         </article>
       </div>
       <div class="head summary-subhead">
         <div>
           <h3>字段偏差分析</h3>
-          <p>聚焦病情等级、处理去向和随访安排三个关键字段，查看 AI 建议与医生最终结论的偏差集中点。</p>
+          <p>聚焦病情等级、处理去向和随访安排三个关键字段，查看 智能建议与医生最终结论的偏差集中点。</p>
         </div>
       </div>
       <div v-if="aiSummary.fieldBreakdown?.length" class="field-grid">
@@ -451,11 +451,11 @@
           </div>
         </article>
       </div>
-      <el-empty v-else description="当前暂无字段级 AI 偏差分析数据" />
+      <el-empty v-else description="当前暂无字段级智能偏差分析数据" />
       <div class="head summary-subhead">
         <div>
           <h3>最近差异记录</h3>
-          <p>优先查看 AI 与医生结论存在偏差的问诊单，便于继续做人工纠偏和规则优化。</p>
+          <p>优先查看智能建议与医生结论存在偏差的问诊单，便于继续做人工纠偏和规则优化。</p>
         </div>
       </div>
       <div v-if="aiSummary.recentMismatchRecords?.length" class="mismatch-list">
@@ -468,10 +468,10 @@
             <span>{{ formatDate(item.updateTime) }}</span>
           </div>
           <p class="copy"><strong>处理医生：</strong>{{ item.doctorName || '未记录' }}</p>
-          <p class="copy"><strong>病情等级：</strong>AI {{ item.aiConditionLevel ? conditionLevelLabel(item.aiConditionLevel) : '未提供' }} / 医生 {{ item.doctorConditionLevel ? conditionLevelLabel(item.doctorConditionLevel) : '未填写' }}</p>
-          <p class="copy"><strong>处理去向：</strong>AI {{ item.aiDisposition ? dispositionLabel(item.aiDisposition) : '未提供' }} / 医生 {{ item.doctorDisposition ? dispositionLabel(item.doctorDisposition) : '未填写' }}</p>
-          <p class="copy"><strong>随访安排：</strong>AI {{ item.aiFollowUpText || '未提供' }} / 医生 {{ item.doctorFollowUpText || '未填写' }}</p>
-          <p v-if="item.aiReasonText" class="copy"><strong>AI 推荐依据：</strong>{{ item.aiReasonText }}</p>
+          <p class="copy"><strong>病情等级：</strong>智能 {{ item.aiConditionLevel ? conditionLevelLabel(item.aiConditionLevel) : '未提供' }} / 医生 {{ item.doctorConditionLevel ? conditionLevelLabel(item.doctorConditionLevel) : '未填写' }}</p>
+          <p class="copy"><strong>处理去向：</strong>智能 {{ item.aiDisposition ? dispositionLabel(item.aiDisposition) : '未提供' }} / 医生 {{ item.doctorDisposition ? dispositionLabel(item.doctorDisposition) : '未填写' }}</p>
+          <p class="copy"><strong>随访安排：</strong>智能 {{ item.aiFollowUpText || '未提供' }} / 医生 {{ item.doctorFollowUpText || '未填写' }}</p>
+          <p v-if="item.aiReasonText" class="copy"><strong>智能推荐依据：</strong>{{ item.aiReasonText }}</p>
           <div v-if="mismatchReasonLabels(item.mismatchReasonCodes).length" class="chips danger">
             <span v-for="tag in mismatchReasonLabels(item.mismatchReasonCodes)" :key="tag">{{ tag }}</span>
           </div>
@@ -481,7 +481,7 @@
           </div>
         </article>
       </div>
-      <el-empty v-else description="当前暂无已标记为与 AI 不一致的问诊记录" />
+      <el-empty v-else description="当前暂无已标记为与智能建议不一致的问诊记录" />
     </section>
 
     <section class="card block">
@@ -590,7 +590,7 @@
         <div class="field-sample-status-group">
           <el-button :type="fieldSampleStatus === 'mismatch' ? 'danger' : 'default'" plain @click="switchFieldSampleStatus('mismatch')">偏差样本</el-button>
           <el-button :type="fieldSampleStatus === 'pending' ? 'primary' : 'default'" plain @click="switchFieldSampleStatus('pending')">待补充样本</el-button>
-          <el-button plain :disabled="!fieldSampleMeta.fieldKey" :loading="fieldSampleExporting" @click="exportFieldSamples">Export CSV</el-button>
+          <el-button plain :disabled="!fieldSampleMeta.fieldKey" :loading="fieldSampleExporting" @click="exportFieldSamples">导出 CSV</el-button>
         </div>
       </div>
       <div class="field-sample-filter-bar">
@@ -626,7 +626,7 @@
               <span>{{ formatDate(item.updateTime) }}</span>
             </div>
             <p class="copy"><strong>处理医生：</strong>{{ item.doctorName || '待处理' }}</p>
-            <p class="copy"><strong>{{ item.fieldLabel }}：</strong>AI {{ item.aiValueText || '未提供' }} / 医生 {{ item.doctorValueText || '待补充' }}</p>
+            <p class="copy"><strong>{{ item.fieldLabel }}：</strong>智能 {{ item.aiValueText || '未提供' }} / 医生 {{ item.doctorValueText || '待补充' }}</p>
             <div v-if="mismatchReasonLabels(item.mismatchReasonCodes).length" class="chips danger">
               <span v-for="tag in mismatchReasonLabels(item.mismatchReasonCodes)" :key="`${item.consultationId}-${tag}`">{{ tag }}</span>
             </div>
@@ -648,7 +648,7 @@
     <el-dialog v-model="mismatchSampleVisible" :title="mismatchSampleDialogTitle" width="920px" destroy-on-close>
       <div class="field-sample-toolbar">
         <div class="chips">
-          <span>AI 偏差样本</span>
+          <span>智能偏差样本</span>
           <span v-if="mismatchSampleFilters.doctorName">医生 {{ mismatchSampleFilters.doctorName }}</span>
           <span v-if="mismatchSampleFilters.reasonCode">原因 {{ aiMismatchReasonLabel(mismatchSampleFilters.reasonCode) }}</span>
           <span v-if="mismatchSampleMeta.sourceCount !== null">命中 {{ mismatchSampleMeta.sourceCount }}</span>
@@ -659,7 +659,7 @@
         <el-input
           v-model="mismatchSampleFilters.keyword"
           clearable
-          placeholder="搜索单号、患者、医生或 AI 推荐依据"
+          placeholder="搜索单号、患者、医生或智能推荐依据"
           style="width: 240px"
           @keyup.enter="loadMismatchSamples"
         />
@@ -677,7 +677,7 @@
         </el-select>
         <el-button type="primary" plain @click="loadMismatchSamples">筛选</el-button>
         <el-button @click="resetMismatchSampleFilters">重置</el-button>
-        <el-button plain :loading="mismatchSampleExporting" @click="exportMismatchSamples">Export CSV</el-button>
+        <el-button plain :loading="mismatchSampleExporting" @click="exportMismatchSamples">导出 CSV</el-button>
       </div>
       <div v-loading="mismatchSampleLoading">
         <div v-if="mismatchSamples.length" class="mismatch-list">
@@ -690,10 +690,10 @@
               <span>{{ formatDate(item.updateTime) }}</span>
             </div>
             <p class="copy"><strong>处理医生：</strong>{{ item.doctorName || '未记录' }}</p>
-            <p class="copy"><strong>病情等级：</strong>AI {{ item.aiConditionLevel ? conditionLevelLabel(item.aiConditionLevel) : '未提供' }} / 医生 {{ item.doctorConditionLevel ? conditionLevelLabel(item.doctorConditionLevel) : '未填写' }}</p>
-            <p class="copy"><strong>处理去向：</strong>AI {{ item.aiDisposition ? dispositionLabel(item.aiDisposition) : '未提供' }} / 医生 {{ item.doctorDisposition ? dispositionLabel(item.doctorDisposition) : '未填写' }}</p>
-            <p class="copy"><strong>随访安排：</strong>AI {{ item.aiFollowUpText || '未提供' }} / 医生 {{ item.doctorFollowUpText || '未填写' }}</p>
-            <p v-if="item.aiReasonText" class="copy"><strong>AI 推荐依据：</strong>{{ item.aiReasonText }}</p>
+            <p class="copy"><strong>病情等级：</strong>智能 {{ item.aiConditionLevel ? conditionLevelLabel(item.aiConditionLevel) : '未提供' }} / 医生 {{ item.doctorConditionLevel ? conditionLevelLabel(item.doctorConditionLevel) : '未填写' }}</p>
+            <p class="copy"><strong>处理去向：</strong>智能 {{ item.aiDisposition ? dispositionLabel(item.aiDisposition) : '未提供' }} / 医生 {{ item.doctorDisposition ? dispositionLabel(item.doctorDisposition) : '未填写' }}</p>
+            <p class="copy"><strong>随访安排：</strong>智能 {{ item.aiFollowUpText || '未提供' }} / 医生 {{ item.doctorFollowUpText || '未填写' }}</p>
+            <p v-if="item.aiReasonText" class="copy"><strong>智能推荐依据：</strong>{{ item.aiReasonText }}</p>
             <div v-if="mismatchReasonLabels(item.mismatchReasonCodes).length" class="chips danger">
               <span v-for="tag in mismatchReasonLabels(item.mismatchReasonCodes)" :key="`${item.consultationId}-${tag}`">{{ tag }}</span>
             </div>
@@ -703,7 +703,7 @@
             </div>
           </article>
         </div>
-        <el-empty v-else description="当前暂无符合条件的 AI 偏差样本" />
+        <el-empty v-else description="当前暂无符合条件的 智能偏差样本" />
         <div v-if="mismatchSamples.length" class="sample-footer">
           <span class="muted-copy">已加载 {{ mismatchSamples.length }} 条样本</span>
           <el-button v-if="mismatchSampleHasMore" plain :loading="mismatchSampleLoading" @click="loadMoreMismatchSamples">加载更多</el-button>
@@ -936,7 +936,7 @@
             <div class="head">
               <div>
                 <h3>结构化结论</h3>
-                <p>查看医生沉淀的标准化结论，用于 AI 复盘和统计分析。</p>
+                <p>查看医生沉淀的标准化结论，用于智能复盘和统计分析。</p>
               </div>
               <div class="chips">
                 <span>{{ conditionLevelLabel(detail.doctorConclusion.conditionLevel) }}</span>
@@ -962,7 +962,7 @@
           <section v-if="detail.aiComparison" class="card panel compare-panel">
             <div class="head">
               <div>
-                <h3>AI 采纳摘要</h3>
+                <h3>智能采纳摘要</h3>
                 <p>{{ detail.aiComparison.summary }}</p>
               </div>
               <div class="chips">
@@ -972,7 +972,7 @@
             </div>
             <div class="compare-grid">
               <article class="subcard compare-card">
-                <strong>AI 建议</strong>
+                <strong>智能建议</strong>
                 <p class="copy"><strong>病情等级：</strong>{{ detail.aiComparison.aiConditionLevel ? conditionLevelLabel(detail.aiComparison.aiConditionLevel) : '未提供' }}</p>
                 <p class="copy"><strong>处理去向：</strong>{{ detail.aiComparison.aiDisposition ? dispositionLabel(detail.aiComparison.aiDisposition) : '未提供' }}</p>
                 <p class="copy"><strong>建议科室：</strong>{{ detail.aiComparison.aiDepartmentName || '未提供' }}</p>
@@ -986,14 +986,14 @@
                 <p class="copy"><strong>处理去向：</strong>{{ detail.doctorConclusion?.disposition ? dispositionLabel(detail.doctorConclusion.disposition) : '待医生判断' }}</p>
                 <p class="copy"><strong>诊断方向：</strong>{{ detail.doctorConclusion?.diagnosisDirection || '待医生填写' }}</p>
                 <p class="copy"><strong>随访建议：</strong>{{ doctorFollowUpText(detail.doctorConclusion) || '待医生判断' }}</p>
-                <p class="copy"><strong>AI 一致性：</strong>{{ detail.doctorConclusion ? aiConsistencyLabel(detail.doctorConclusion.isConsistentWithAi) : '待医生判断' }}</p>
+                <p class="copy"><strong>智能一致性：</strong>{{ detail.doctorConclusion ? aiConsistencyLabel(detail.doctorConclusion.isConsistentWithAi) : '待医生判断' }}</p>
               </article>
             </div>
             <div class="compare-list">
               <article class="subcard compare-item">
                 <div>
                   <strong>病情等级</strong>
-                  <p class="copy">AI：{{ detail.aiComparison.aiConditionLevel ? conditionLevelLabel(detail.aiComparison.aiConditionLevel) : '未提供' }}</p>
+                  <p class="copy">智能：{{ detail.aiComparison.aiConditionLevel ? conditionLevelLabel(detail.aiComparison.aiConditionLevel) : '未提供' }}</p>
                   <p class="copy">医生：{{ detail.doctorConclusion?.conditionLevel ? conditionLevelLabel(detail.doctorConclusion.conditionLevel) : '待医生判断' }}</p>
                 </div>
                 <span :class="['compare-badge', comparisonStatusClass(detail.aiComparison.conditionLevelStatus)]">{{ comparisonStatusLabel(detail.aiComparison.conditionLevelStatus) }}</span>
@@ -1001,7 +1001,7 @@
               <article class="subcard compare-item">
                 <div>
                   <strong>处理去向</strong>
-                  <p class="copy">AI：{{ detail.aiComparison.aiDisposition ? dispositionLabel(detail.aiComparison.aiDisposition) : '未提供' }}</p>
+                  <p class="copy">智能：{{ detail.aiComparison.aiDisposition ? dispositionLabel(detail.aiComparison.aiDisposition) : '未提供' }}</p>
                   <p class="copy">医生：{{ detail.doctorConclusion?.disposition ? dispositionLabel(detail.doctorConclusion.disposition) : '待医生判断' }}</p>
                 </div>
                 <span :class="['compare-badge', comparisonStatusClass(detail.aiComparison.dispositionStatus)]">{{ comparisonStatusLabel(detail.aiComparison.dispositionStatus) }}</span>
@@ -1009,7 +1009,7 @@
               <article class="subcard compare-item">
                 <div>
                   <strong>随访安排</strong>
-                  <p class="copy">AI：{{ detail.aiComparison.aiFollowUpText || '未提供' }}</p>
+                  <p class="copy">智能：{{ detail.aiComparison.aiFollowUpText || '未提供' }}</p>
                   <p class="copy">医生：{{ doctorFollowUpText(detail.doctorConclusion) || '待医生判断' }}</p>
                 </div>
                 <span :class="['compare-badge', comparisonStatusClass(detail.aiComparison.followUpStatus)]">{{ comparisonStatusLabel(detail.aiComparison.followUpStatus) }}</span>
@@ -1242,7 +1242,7 @@ function createEmptyFieldSampleMeta() {
 
 function createEmptyMismatchSampleMeta() {
   return {
-    title: 'AI 偏差样本',
+    title: '智能偏差样本',
     sourceCount: null,
     defaultFilters: createEmptyMismatchSampleFilters()
   }
@@ -1391,7 +1391,7 @@ const fieldSampleDepartmentOptions = computed(() => [...new Set(records.value.ma
     label: count ? `${option.label}（${count}）` : option.label
   }
 }))
-const mismatchSampleDialogTitle = computed(() => mismatchSampleMeta.value.title || 'AI 偏差样本')
+const mismatchSampleDialogTitle = computed(() => mismatchSampleMeta.value.title || '智能偏差样本')
 */
 const mismatchSampleReasonOptions = computed(() => aiMismatchReasonOptions.map(option => {
   const count = (aiSummary.value.mismatchReasonBreakdown || []).find(item => item.reasonCode === option.value)?.count
@@ -1400,7 +1400,7 @@ const mismatchSampleReasonOptions = computed(() => aiMismatchReasonOptions.map(o
     label: count ? `${option.label} (${count})` : option.label
   }
 }))
-const mismatchSampleDialogTitle = computed(() => mismatchSampleMeta.value.title || 'AI 偏差样本')
+const mismatchSampleDialogTitle = computed(() => mismatchSampleMeta.value.title || '智能偏差样本')
 const fieldSampleDialogTitle = computed(() => `${fieldSampleMeta.value.fieldLabel || '字段'}${fieldSampleStatus.value === 'mismatch' ? '偏差样本' : '待补充样本'}`)
 const filteredRecords = computed(() => records.value.filter(item => {
   const search = keyword.value.trim().toLowerCase()
@@ -1461,7 +1461,7 @@ function loadAiSummary() {
     summaryLoading.value = false
   }, message => {
     summaryLoading.value = false
-    ElMessage.warning(message || 'AI 采纳统计加载失败')
+    ElMessage.warning(message || '智能采纳统计加载失败')
   })
 }
 function loadSmartDispatchSummary() {
@@ -1475,7 +1475,7 @@ function loadSmartDispatchSummary() {
   })
 }
 function openMismatchSampleDialog({
-  title = 'AI 偏差样本',
+  title = '智能偏差样本',
   doctorName = '',
   reasonCode = '',
   categoryName = '',
@@ -1525,7 +1525,7 @@ function loadMismatchSamples({ append = false } = {}) {
     mismatchSampleLoading.value = false
   }, message => {
     mismatchSampleLoading.value = false
-    ElMessage.warning(message || 'AI 偏差样本加载失败')
+    ElMessage.warning(message || '智能偏差样本加载失败')
   })
 }
 function resetMismatchSampleFilters() {
@@ -1766,7 +1766,7 @@ function medicationSeverityLabel(value) { return ({ mild: '轻度', medium: '中
 function medicationActionLabel(value) { return ({ continued: '继续用药', paused: '暂时停用', stopped: '已经停药', consulting: '正在咨询医生', other: '其他处理' })[value] || '其他处理' }
 function conditionLevelLabel(value) { return ({ low: '轻度', medium: '中度', high: '较高风险', critical: '危急' })[value] || '未填写' }
 function dispositionLabel(value) { return ({ observe: '继续观察', online_followup: '线上随访', offline_visit: '线下就医', emergency: '立即急诊' })[value] || '未填写' }
-function aiConsistencyLabel(value) { return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断' }
+function aiConsistencyLabel(value) { return value === 1 ? '与智能建议一致' : value === 0 ? '与智能建议不一致' : '未判断' }
 function doctorFollowUpText(conclusion) { return !conclusion ? '' : conclusion.needFollowUp === 1 ? (conclusion.followUpWithinDays ? `${conclusion.followUpWithinDays} 天内随访` : '需要随访') : conclusion.needFollowUp === 0 ? '暂不需要随访' : '' }
 function followUpTypeLabel(value) { return ({ platform: '平台随访', phone: '电话随访', offline: '线下随访', other: '其他方式' })[value] || '其他方式' }
 function patientStatusLabel(value) { return ({ improved: '明显好转', stable: '基本稳定', worsened: '出现加重', other: '其他情况' })[value] || '其他情况' }

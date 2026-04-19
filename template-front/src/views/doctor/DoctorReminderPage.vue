@@ -8,7 +8,7 @@
     <template v-else>
       <section class="hero-card">
         <div class="hero-copy">
-          <span class="section-tag">Task Center</span>
+          <span class="section-tag">待办中心</span>
           <h2>消息与待办中心</h2>
           <p>{{ heroSummary }}</p>
           <div class="chip-row">

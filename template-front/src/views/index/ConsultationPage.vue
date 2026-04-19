@@ -43,7 +43,7 @@
       <article class="reminder-card">
         <div class="reminder-head">
           <div>
-            <span class="panel-kicker">Feedback</span>
+            <span class="panel-kicker">评价提醒</span>
             <h3>待评价</h3>
             <p>医生完成处理后，可在这里快速补充服务评分、问题是否解决和本次问诊体验。</p>
           </div>
@@ -77,7 +77,7 @@
       <article class="reminder-card">
         <div class="reminder-head">
           <div>
-            <span class="panel-kicker">Reminder</span>
+            <span class="panel-kicker">消息提醒</span>
             <h3>医生新回复</h3>
             <p>优先查看医生刚回复的问诊，避免错过进一步处理建议。</p>
           </div>
@@ -111,7 +111,7 @@
       <article class="reminder-card">
         <div class="reminder-head">
           <div>
-            <span class="panel-kicker">Queue</span>
+            <span class="panel-kicker">待处理</span>
             <h3>待医生处理</h3>
             <p>这些问诊还在等待医生接手或继续处理，可随时补充更多症状与资料。</p>
           </div>
@@ -145,7 +145,7 @@
       <article class="reminder-card reminder-card-followup">
         <div class="reminder-head">
           <div>
-            <span class="panel-kicker">Follow-up</span>
+            <span class="panel-kicker">随访提醒</span>
             <h3>待随访提醒</h3>
             <p>及时查看需要继续跟进的问诊，尤其是今日到期和已逾期的随访。</p>
           </div>
@@ -186,7 +186,7 @@
       <div class="side-card">
         <div class="panel-head">
           <div>
-            <span class="panel-kicker">Step 1</span>
+            <span class="panel-kicker">步骤一</span>
             <h3>选择问诊分类</h3>
           </div>
           <el-button text @click="loadCategories">刷新分类</el-button>
@@ -217,7 +217,7 @@
         <div class="patient-block">
           <div class="panel-head compact">
             <div>
-              <span class="panel-kicker">Step 2</span>
+              <span class="panel-kicker">步骤二</span>
               <h3>选择就诊人</h3>
             </div>
             <el-button text @click="router.push('/index/patient')">去管理</el-button>
@@ -264,7 +264,7 @@
       <div class="form-card">
         <div class="panel-head">
           <div>
-            <span class="panel-kicker">Step 3</span>
+            <span class="panel-kicker">步骤三</span>
             <h3>填写问诊资料</h3>
             <p v-if="currentCategory">
               {{ currentCategory.name }}{{ currentCategory.departmentName ? ` · ${currentCategory.departmentName}` : '' }}
@@ -273,7 +273,7 @@
           <div class="panel-actions">
             <el-button @click="resetForm" :disabled="!template">重置表单</el-button>
             <el-button type="primary" :loading="submitting" :disabled="!template || !selectedPatientId" @click="submitConsultation">
-              提交并进入 AI 导诊
+              提交并进入 智能导诊
             </el-button>
           </div>
         </div>
@@ -288,7 +288,7 @@
 
         <template v-else-if="template">
           <el-alert
-            :title="template.description || '请根据实际情况填写当前问诊资料，提交后系统会自动进入 AI 导诊工作区，继续生成建议和追问。'"
+            :title="template.description || '请根据实际情况填写当前问诊资料，提交后系统会自动进入 智能导诊工作区，继续生成建议和追问。'"
             type="info"
             :closable="false"
             class="template-alert"
@@ -418,7 +418,7 @@
     <section ref="historySectionRef" class="history-card">
       <div class="panel-head">
         <div>
-          <span class="panel-kicker">History</span>
+          <span class="panel-kicker">历史记录</span>
           <h3>问诊记录</h3>
         </div>
         <el-button @click="loadRecords">刷新记录</el-button>
@@ -514,7 +514,7 @@
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openRecordDetail(row)">查看详情</el-button>
-            <el-button link type="success" @click="openTriageWorkspace(row.id)">AI 导诊</el-button>
+            <el-button link type="success" @click="openTriageWorkspace(row.id)">智能导诊</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -546,7 +546,7 @@
             <div class="doctor-recommend-head">
               <div>
                 <strong>问诊收费</strong>
-                <span>{{ detailPayment.status === 'paid' ? '当前已完成模拟支付，可继续按原流程查看 AI 导诊与问诊详情。' : '当前为演示版模拟收费，不接真实支付，点击按钮即可完成付款。' }}</span>
+                <span>{{ detailPayment.status === 'paid' ? '当前已完成模拟支付，可继续按原流程查看 智能导诊与问诊详情。' : '当前为演示版模拟收费，不接真实支付，点击按钮即可完成付款。' }}</span>
               </div>
               <el-tag :type="paymentStatusTagType(detailPayment)" effect="light">
                 {{ paymentStatusLabel(detailPayment) }}
@@ -568,7 +568,7 @@
               >
                 模拟支付
               </el-button>
-              <el-button plain @click="openTriageWorkspace(detailRecord.id)">打开 AI 导诊</el-button>
+              <el-button plain @click="openTriageWorkspace(detailRecord.id)">打开智能导诊</el-button>
             </div>
           </div>
 
@@ -757,7 +757,7 @@
               <el-button text type="primary" @click="openTriageWorkspace(detailRecord.id)">在独立工作区打开</el-button>
             </div>
             <div class="session-meta">
-              <span>Session {{ detailRecord.triageSession.sessionNo }}</span>
+              <span>会话编号 {{ detailRecord.triageSession.sessionNo }}</span>
               <span>{{ triageSessionStatusLabel(detailRecord.triageSession.status) }}</span>
               <span>{{ detailRecord.triageSession.messageCount || 0 }} messages</span>
             </div>
@@ -796,8 +796,8 @@
             <div class="triage-ai-composer">
               <div class="session-message-head">
                 <div>
-                  <strong>继续 AI 导诊</strong>
-                  <span>可继续补充症状变化、持续时间、体温或检查结果，AI 会继续追问并更新建议。</span>
+                  <strong>继续智能导诊</strong>
+                  <span>可继续补充症状变化、持续时间、体温或检查结果，智能会继续追问并更新建议。</span>
                 </div>
               </div>
               <el-input
@@ -818,7 +818,7 @@
                   :disabled="!canSendTriageAiMessage"
                   @click="sendTriageAiMessage"
                 >
-                  发送给 AI
+                  发送给智能导诊
                 </el-button>
               </div>
             </div>
@@ -925,7 +925,7 @@
           <div v-if="detailRecord.triageResult" class="result-panel">
             <div class="doctor-recommend-head">
               <strong>导诊结果归档</strong>
-              <span>保存本次导诊的最终推荐结果，便于后续复盘和 AI 训练使用</span>
+              <span>保存本次导诊的最终推荐结果，便于后续复盘和智能训练使用</span>
             </div>
             <div class="session-meta">
               <span>{{ detailRecord.triageResult.triageLevelName || '待评估' }}</span>
@@ -1061,7 +1061,7 @@
 
           <div v-if="detailRecord.aiComparison" class="result-panel compare-panel">
             <div class="doctor-recommend-head">
-              <strong>AI 建议采纳情况</strong>
+              <strong>智能建议采纳情况</strong>
               <span>{{ detailRecord.aiComparison.summary }}</span>
             </div>
             <div class="session-meta">
@@ -1072,7 +1072,7 @@
             </div>
             <div class="compare-grid">
               <article class="compare-card">
-                <strong>AI 建议</strong>
+                <strong>智能建议</strong>
                 <div class="compare-kv">
                   <label>病情等级</label>
                   <span>{{ detailRecord.aiComparison.aiConditionLevel ? conditionLevelLabel(detailRecord.aiComparison.aiConditionLevel) : '未提供' }}</span>
@@ -1114,7 +1114,7 @@
                   <span>{{ doctorFollowUpText(detailRecord.doctorConclusion) || '待医生判断' }}</span>
                 </div>
                 <div class="compare-kv">
-                  <label>AI 一致性</label>
+                  <label>智能一致性</label>
                   <span>{{ detailRecord.doctorConclusion ? aiConsistencyLabel(detailRecord.doctorConclusion.isConsistentWithAi) : '待医生判断' }}</span>
                 </div>
               </article>
@@ -1123,7 +1123,7 @@
               <article class="compare-item">
                 <div>
                   <strong>病情等级</strong>
-                  <p>AI：{{ detailRecord.aiComparison.aiConditionLevel ? conditionLevelLabel(detailRecord.aiComparison.aiConditionLevel) : '未提供' }}</p>
+                  <p>智能：{{ detailRecord.aiComparison.aiConditionLevel ? conditionLevelLabel(detailRecord.aiComparison.aiConditionLevel) : '未提供' }}</p>
                   <p>医生：{{ detailRecord.doctorConclusion?.conditionLevel ? conditionLevelLabel(detailRecord.doctorConclusion.conditionLevel) : '待医生判断' }}</p>
                 </div>
                 <span :class="['compare-badge', comparisonStatusClass(detailRecord.aiComparison.conditionLevelStatus)]">{{ comparisonStatusLabel(detailRecord.aiComparison.conditionLevelStatus) }}</span>
@@ -1131,7 +1131,7 @@
               <article class="compare-item">
                 <div>
                   <strong>处理去向</strong>
-                  <p>AI：{{ detailRecord.aiComparison.aiDisposition ? dispositionLabel(detailRecord.aiComparison.aiDisposition) : '未提供' }}</p>
+                  <p>智能：{{ detailRecord.aiComparison.aiDisposition ? dispositionLabel(detailRecord.aiComparison.aiDisposition) : '未提供' }}</p>
                   <p>医生：{{ detailRecord.doctorConclusion?.disposition ? dispositionLabel(detailRecord.doctorConclusion.disposition) : '待医生判断' }}</p>
                 </div>
                 <span :class="['compare-badge', comparisonStatusClass(detailRecord.aiComparison.dispositionStatus)]">{{ comparisonStatusLabel(detailRecord.aiComparison.dispositionStatus) }}</span>
@@ -1139,7 +1139,7 @@
               <article class="compare-item">
                 <div>
                   <strong>随访安排</strong>
-                  <p>AI：{{ detailRecord.aiComparison.aiFollowUpText || '未提供' }}</p>
+                  <p>智能：{{ detailRecord.aiComparison.aiFollowUpText || '未提供' }}</p>
                   <p>医生：{{ doctorFollowUpText(detailRecord.doctorConclusion) || '待医生判断' }}</p>
                 </div>
                 <span :class="['compare-badge', comparisonStatusClass(detailRecord.aiComparison.followUpStatus)]">{{ comparisonStatusLabel(detailRecord.aiComparison.followUpStatus) }}</span>
@@ -1309,7 +1309,7 @@
               <el-input
                 v-model="checkResultUpdateForm.reportName"
                 maxlength="100"
-                placeholder="填写报告名称，例如：血常规 / 胸部 CT / 病理报告"
+                placeholder="填写报告名称，例如：血常规 / 胸部影像检查 / 病理报告"
               />
               <el-date-picker
                 v-model="checkResultUpdateForm.reportDate"
@@ -1507,11 +1507,11 @@
             />
             <article v-if="latestPatientFollowUpUpdate" class="detail-answer-card">
               <div class="chip-row">
-                <span>Latest update {{ formatDate(latestPatientFollowUpUpdate.createTime) }}</span>
-                <span v-if="messageAttachments(latestPatientFollowUpUpdate).length">Images {{ messageAttachments(latestPatientFollowUpUpdate).length }}</span>
+                <span>最近更新 {{ formatDate(latestPatientFollowUpUpdate.createTime) }}</span>
+                <span v-if="messageAttachments(latestPatientFollowUpUpdate).length">图片 {{ messageAttachments(latestPatientFollowUpUpdate).length }}</span>
               </div>
               <div class="detail-answer-value">
-                <p>{{ latestPatientFollowUpUpdate.content || 'The latest recovery update only contains image attachments.' }}</p>
+                <p>{{ latestPatientFollowUpUpdate.content || '最近一条恢复更新仅包含图片附件。' }}</p>
               </div>
             </article>
             <div class="feedback-form followup-update-form">
@@ -1884,7 +1884,7 @@ const triageAiSendHint = computed(() => {
   if (!detailRecord.value?.triageSession) return '当前问诊还没有导诊会话。'
   if (detailRecord.value.triageActionType === 'emergency') return '当前已有高风险提示，如症状继续加重请优先线下就医。'
   if (detailRecord.value.triageActionType === 'offline') return '可以继续补充变化情况，但若不适明显加重仍建议优先线下就医。'
-  return 'AI 会基于已提交问诊资料和导诊历史继续分析。'
+  return '智能会基于已提交问诊资料和导诊历史继续分析。'
 })
 const canSendMessage = computed(() => !!detailRecord.value)
 const messageSendHint = computed(() => {
@@ -1976,7 +1976,7 @@ const conversationPendingNewMessageText = computed(() => {
 const patientJourneyLeadText = computed(() => {
   const record = detailRecord.value
   if (!record) return ''
-  if (isPendingPaymentRecord(record)) return '当前问诊已生成收费记录，建议先完成模拟支付，再继续查看 AI 导诊和后续沟通内容。'
+  if (isPendingPaymentRecord(record)) return '当前问诊已生成收费记录，建议先完成模拟支付，再继续查看 智能导诊和后续沟通内容。'
   const stage = recordProgressStage(record)
   if (stage === 'waiting_doctor') return '医生接手前，你仍可以继续补充症状变化、检查结果和相关图片资料。'
   if (recordHasUnreadDoctorReply(record)) return '医生刚有新回复，建议先查看本轮处理结果，再决定是否继续补充资料。'
@@ -2679,7 +2679,7 @@ function paymentChannelLabel(channel) {
 function paymentSummaryText(payment) {
   const record = normalizePayment(payment)
   if (!record) return '当前问诊尚未生成收费记录。'
-  if (record.amount <= 0) return '当前问诊无需额外支付，可直接继续后续 AI 导诊与医患沟通流程。'
+  if (record.amount <= 0) return '当前问诊无需额外支付，可直接继续后续 智能导诊与医患沟通流程。'
   if (record.status === 'paid') {
     const paidTimeText = record.paidTime ? `，支付时间 ${formatDate(record.paidTime)}` : ''
     return `本次问诊已完成模拟支付，金额 ${formatAmount(record.amount)}${paidTimeText}。`
@@ -2720,7 +2720,7 @@ function dispositionLabel(value) {
 }
 
 function aiConsistencyLabel(value) {
-  return value === 1 ? '与 AI 一致' : value === 0 ? '与 AI 不一致' : '未判断'
+  return value === 1 ? '与智能建议一致' : value === 0 ? '与智能建议不一致' : '未判断'
 }
 
 function doctorFollowUpText(conclusion) {
@@ -2875,7 +2875,7 @@ function submitConsultation() {
     answers
   }, () => {
     submitting.value = false
-    ElMessage.success('问诊资料提交成功，正在进入 AI 导诊工作区')
+    ElMessage.success('问诊资料提交成功，正在进入 智能导诊工作区')
     loadRecords((list) => {
       const latestRecord = list?.[0]
       if (latestRecord?.id) {
@@ -3196,7 +3196,7 @@ function sendTriageAiMessage() {
   if (!recordId || !detailRecord.value?.triageSession) return
   const content = `${triageAiDraft.content || ''}`.trim()
   if (!content) {
-    ElMessage.warning('请先补充想继续告诉 AI 的内容')
+    ElMessage.warning('请先补充想继续告诉智能导诊的内容')
     return
   }
 
@@ -3207,11 +3207,11 @@ function sendTriageAiMessage() {
   }, () => {
     triageAiSending.value = false
     resetTriageAiDraft()
-    ElMessage.success('AI 导诊已结合你的补充信息继续分析')
+    ElMessage.success('智能导诊已结合你的补充信息继续分析')
     refreshRecordDetail(recordId)
   }, (message) => {
     triageAiSending.value = false
-    ElMessage.warning(message || 'AI 导诊继续分析失败')
+    ElMessage.warning(message || '智能导诊继续分析失败')
   })
 }
 
@@ -4200,7 +4200,7 @@ function messageRoleLabel(value) {
     user: '用户',
     system: '系统',
     rule_engine: '规则引擎',
-    assistant: 'AI 导诊'
+    assistant: '智能导诊'
   }[value] || value || '-'
 }
 
@@ -4215,10 +4215,10 @@ function messageTypeLabel(value) {
     triage_result: '分诊结果',
     rule_summary: '规则摘要',
     rule_hit: '命中详情',
-    ai_triage_summary: 'AI 导诊建议',
-    ai_followup_questions: 'AI 建议补充',
+    ai_triage_summary: '智能导诊建议',
+    ai_followup_questions: '智能建议补充',
     ai_user_followup: '患者补充',
-    ai_chat_reply: 'AI 导诊回复'
+    ai_chat_reply: '智能导诊回复'
   }[value] || value || '-'
 }
 

@@ -2,13 +2,13 @@
   <div class="overview-page" v-loading="loading">
     <section class="hero-card">
       <div class="hero-copy">
-        <span class="section-tag">Patient Workbench</span>
+        <span class="section-tag">患者工作台</span>
         <h2>从提醒到导诊，再到医生处理，你的问诊进展都在这里</h2>
         <p>{{ heroSummary }}</p>
         <div class="hero-actions">
           <el-button type="primary" size="large" @click="router.push('/index/consultation')">发起问诊</el-button>
           <el-button size="large" @click="router.push('/index/reminder')">消息与提醒</el-button>
-          <el-button size="large" plain @click="router.push('/index/triage')">AI 导诊工作区</el-button>
+          <el-button size="large" plain @click="router.push('/index/triage')">智能导诊工作区</el-button>
         </div>
       </div>
 
@@ -21,7 +21,7 @@
         <article class="hero-metric hero-metric-accent">
           <span>档案覆盖</span>
           <strong>{{ historyCoverageText }}</strong>
-          <p>已为 {{ historyCoverageCount }} 位就诊人建立健康档案，可为 AI 导诊与医生接诊提供更完整上下文。</p>
+          <p>已为 {{ historyCoverageCount }} 位就诊人建立健康档案，可为 智能导诊与医生接诊提供更完整上下文。</p>
         </article>
       </div>
     </section>
@@ -114,32 +114,32 @@
 
         <div class="action-grid">
           <button type="button" class="action-card" @click="router.push('/index/consultation')">
-            <span class="action-kicker">Consultation</span>
+            <span class="action-kicker">在线问诊</span>
             <strong>发起问诊</strong>
-            <p>选择分类、填写资料，并提交进入 AI 导诊主链路。</p>
+            <p>选择分类、填写资料，并提交进入 智能导诊主链路。</p>
           </button>
           <button type="button" class="action-card" @click="router.push('/index/reminder')">
-            <span class="action-kicker">Reminder</span>
+            <span class="action-kicker">消息提醒</span>
             <strong>消息与提醒</strong>
             <p>查看医生新回复、待处理问诊与随访提醒。</p>
           </button>
           <button type="button" class="action-card" @click="router.push('/index/triage')">
-            <span class="action-kicker">AI Triage</span>
-            <strong>AI 导诊工作区</strong>
-            <p>集中查看 AI 导诊会话、结果归档和推荐医生。</p>
+            <span class="action-kicker">智能导诊</span>
+            <strong>智能导诊工作区</strong>
+            <p>集中查看 智能导诊会话、结果归档和推荐医生。</p>
           </button>
           <button type="button" class="action-card" @click="router.push('/index/health')">
-            <span class="action-kicker">Health</span>
+            <span class="action-kicker">健康档案</span>
             <strong>健康档案</strong>
             <p>补齐既往病史、过敏史和长期用药，提升导诊准确度。</p>
           </button>
           <button type="button" class="action-card" @click="router.push('/index/patient')">
-            <span class="action-kicker">Patient</span>
+            <span class="action-kicker">就诊人</span>
             <strong>就诊人管理</strong>
             <p>维护本人和家庭成员档案，作为问诊主体入口。</p>
           </button>
           <button type="button" class="action-card action-card-accent" @click="router.push('/index/profile')">
-            <span class="action-kicker">Profile</span>
+            <span class="action-kicker">账户设置</span>
             <strong>账户设置</strong>
             <p>维护邮箱、头像与登录资料，保证工作台信息完整。</p>
           </button>
@@ -152,7 +152,7 @@
         <div class="panel-head">
           <div>
             <h3>最近问诊</h3>
-            <p>最近提交或仍在推进中的问诊记录，可直接回到详情或 AI 导诊工作区继续处理。</p>
+            <p>最近提交或仍在推进中的问诊记录，可直接回到详情或 智能导诊工作区继续处理。</p>
           </div>
           <el-button text @click="router.push('/index/consultation')">查看全部问诊</el-button>
         </div>
@@ -175,7 +175,7 @@
             </div>
             <div class="recent-actions">
               <el-button text type="primary" @click="openConsultationRecord(item, reminderQuery(item))">查看详情</el-button>
-              <el-button text @click="openTriageWorkspace(item.id)">AI 导诊</el-button>
+              <el-button text @click="openTriageWorkspace(item.id)">智能导诊</el-button>
             </div>
           </article>
         </div>
@@ -293,12 +293,12 @@ const heroSummary = computed(() => {
     && pendingFollowUpCount.value <= 0) {
     return `当前有 ${pendingServiceFeedbackCount.value} 条问诊已完成医生处理，建议补充服务评分和问题是否解决。`
   }
-  if (!records.value.length) return '当前还没有问诊记录，可以先选择就诊人并发起一条问诊，系统会在提交后自动进入 AI 导诊主链路。'
+  if (!records.value.length) return '当前还没有问诊记录，可以先选择就诊人并发起一条问诊，系统会在提交后自动进入 智能导诊主链路。'
   if (overdueFollowUpCount.value > 0) return `当前有 ${overdueFollowUpCount.value} 条问诊已进入逾期随访，建议先进入提醒中心查看详情并继续跟进恢复情况。`
   if (unreadDoctorReplyCount.value > 0) return `医生刚回复了 ${unreadDoctorReplyCount.value} 条问诊，首页已经把它们归到待办区，适合优先回看并决定是否继续补充信息。`
   if (waitingDoctorHandleCount.value > 0) return `仍有 ${waitingDoctorHandleCount.value} 条问诊正在等待医生进一步处理，你可以继续补充症状变化、检查结果或恢复情况。`
   if (pendingFollowUpCount.value > 0) return `当前共有 ${pendingFollowUpCount.value} 条问诊处于待随访状态，适合按计划继续观察并记录恢复进展。`
-  return '当前问诊链路运行平稳，没有需要立即处理的待办。你可以继续补齐档案、发起新问诊，或回到 AI 导诊工作区查看历史会话。'
+  return '当前问诊链路运行平稳，没有需要立即处理的待办。你可以继续补齐档案、发起新问诊，或回到 智能导诊工作区查看历史会话。'
 })
 
 function loadData() {

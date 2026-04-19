@@ -2,7 +2,7 @@
   <div class="triage-case-page">
     <section class="helper-card">
       <p>
-        这里维护给 AI 导诊、推荐解释和运营复盘使用的内部案例。
+        这里维护给智能导诊、推荐解释和运营复盘使用的内部案例。
         与首页展示案例不同，这些内容强调主诉、症状摘要、分诊结论和风险等级等结构化信息。
       </p>
     </section>
@@ -234,7 +234,7 @@
             :rows="6"
             maxlength="5000"
             show-word-limit
-            placeholder="补充症状进展、伴随表现、既往处理、关键问诊要点等，供 AI 检索和复盘使用。"
+            placeholder="补充症状进展、伴随表现、既往处理、关键问诊要点等，供智能检索和复盘使用。"
           />
         </el-form-item>
 

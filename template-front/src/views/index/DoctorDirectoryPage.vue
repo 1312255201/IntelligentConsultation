@@ -41,7 +41,7 @@
           <span>可用排班：{{ item.availableScheduleCount || 0 }}</span>
         </div>
         <div class="doctor-actions">
-          <el-button plain @click="router.push('/index/triage')">先 AI 导诊</el-button>
+          <el-button plain @click="router.push('/index/triage')">先做智能导诊</el-button>
           <el-button type="primary" @click="router.push('/index/consultation')">发起问诊</el-button>
         </div>
       </article>
