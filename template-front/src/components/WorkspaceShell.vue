@@ -3,37 +3,66 @@
     <aside class="side-panel">
       <div class="brand-block">
         <div class="brand-mark">{{ brandMark }}</div>
-        <div>
+        <div class="brand-text">
           <div class="brand-title">{{ brandTitle }}</div>
           <div class="brand-subtitle">{{ brandSubtitle }}</div>
         </div>
       </div>
 
-      <el-menu
-        :default-active="route.path"
-        class="side-menu"
-        router
-      >
-        <el-menu-item
-          v-for="item in menuItems"
-          :key="item.index"
-          :index="item.index"
+      <el-scrollbar class="side-menu-container" wrap-class="scrollbar-wrap" view-class="scrollbar-view">
+        <el-menu
+          :default-active="route.path"
+          class="side-menu"
+          router
+          unique-opened
         >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <div class="menu-copy">
-            <span>{{ item.title }}</span>
-            <el-tag
-              v-if="menuBadgeCount(item) > 0"
-              :type="menuBadgeType(item)"
-              effect="dark"
-              size="small"
-              class="menu-count-tag"
-            >
-              {{ formatMenuCount(menuBadgeCount(item)) }}
-            </el-tag>
-          </div>
-        </el-menu-item>
-      </el-menu>
+          <template v-for="item in menuItems" :key="item.index">
+            <!-- 包含子菜单的项 -->
+            <el-sub-menu v-if="item.children && item.children.length > 0" :index="item.index">
+              <template #title>
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span>{{ item.title }}</span>
+              </template>
+              <el-menu-item
+                v-for="sub in item.children"
+                :key="sub.index"
+                :index="sub.index"
+              >
+                <el-icon><component :is="sub.icon" /></el-icon>
+                <div class="menu-copy">
+                  <span>{{ sub.title }}</span>
+                  <el-tag
+                    v-if="menuBadgeCount(sub) > 0"
+                    :type="menuBadgeType(sub)"
+                    effect="dark"
+                    size="small"
+                    class="menu-count-tag"
+                  >
+                    {{ formatMenuCount(menuBadgeCount(sub)) }}
+                  </el-tag>
+                </div>
+              </el-menu-item>
+            </el-sub-menu>
+
+            <!-- 无子菜单且直接路由的项 -->
+            <el-menu-item v-else :index="item.index">
+              <el-icon><component :is="item.icon" /></el-icon>
+              <div class="menu-copy">
+                <span>{{ item.title }}</span>
+                <el-tag
+                  v-if="menuBadgeCount(item) > 0"
+                  :type="menuBadgeType(item)"
+                  effect="dark"
+                  size="small"
+                  class="menu-count-tag"
+                >
+                  {{ formatMenuCount(menuBadgeCount(item)) }}
+                </el-tag>
+              </div>
+            </el-menu-item>
+          </template>
+        </el-menu>
+      </el-scrollbar>
 
       <div v-if="footerText" class="side-footer">
         {{ footerText }}
@@ -49,31 +78,34 @@
         </div>
 
         <div class="user-panel">
-          <el-avatar :size="46" :src="avatarUrl || undefined">
+          <el-avatar :size="48" :src="avatarUrl || undefined" class="user-avatar">
             {{ userInitial }}
           </el-avatar>
           <div class="user-text">
             <strong>{{ profile.username || 'Loading...' }}</strong>
             <span>{{ profile.email || 'Fetching user profile' }}</span>
           </div>
-          <el-tag v-if="profile.role" type="success" effect="light">
+          <el-tag v-if="profile.role" type="success" effect="light" round class="role-tag">
             {{ profile.role }}
           </el-tag>
-          <el-dropdown @command="handleCommand">
-            <el-button class="action-button" plain>
-              操作
-              <el-icon class="action-icon"><ArrowDown /></el-icon>
+          <el-dropdown @command="handleCommand" trigger="click">
+            <el-button class="action-button" plain round>
+              选项
+              <el-icon class="action-icon el-icon--right"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
-              <el-dropdown-menu>
+              <el-dropdown-menu class="custom-dropdown">
                 <el-dropdown-item
-                  v-for="item in menuItems"
+                  v-for="item in flatMenuItems"
                   :key="item.index"
                   :command="item.index"
                 >
+                  <el-icon v-if="item.icon"><component :is="item.icon" /></el-icon>
                   {{ item.title }}
                 </el-dropdown-item>
-                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                <el-dropdown-item command="logout" divided class="text-danger">
+                  <el-icon><Close /></el-icon>退出登录
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -83,7 +115,9 @@
       <main class="workspace-body">
         <router-view v-slot="{ Component }">
           <transition name="panel-fade" mode="out-in">
-            <component :is="Component" />
+            <div class="body-wrapper">
+              <component :is="Component" />
+            </div>
           </transition>
         </router-view>
       </main>
@@ -92,7 +126,7 @@
 </template>
 
 <script setup>
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -305,8 +339,20 @@ function refreshDoctorWorkspaceSummary(showLoading = false) {
   })
 }
 
+const flatMenuItems = computed(() => {
+  const result = []
+  props.menuItems.forEach(item => {
+    if (item.children && item.children.length > 0) {
+      result.push(...item.children)
+    } else {
+      result.push(item)
+    }
+  })
+  return result
+})
+
 const currentItem = computed(() => {
-  return props.menuItems.find(item => route.path === item.index) || props.menuItems[0]
+  return flatMenuItems.value.find(item => route.path.startsWith(item.index)) || flatMenuItems.value[0] || {}
 })
 
 const avatarUrl = computed(() => resolveImagePath(profile.avatar))
@@ -394,216 +440,255 @@ onMounted(() => {
 </script>
 
 <style scoped>
+:global(:root) {
+  --ws-bg: #F0F4F8;
+  --ws-panel: #FFFFFF;
+  --ws-border: #E2E8F0;
+  --ws-text: #1C274C;
+  --ws-muted: #64748B;
+  --ws-primary: #0265DC;
+  --ws-sidebar-bg: #0A1930;
+  --ws-sidebar-text: #8FA5C8;
+  --ws-sidebar-hover: rgba(255, 255, 255, 0.08);
+  --ws-sidebar-active-bg: #0265DC;
+  --ws-sidebar-active-text: #FFFFFF;
+  --ws-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
 .workspace-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 272px minmax(0, 1fr);
-  padding: 20px;
-  gap: 18px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  background-color: var(--ws-bg);
+  padding: 16px;
+  gap: 16px;
+  font-family: 'Inter', -apple-system, sans-serif;
+  box-sizing: border-box;
 }
 
+/* Sidebar Elements */
 .side-panel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px 18px;
-  border: 1px solid rgba(16, 57, 60, 0.08);
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(19, 73, 80, 0.92), rgba(19, 73, 80, 0.78));
-  color: #f3fbfb;
-  box-shadow: 0 20px 55px rgba(12, 45, 49, 0.2);
+  background: linear-gradient(180deg, #0A1930 0%, #112F5C 100%);
+  border-radius: 24px;
+  color: #fff;
+  box-shadow: 0 10px 40px rgba(10, 25, 48, 0.15);
+  overflow: hidden;
 }
 
 .brand-block {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 8px 6px 2px;
+  gap: 16px;
+  padding: 28px 24px 20px;
 }
 
 .brand-mark {
-  width: 50px;
-  height: 50px;
-  display: grid;
-  place-items: center;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #88e0d1, #f6d39a);
-  color: #0d4047;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.brand-title {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0265DC, #4A90E2);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 1px;
+  box-shadow: 0 8px 16px rgba(2, 101, 220, 0.3);
 }
 
-.brand-subtitle {
-  margin-top: 4px;
-  font-size: 12px;
-  color: rgba(243, 251, 251, 0.72);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.brand-text { display: flex; flex-direction: column; }
+.brand-title { font-size: 18px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.5px; }
+.brand-subtitle { font-size: 11px; margin-top: 4px; color: var(--ws-sidebar-text); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+
+.side-menu-container {
+  flex: 1;
+  padding: 0 12px;
 }
 
 .side-menu {
-  flex: 1;
-  border: none;
+  border-right: none;
   background: transparent;
 }
 
+.side-menu :deep(.el-menu) {
+  background-color: transparent !important;
+}
+
+.side-menu :deep(.el-sub-menu__title) {
+  border-radius: 12px;
+  color: var(--ws-sidebar-text);
+  margin-bottom: 4px;
+  height: 48px;
+  line-height: 48px;
+  transition: all 0.2s;
+}
+
 .side-menu :deep(.el-menu-item) {
-  margin-bottom: 8px;
-  border-radius: 16px;
-  color: rgba(243, 251, 251, 0.82);
+  border-radius: 12px;
+  color: var(--ws-sidebar-text);
+  margin-bottom: 4px;
+  height: 48px;
+  line-height: 48px;
+  transition: all 0.2s;
 }
 
-.menu-copy {
-  min-width: 0;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.menu-count-tag {
-  flex-shrink: 0;
-}
-
-.side-menu :deep(.el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.12);
+.side-menu :deep(.el-menu-item:hover),
+.side-menu :deep(.el-sub-menu__title:hover) {
+  background: var(--ws-sidebar-hover) !important;
   color: #ffffff;
 }
 
 .side-menu :deep(.el-menu-item.is-active) {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  background: var(--ws-sidebar-active-bg) !important;
+  color: var(--ws-sidebar-active-text);
   font-weight: 600;
+  box-shadow: 0 4px 12px rgba(2, 101, 220, 0.4);
+}
+
+.side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: #ffffff;
+}
+
+.side-menu :deep(.el-menu-item .el-icon),
+.side-menu :deep(.el-sub-menu__title .el-icon) {
+  font-size: 18px;
+  margin-right: 12px;
+}
+
+.menu-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .side-footer {
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(243, 251, 251, 0.75);
-  line-height: 1.7;
-  font-size: 13px;
+  padding: 24px;
+  font-size: 12px;
+  color: var(--ws-sidebar-text);
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Main Workspace Elements */
 .workspace-main {
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
+  min-width: 0;
 }
 
 .workspace-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
-  padding: 24px 28px;
-  border: 1px solid var(--app-border);
-  border-radius: 28px;
-  background: var(--app-panel);
-  box-shadow: var(--app-shadow);
-  backdrop-filter: blur(18px);
+  background: var(--ws-panel);
+  border-radius: 24px;
+  padding: 24px 32px;
+  box-shadow: var(--ws-shadow);
+  border: 1px solid var(--ws-border);
 }
 
 .page-kicker {
-  font-size: 12px;
-  letter-spacing: 0.16em;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  color: #5e8f92;
+  letter-spacing: 1.5px;
+  color: var(--ws-primary);
+  margin-bottom: 8px;
 }
 
 .page-meta h1 {
-  margin: 8px 0 10px;
-  font-size: 30px;
-  line-height: 1.1;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--ws-text);
+  margin: 0 0 6px 0;
 }
 
 .page-meta p {
+  font-size: 14px;
+  color: var(--ws-muted);
   margin: 0;
-  color: var(--app-muted);
 }
 
 .user-panel {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
+  gap: 16px;
+}
+
+.user-avatar {
+  border: 2px solid white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
 }
 
 .user-text {
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
-.user-text strong,
-.user-text span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.user-text strong {
+  font-size: 15px;
+  color: var(--ws-text);
 }
 
 .user-text span {
-  margin-top: 4px;
-  color: var(--app-muted);
   font-size: 13px;
+  color: var(--ws-muted);
+}
+
+.role-tag {
+  font-weight: 600;
 }
 
 .action-button {
-  border-radius: 14px;
-  padding-inline: 16px;
-}
-
-.action-icon {
-  margin-left: 6px;
+  border-color: var(--ws-border);
 }
 
 .workspace-body {
-  min-height: 0;
+  flex: 1;
+  background: var(--ws-panel);
+  border-radius: 24px;
+  box-shadow: var(--ws-shadow);
+  border: 1px solid var(--ws-border);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
+.body-wrapper {
+  padding: 32px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Transitions */
 .panel-fade-enter-active,
 .panel-fade-leave-active {
-  transition: all 0.24s ease;
+  transition: all 0.2s ease-out;
 }
 
 .panel-fade-enter-from,
 .panel-fade-leave-to {
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(8px);
 }
 
-@media (max-width: 1100px) {
-  .workspace-shell {
-    grid-template-columns: 1fr;
-  }
+.text-danger { color: #F56C6C; }
+.custom-dropdown .el-icon { margin-right: 8px; }
 
-  .side-panel {
-    gap: 14px;
-  }
+@media (max-width: 1024px) {
+  .workspace-shell { grid-template-columns: 240px minmax(0, 1fr); }
+  .workspace-header { padding: 20px; }
+  .body-wrapper { padding: 20px; }
 }
-
-@media (max-width: 760px) {
-  .workspace-shell {
-    padding: 12px;
-  }
-
-  .workspace-header {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 20px;
-  }
-
-  .user-panel {
-    width: 100%;
-    flex-wrap: wrap;
-  }
+@media (max-width: 768px) {
+  .workspace-shell { grid-template-columns: 1fr; }
+  .side-panel { display: none; /* simple mobile fallback, ideally add a drawer */ }
+  .user-text, .role-tag { display: none; }
 }
 </style>
