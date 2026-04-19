@@ -5,7 +5,7 @@
         <div class="brand">
           <div class="brand-mark">IC</div>
           <div>
-            <strong>智能问诊系统</strong>
+            <strong>智慧医疗问诊系统</strong>
             <span>Intelligent Consultation</span>
           </div>
         </div>

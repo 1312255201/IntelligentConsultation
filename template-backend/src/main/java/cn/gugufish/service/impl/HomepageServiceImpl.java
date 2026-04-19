@@ -72,9 +72,9 @@ public class HomepageServiceImpl implements HomepageService {
 
         HomepageConfig defaultConfig = new HomepageConfig(
                 CONFIG_ID,
-                "智能问诊系统",
+                "智慧问诊系统",
                 "提供专业、可靠、便捷的在线问诊与健康管理服务",
-                "欢迎访问智能问诊系统，在线咨询、医生推荐与健康管理服务已就绪。",
+                "欢迎访问智慧问诊系统，在线咨询、医生推荐与健康管理服务已就绪。",
                 "平台简介",
                 "系统支持科室展示、推荐医生、经典案例与后续智能问诊能力扩展，可作为首页内容配置的统一入口。",
                 "",

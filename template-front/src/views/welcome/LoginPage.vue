@@ -2,7 +2,7 @@
   <div class="auth-page">
     <div class="page-head">
       <h2>登录系统</h2>
-      <p>输入账号信息后进入智能问诊系统。</p>
+      <p>输入账号信息后进入智慧医疗问诊系统。</p>
     </div>
 
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">

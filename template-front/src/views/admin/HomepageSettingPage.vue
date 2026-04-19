@@ -43,7 +43,7 @@
                 <el-input
                   v-model="configForm.heroTitle"
                   maxlength="100"
-                  placeholder="例如：智能问诊系统"
+                  placeholder="例如：智慧医疗问诊系统"
                 />
               </el-form-item>
               <el-form-item label="首页副标题" prop="heroSubtitle">

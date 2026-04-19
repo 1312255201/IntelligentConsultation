@@ -1,7 +1,7 @@
 <template>
   <WorkspaceShell
     brand-mark="IC"
-    brand-title="智能问诊系统"
+    brand-title="智慧医疗问诊系统"
     brand-subtitle="Patient Workspace"
     page-kicker="Clinical Workspace"
     :footer-text="footerText"

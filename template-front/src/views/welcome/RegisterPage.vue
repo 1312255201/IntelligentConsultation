@@ -2,7 +2,7 @@
   <div class="auth-page">
     <div class="page-head">
       <h2>注册账号</h2>
-      <p>创建账号后即可进入智能问诊系统继续咨询与资料管理。</p>
+      <p>创建账号后即可进入智慧医疗问诊系统继续咨询与资料管理。</p>
     </div>
 
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @validate="onValidate">
