@@ -3,75 +3,150 @@ package cn.gugufish.service.impl;
 import cn.gugufish.ai.AiTriageAdvice;
 import cn.gugufish.ai.AiTriageContext;
 import cn.gugufish.ai.AiTriageProperties;
+import cn.gugufish.ai.advisor.MedicalLongTermMemoryAdvisor;
 import cn.gugufish.entity.dto.ConsultationRecord;
 import cn.gugufish.entity.dto.ConsultationRecordAnswer;
-import cn.gugufish.entity.dto.TriageMessage;
 import cn.gugufish.entity.vo.response.ConsultationRecommendDoctorVO;
 import cn.gugufish.service.AiTriageService;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.deepseek.DeepSeekChatModel;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.core.env.Environment;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * AI 导诊服务 — 基于 Spring AI Advisors API 的高阶重构版本。
+ *
+ * <h3>与旧版 AiTriageServiceImpl 的核心差异</h3>
+ * <table>
+ *   <tr><th>维度</th><th>旧版</th><th>新版（本类）</th></tr>
+ *   <tr><td>ChatClient 创建方式</td>
+ *       <td>每次请求 ChatClient.create(chatModel)</td>
+ *       <td>全局单例 ChatClient，构造时已织入 Advisor 链</td></tr>
+ *   <tr><td>多轮对话上下文</td>
+ *       <td>手动拼接历史消息到 User Prompt（最多 12 条）</td>
+ *       <td>MessageChatMemoryAdvisor 自动管理滑动窗口</td></tr>
+ *   <tr><td>跨会话记忆</td>
+ *       <td>无 → 过敏史等红旗信息会被遗忘</td>
+ *       <td>MedicalLongTermMemoryAdvisor 基于 Redis 持久化</td></tr>
+ *   <tr><td>防幻觉</td>
+ *       <td>仅靠 System Prompt 约束</td>
+ *       <td>QuestionAnswerAdvisor 检索医学知识库做 RAG 增强</td></tr>
+ * </table>
+ *
+ * <h3>激活方式</h3>
+ * <p>在 application.yml 中设置 {@code consultation.ai.triage.use-advisor=true} 启用本实现，
+ * 否则使用旧版 {@link AiTriageServiceImpl} 做兜底。</p>
+ */
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "consultation.ai.triage.use-advisor", havingValue = "false", matchIfMissing = true)
-public class AiTriageServiceImpl implements AiTriageService {
+@ConditionalOnProperty(name = "consultation.ai.triage.use-advisor", havingValue = "true")
+public class AdvancedAiTriageServiceImpl implements AiTriageService {
 
-    private final ObjectProvider<DeepSeekChatModel> chatModelProvider;
+    /**
+     * 全局配置好 Advisor 链的 ChatClient 单例。
+     * 由 AiAdvisorConfiguration 通过 Builder 模式组装：
+     *   Advisor 链 = LongTermMemory(10) → ChatMemory(100) → RAG(200) → LLM
+     */
+    private final ChatClient advisorChatClient;
+
     private final AiTriageProperties properties;
     private final Environment environment;
 
-    public AiTriageServiceImpl(ObjectProvider<DeepSeekChatModel> chatModelProvider,
-                               AiTriageProperties properties,
-                               Environment environment) {
-        this.chatModelProvider = chatModelProvider;
+    /**
+     * 注入方式说明：
+     * - advisorChatClientProvider：从 AiAdvisorConfiguration 注入的全局 ChatClient
+     *   （使用 ObjectProvider 避免 DeepSeek 未配置时启动失败）
+     */
+    public AdvancedAiTriageServiceImpl(
+            ObjectProvider<ChatClient> advisorChatClientProvider,
+            AiTriageProperties properties,
+            Environment environment) {
+        this.advisorChatClient = advisorChatClientProvider.getIfAvailable();
         this.properties = properties;
         this.environment = environment;
+    }
+
+    @PostConstruct
+    public void logAvailabilityAtStartup() {
+        boolean triageEnabled = properties.isEnabled();
+        boolean apiKeyConfigured = hasApiKey();
+        boolean chatClientReady = advisorChatClient != null;
+        if (triageEnabled && apiKeyConfigured && chatClientReady) {
+            log.info("AI triage advisor pipeline is ready: triageEnabled={}, apiKeyConfigured={}, advisorChatClientReady={}",
+                    triageEnabled, apiKeyConfigured, true);
+            return;
+        }
+        log.warn("AI triage advisor pipeline is not ready: triageEnabled={}, apiKeyConfigured={}, advisorChatClientReady={}",
+                triageEnabled, apiKeyConfigured, chatClientReady);
     }
 
     @Override
     public boolean isAvailable() {
         return properties.isEnabled()
                 && hasApiKey()
-                && chatModelProvider.getIfAvailable() != null;
+                && advisorChatClient != null;
     }
+
+    // ==================== 初次导诊 ====================
 
     @Override
     public AiTriageAdvice generateInitialAdvice(AiTriageContext context) {
         if (context == null || context.getRecord() == null || !isAvailable()) return null;
 
         try {
-            DeepSeekChatModel chatModel = chatModelProvider.getIfAvailable();
-            if (chatModel == null) return null;
+            // conversationId 格式：triage-{问诊ID}，确保同一问诊单共享上下文
+            String conversationId = "triage-" + context.getRecord().getId();
+            // patientId 用于长期记忆跨会话召回
+            String patientId = resolvePatientId(context.getRecord());
 
-            ChatClient chatClient = ChatClient.create(chatModel);
-            AiTriageAdvice advice = chatClient.prompt()
+            /*
+             * 关键改动：不再 ChatClient.create(chatModel).prompt()...
+             * 而是直接使用已织入 Advisor 链的 advisorChatClient。
+             *
+             * .advisors() 在运行时传入动态参数：
+             *   - CONVERSATION_ID  → 短期记忆按此 ID 隔离不同问诊单
+             *   - PATIENT_ID_KEY   → 长期记忆按此 ID 读取该患者历史关键事实
+             *
+             * 执行流程（自动）：
+             *   1) MedicalLongTermMemoryAdvisor.before → 从 Redis 读取过敏史等，注入 SystemMessage
+             *   2) MessageChatMemoryAdvisor.before     → 从内存读取本问诊的历史对话，注入消息列表
+             *   3) QuestionAnswerAdvisor.before        → 用 userPrompt 检索向量库，把匹配的医学知识拼入 context
+             *   4) DeepSeek LLM 调用
+             *   5) QuestionAnswerAdvisor.after          → 透传
+             *   6) MessageChatMemoryAdvisor.after       → 把本轮 user+assistant 消息存入滑动窗口
+             *   7) MedicalLongTermMemoryAdvisor.after    → 从响应中提取过敏/高风险事实，写回 Redis
+             */
+            AiTriageAdvice advice = advisorChatClient.prompt()
                     .system(buildSystemPrompt())
                     .user(buildUserPrompt(context))
+                    .advisors(advisor -> advisor
+                            .param(ChatMemory.CONVERSATION_ID, conversationId)
+                            .param(MedicalLongTermMemoryAdvisor.PATIENT_ID_KEY, patientId)
+                    )
                     .call()
                     .entity(AiTriageAdvice.class);
+
             return normalizeAdvice(advice, context);
         } catch (Exception exception) {
             ConsultationRecord record = context.getRecord();
-            log.warn("AI triage generation skipped for consultation {} because DeepSeek call failed: {}",
+            log.warn("AI triage generation skipped for consultation {} because call failed: {}",
                     record == null ? null : record.getId(),
                     exception.getMessage());
             return null;
         }
     }
+
+    // ==================== 多轮继续对话 ====================
 
     @Override
     public AiTriageAdvice continueConversation(AiTriageContext context) {
@@ -79,29 +154,61 @@ public class AiTriageServiceImpl implements AiTriageService {
         if (!StringUtils.hasText(context.getUserMessage())) return null;
 
         try {
-            DeepSeekChatModel chatModel = chatModelProvider.getIfAvailable();
-            if (chatModel == null) return null;
+            String conversationId = "triage-" + context.getRecord().getId();
+            String patientId = resolvePatientId(context.getRecord());
 
-            ChatClient chatClient = ChatClient.create(chatModel);
-            AiTriageAdvice advice = chatClient.prompt()
+            /*
+             * 与旧版最大的区别：
+             *
+             * 旧版需要手动拼接 messageHistory（最多 12 条截断），历史一长就丢失上下文。
+             * 新版由 MessageChatMemoryAdvisor 自动管理滑动窗口（默认 20 条），
+             * System Message 始终保留，用户/助手消息按 FIFO 淘汰。
+             *
+             * 同时 QuestionAnswerAdvisor 会自动提取用户消息中的关键词，
+             * 从医学知识库检索相关指南文档，拼入 Prompt context，
+             * 约束 LLM 不能脱离医学事实凭空编造诊断建议。
+             *
+             * 此外注意 buildConversationUserPrompt 不再手动拼接 triageMessages，
+             * 因为 Advisor 已经自动管理对话历史了。
+             */
+            AiTriageAdvice advice = advisorChatClient.prompt()
                     .system(buildConversationSystemPrompt())
                     .user(buildConversationUserPrompt(context))
+                    .advisors(advisor -> advisor
+                            .param(ChatMemory.CONVERSATION_ID, conversationId)
+                            .param(MedicalLongTermMemoryAdvisor.PATIENT_ID_KEY, patientId)
+                    )
                     .call()
                     .entity(AiTriageAdvice.class);
+
             return normalizeAdvice(advice, context);
         } catch (Exception exception) {
             ConsultationRecord record = context.getRecord();
-            log.warn("AI triage conversation skipped for consultation {} because DeepSeek call failed: {}",
+            log.warn("AI triage conversation skipped for consultation {} because call failed: {}",
                     record == null ? null : record.getId(),
                     exception.getMessage());
             return null;
         }
     }
 
+    // ==================== 患者 ID 解析（用于长期记忆 Redis key） ====================
+
+    private String resolvePatientId(ConsultationRecord record) {
+        // 优先用就诊人姓名的 hashCode 作为长期记忆 key
+        // 实际生产环境建议替换为患者的唯一业务 ID
+        if (record.getPatientName() != null) {
+            return "patient-" + record.getPatientName().hashCode();
+        }
+        return "patient-" + record.getId();
+    }
+
     private boolean hasApiKey() {
         return StringUtils.hasText(environment.getProperty("spring.ai.deepseek.api-key"))
                 || StringUtils.hasText(environment.getProperty("spring.ai.deepseek.chat.api-key"));
     }
+
+    // ==================== System Prompt ====================
+    // 相比旧版新增了第 6、7 条规则，用于引导 LLM 正确使用 Advisor 注入的额外上下文
 
     private String buildSystemPrompt() {
         return """
@@ -114,6 +221,8 @@ public class AiTriageServiceImpl implements AiTriageService {
                 3. 推荐医生时，只能从系统提供的候选医生中选择或说明没有足够依据。
                 4. 输出重点是导诊总结、风险提醒、就诊方式建议、候选医生解释和建议补充问题。
                 5. 输出应简洁、专业、可解释，适合直接展示在导诊记录中。
+                6. 如果系统提供了"患者长期医学记忆"，你必须将其中的过敏史和红旗症状纳入分析，不可忽略。
+                7. 如果系统提供了"相关医学知识参考"，请基于这些参考资料约束你的建议范围，不要超越参考资料给出无根据的诊疗建议。
                 """;
     }
 
@@ -127,8 +236,12 @@ public class AiTriageServiceImpl implements AiTriageService {
                 3. 如果出现明显高风险，请明确建议线下就医或医生尽快接管。
                 4. 推荐医生时只能从候选医生中选择。
                 5. 你的输出重点是继续导诊，不要重复长篇免责声明。
+                6. 如果系统注入了患者的长期医学记忆（如过敏史），你必须在回复中体现对这些信息的考量。
+                7. 基于系统提供的医学知识参考材料回答，不要超出参考范围做主观臆断。
                 """;
     }
+
+    // ==================== User Prompt（保持原有结构化格式） ====================
 
     private String buildUserPrompt(AiTriageContext context) {
         ConsultationRecord record = context.getRecord();
@@ -215,23 +328,13 @@ public class AiTriageServiceImpl implements AiTriageService {
         ConsultationRecord record = context.getRecord();
         List<ConsultationRecordAnswer> answers = context.getAnswers() == null ? List.of() : context.getAnswers();
         List<ConsultationRecommendDoctorVO> doctors = context.getDoctorCandidates() == null ? List.of() : context.getDoctorCandidates();
-        List<TriageMessage> messages = context.getTriageMessages() == null ? List.of() : context.getTriageMessages();
+        // 注意：不再手动拼接 triageMessages / messageHistory
+        // MessageChatMemoryAdvisor 已自动管理对话滑动窗口
 
         String answerSummary = answers.stream()
                 .filter(item -> StringUtils.hasText(item.getFieldValue()))
                 .map(item -> item.getFieldLabel() + "：" + abbreviate(displayAnswer(item), 120))
                 .limit(12)
-                .collect(Collectors.joining("\n"));
-
-        String messageHistory = messages.stream()
-                .sorted((left, right) -> {
-                    int leftSort = left.getSort() == null ? 0 : left.getSort();
-                    int rightSort = right.getSort() == null ? 0 : right.getSort();
-                    return Integer.compare(leftSort, rightSort);
-                })
-                .skip(Math.max(messages.size() - 12, 0))
-                .map(item -> "[" + roleLabel(item.getRoleType()) + "/" + safeText(item.getMessageType(), "-") + "] "
-                        + safeText(item.getContent(), "-"))
                 .collect(Collectors.joining("\n"));
 
         String doctorSummary = doctors.stream()
@@ -266,9 +369,6 @@ public class AiTriageServiceImpl implements AiTriageService {
                 问诊答案摘要：
                 %s
 
-                导诊历史消息：
-                %s
-
                 当前候选医生：
                 %s
 
@@ -289,11 +389,12 @@ public class AiTriageServiceImpl implements AiTriageService {
                 safeText(record.getChiefComplaint(), "暂无主诉"),
                 safeText(record.getHealthSummary(), "暂无健康摘要"),
                 safeText(answerSummary, "暂无问诊答案"),
-                safeText(messageHistory, "暂无导诊历史"),
                 safeText(doctorSummary, "暂无候选医生"),
                 safeText(context.getUserMessage(), "暂无补充内容")
         );
     }
+
+    // ==================== 规范化逻辑（与原 AiTriageServiceImpl 完全一致） ====================
 
     private AiTriageAdvice normalizeAdvice(AiTriageAdvice advice, AiTriageContext context) {
         if (advice == null) return null;
@@ -374,16 +475,6 @@ public class AiTriageServiceImpl implements AiTriageService {
             return "1".equals(answer.getFieldValue()) ? "是" : "否";
         }
         return answer.getFieldValue();
-    }
-
-    private String roleLabel(String roleType) {
-        return switch (roleType == null ? "" : roleType.toLowerCase()) {
-            case "user" -> "患者";
-            case "assistant" -> "AI";
-            case "rule_engine" -> "规则";
-            case "system" -> "系统";
-            default -> roleType;
-        };
     }
 
     private String safeText(String value, String fallback) {

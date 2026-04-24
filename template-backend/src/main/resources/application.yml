@@ -9,15 +9,28 @@ spring:
     username: temlate@163.com
     password: temlate
   ai:
+    model:
+      # Spring AI 1.1.x 起，Embedding 自动配置由顶层属性控制。
+      # 设为 ollama 后，才会稳定创建 OllamaEmbeddingModel Bean。
+      embedding: ${SPRING_AI_MODEL_EMBEDDING:ollama}
     deepseek:
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
       api-key: ${DEEPSEEK_API_KEY:qwq}
       chat:
-        enabled: ${DEEPSEEK_ENABLED:false}
+        enabled: ${DEEPSEEK_ENABLED:true}
         options:
           model: ${DEEPSEEK_MODEL:deepseek-chat}
           temperature: ${DEEPSEEK_TEMPERATURE:0.2}
           max-tokens: ${DEEPSEEK_MAX_TOKENS:1200}
+    # ---------- Ollama Embedding（本地部署，用于 RAG 向量化） ----------
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        enabled: false
+      embedding:
+        # spring.ai.ollama.embedding.enabled 在 Spring AI 1.1.x 中已移除，不再作为开关生效。
+        options:
+          model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
   rabbitmq:
     addresses: localhost
     username: admin
@@ -59,3 +72,19 @@ consultation:
       enabled: ${CONSULTATION_AI_TRIAGE_ENABLED:true}
       prompt-version: ${CONSULTATION_AI_TRIAGE_PROMPT_VERSION:deepseek-triage-v1}
       doctor-candidate-limit: ${CONSULTATION_AI_TRIAGE_DOCTOR_LIMIT:3}
+      # 设为 true 启用 Advisor 链重构版（AdvancedAiTriageServiceImpl）
+      use-advisor: ${CONSULTATION_AI_TRIAGE_USE_ADVISOR:true}
+    # ---------- Advisor 链子系统配置 ----------
+    advisor:
+      # 短期记忆滑动窗口大小（消息条数）
+      memory-window-size: ${AI_MEMORY_WINDOW_SIZE:20}
+      # 长期记忆 Redis key 前缀
+      long-term-memory-prefix: ${AI_LONG_TERM_MEMORY_PREFIX:ai:ltm:patient:}
+      # 长期记忆 Redis 过期时间（天）
+      long-term-memory-ttl-days: ${AI_LONG_TERM_MEMORY_TTL_DAYS:180}
+      # RAG 检索 Top-K
+      rag-top-k: ${AI_RAG_TOP_K:4}
+      # RAG 相似度阈值
+      rag-similarity-threshold: ${AI_RAG_SIMILARITY_THRESHOLD:0.72}
+      # 医学知识库文件路径
+      knowledge-base-path: ${AI_KNOWLEDGE_BASE_PATH:classpath:medical-knowledge/}
