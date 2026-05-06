@@ -33,13 +33,16 @@ public class AiTriageServiceImpl implements AiTriageService {
     private final ObjectProvider<DeepSeekChatModel> chatModelProvider;
     private final AiTriageProperties properties;
     private final Environment environment;
+    private final ConsultationDepartmentRoutingService consultationDepartmentRoutingService;
 
     public AiTriageServiceImpl(ObjectProvider<DeepSeekChatModel> chatModelProvider,
                                AiTriageProperties properties,
-                               Environment environment) {
+                               Environment environment,
+                               ConsultationDepartmentRoutingService consultationDepartmentRoutingService) {
         this.chatModelProvider = chatModelProvider;
         this.properties = properties;
         this.environment = environment;
+        this.consultationDepartmentRoutingService = consultationDepartmentRoutingService;
     }
 
     @Override
@@ -158,6 +161,7 @@ public class AiTriageServiceImpl implements AiTriageService {
                     return "- " + String.join("；", segments);
                 })
                 .collect(Collectors.joining("\n"));
+        String departmentGuidance = consultationDepartmentRoutingService.buildDepartmentSelectionGuidance(record);
 
         return """
                 请基于以下问诊资料生成一份结构化 AI 导诊补充建议。
@@ -187,9 +191,13 @@ public class AiTriageServiceImpl implements AiTriageService {
                 当前候选医生：
                 %s
 
+                科室判断要求：
+                %s
+
                 请注意：
                 - 如果存在高风险，请把 suggestOfflineImmediately 设为 1，并把 shouldEscalateToHuman 设为 1。
                 - recommendedVisitType 建议使用 offline、online、followup、emergency 之一。
+                - recommendedDepartmentName 必须返回项目中真实存在的科室名称；如果无法判断更合适的专科，请返回“全科门诊”。
                 - confidenceScore 使用 0 到 1 之间的小数。
                 - nextQuestions 最多给 3 条。
                 - riskFlags 最多给 5 条。
@@ -207,7 +215,8 @@ public class AiTriageServiceImpl implements AiTriageService {
                 safeText(record.getTriageSuggestion(), "暂无规则建议"),
                 safeText(record.getTriageRuleSummary(), "暂无风险摘要"),
                 safeText(answerSummary, "暂无补充答案"),
-                safeText(doctorSummary, "暂无候选医生")
+                safeText(doctorSummary, "暂无候选医生"),
+                safeText(departmentGuidance, "如能判断更合适的目标科室，请在 recommendedDepartmentName 中返回系统真实科室名称。")
         );
     }
 
@@ -245,6 +254,7 @@ public class AiTriageServiceImpl implements AiTriageService {
                     return "- " + String.join("；", segments);
                 })
                 .collect(Collectors.joining("\n"));
+        String departmentGuidance = consultationDepartmentRoutingService.buildDepartmentSelectionGuidance(record);
 
         return """
                 请继续这段导诊会话，并根据患者刚补充的内容给出下一轮导诊回复。
@@ -275,10 +285,14 @@ public class AiTriageServiceImpl implements AiTriageService {
                 患者刚补充的内容：
                 %s
 
+                科室判断要求：
+                %s
+
                 输出要求：
                 - reply 要直接回答患者，并结合当前导诊状态说明下一步建议。
                 - 如果当前资料足够，可减少 nextQuestions。
                 - 如果风险提高，请同步更新 riskFlags、recommendedVisitType、shouldEscalateToHuman、suggestOfflineImmediately。
+                - recommendedDepartmentName 必须使用项目真实科室名称；如果仍然无法判断更合适的专科，请返回“全科门诊”。
                 """.formatted(
                 safeNumber(record.getId()),
                 safeText(record.getPatientName(), "-"),
@@ -291,7 +305,8 @@ public class AiTriageServiceImpl implements AiTriageService {
                 safeText(answerSummary, "暂无问诊答案"),
                 safeText(messageHistory, "暂无导诊历史"),
                 safeText(doctorSummary, "暂无候选医生"),
-                safeText(context.getUserMessage(), "暂无补充内容")
+                safeText(context.getUserMessage(), "暂无补充内容"),
+                safeText(departmentGuidance, "如能判断更合适的目标科室，请在 recommendedDepartmentName 中返回系统真实科室名称。")
         );
     }
 

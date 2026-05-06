@@ -1,20 +1,23 @@
 package cn.gugufish.controller;
 
 import cn.gugufish.entity.RestBean;
+import cn.gugufish.entity.vo.request.ConsultationIntakeRouteRequestVO;
 import cn.gugufish.entity.vo.request.ConsultationMedicationFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationMessageSendVO;
 import cn.gugufish.entity.vo.request.ConsultationPaymentMockPayVO;
-import cn.gugufish.entity.vo.request.ConsultationReportFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationRecordCreateVO;
+import cn.gugufish.entity.vo.request.ConsultationReportFeedbackSubmitVO;
 import cn.gugufish.entity.vo.request.ConsultationServiceFeedbackSubmitVO;
-import cn.gugufish.entity.vo.request.ConsultationTriageMessageSendVO;
 import cn.gugufish.entity.vo.request.ConsultationTriageFeedbackSubmitVO;
-import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
+import cn.gugufish.entity.vo.request.ConsultationTriageMessageSendVO;
 import cn.gugufish.entity.vo.response.ConsultationEntryCategoryVO;
+import cn.gugufish.entity.vo.response.ConsultationFeedbackOptionsVO;
+import cn.gugufish.entity.vo.response.ConsultationIntakeRouteVO;
 import cn.gugufish.entity.vo.response.ConsultationIntakeTemplateVO;
 import cn.gugufish.entity.vo.response.ConsultationMessageVO;
 import cn.gugufish.entity.vo.response.ConsultationPaymentVO;
 import cn.gugufish.entity.vo.response.ConsultationRecordVO;
+import cn.gugufish.service.ConsultationIntakeRoutingService;
 import cn.gugufish.service.ConsultationMessageService;
 import cn.gugufish.service.ConsultationPaymentService;
 import cn.gugufish.service.ConsultationService;
@@ -46,7 +49,7 @@ import java.util.function.Supplier;
 @Validated
 @RestController
 @RequestMapping("/api/user/consultation")
-@Tag(name = "用户发起问诊", description = "用户选择问诊分类、装配前置模板并提交问诊资料")
+@Tag(name = "用户发起问诊", description = "用户问诊入口、智能分诊交互、问诊记录及诊后反馈")
 public class ConsultationController {
 
     private static final MediaType TEXT_MEDIA_TYPE = MediaType.parseMediaType("text/plain;charset=UTF-8");
@@ -64,8 +67,11 @@ public class ConsultationController {
     @Resource
     ConsultationTriageChatService consultationTriageChatService;
 
+    @Resource
+    ConsultationIntakeRoutingService consultationIntakeRoutingService;
+
     @GetMapping("/category/list")
-    @Operation(summary = "查询可发起的问诊分类列表")
+    @Operation(summary = "查询可用问诊分类")
     public RestBean<List<ConsultationEntryCategoryVO>> listCategories() {
         return RestBean.success(consultationService.listEntryCategories());
     }
@@ -75,6 +81,14 @@ public class ConsultationController {
     public RestBean<ConsultationIntakeTemplateVO> template(@RequestParam @Positive int categoryId) {
         ConsultationIntakeTemplateVO template = consultationService.defaultTemplateDetail(categoryId);
         return template == null ? RestBean.failure(404, "当前问诊分类暂无可用模板") : RestBean.success(template);
+    }
+
+    @PostMapping("/intake/route")
+    @Operation(summary = "根据症状描述智能匹配问诊分类与模板")
+    public RestBean<ConsultationIntakeRouteVO> routeIntake(@RequestAttribute(Const.ATTR_USER_ID) int id,
+                                                           @RequestBody @Valid ConsultationIntakeRouteRequestVO vo) {
+        ConsultationIntakeRouteVO route = consultationIntakeRoutingService.route(id, vo);
+        return route == null ? RestBean.failure(404, "当前暂无可用的问诊入口") : RestBean.success(route);
     }
 
     @GetMapping("/record/list")
@@ -101,7 +115,7 @@ public class ConsultationController {
         }
         String content = record.getArchiveSummary() == null ? null : record.getArchiveSummary().getPlainText();
         if (content == null || content.isBlank()) {
-            return ResponseEntity.badRequest().body(RestBean.failure(400, "当前问诊暂未生成可导出的归档摘要"));
+            return ResponseEntity.badRequest().body(RestBean.failure(400, "当前问诊尚未生成可导出的归档摘要"));
         }
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + archiveFileName(record) + "\"")
@@ -125,7 +139,7 @@ public class ConsultationController {
     }
 
     @PostMapping("/triage/message/send")
-    @Operation(summary = "继续与 AI 导诊交互")
+    @Operation(summary = "继续进行 AI 导诊交互")
     public RestBean<Void> sendTriageMessage(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                             @RequestBody @Valid ConsultationTriageMessageSendVO vo) {
         return this.messageHandle(() -> consultationTriageChatService.sendUserMessage(id, vo));
@@ -139,7 +153,7 @@ public class ConsultationController {
     }
 
     @PostMapping("/payment/mock-pay")
-    @Operation(summary = "妯℃嫙鏀粯闂瘖璐圭敤")
+    @Operation(summary = "模拟支付问诊订单")
     public RestBean<ConsultationPaymentVO> mockPay(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                                    @RequestBody @Valid ConsultationPaymentMockPayVO vo) {
         String message = consultationService.mockPay(id, vo.getRecordId());
@@ -147,7 +161,7 @@ public class ConsultationController {
             return RestBean.failure(400, message);
         }
         ConsultationPaymentVO payment = consultationPaymentService.detailByConsultationId(vo.getRecordId());
-        return payment == null ? RestBean.failure(404, "鏀惰垂璁板綍涓嶅瓨鍦?") : RestBean.success(payment);
+        return payment == null ? RestBean.failure(404, "支付记录不存在") : RestBean.success(payment);
     }
 
     @GetMapping("/feedback/options")
@@ -164,14 +178,14 @@ public class ConsultationController {
     }
 
     @PostMapping("/report-feedback/submit")
-    @Operation(summary = "提交结构化检查报告反馈")
+    @Operation(summary = "提交检查报告反馈")
     public RestBean<Void> submitReportFeedback(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                                @RequestBody @Valid ConsultationReportFeedbackSubmitVO vo) {
         return this.messageHandle(() -> consultationService.submitReportFeedback(id, vo));
     }
 
     @PostMapping("/medication-feedback/submit")
-    @Operation(summary = "提交用药反馈")
+    @Operation(summary = "提交用药效果反馈")
     public RestBean<Void> submitMedicationFeedback(@RequestAttribute(Const.ATTR_USER_ID) int id,
                                                    @RequestBody @Valid ConsultationMedicationFeedbackSubmitVO vo) {
         return this.messageHandle(() -> consultationService.submitMedicationFeedback(id, vo));

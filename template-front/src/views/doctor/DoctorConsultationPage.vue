@@ -244,6 +244,79 @@
             </div>
           </section>
 
+          <section v-if="doctorWorkflowSteps.length" class="card panel workflow-step-panel">
+            <div class="head">
+              <div>
+                <h3>接诊流程</h3>
+                <p>{{ doctorWorkflowLeadText }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ doctorWorkflowProgressText }}</span>
+                <span v-if="doctorWorkflowPrimaryStep">当前推荐 {{ doctorWorkflowPrimaryStep.title }}</span>
+              </div>
+            </div>
+            <div class="workflow-step-list">
+              <button
+                v-for="item in doctorWorkflowSteps"
+                :key="item.key"
+                type="button"
+                :class="['workflow-step-item', `is-${item.state}`, { 'is-active': doctorWorkflowPrimaryStep?.key === item.key }]"
+                @click="openWorkflowStep(item)"
+              >
+                <span class="workflow-step-index">{{ item.index }}</span>
+                <div class="workflow-step-copy">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.status }}</span>
+                  <p>{{ item.description }}</p>
+                </div>
+                <span class="workflow-step-action">{{ item.actionLabel }}</span>
+              </button>
+            </div>
+          </section>
+
+          <section v-if="doctorJourneyStages.length" class="card panel journey-stage-panel">
+            <div class="head">
+              <div>
+                <h3>阶段工作台</h3>
+                <p>{{ doctorJourneyStageDescription }}</p>
+              </div>
+              <div class="head-actions">
+                <div class="detail-view-mode-switch">
+                  <button
+                    type="button"
+                    :class="['detail-view-mode-button', { 'is-active': detailViewMode === 'guided' }]"
+                    @click="detailViewMode = 'guided'"
+                  >
+                    引导视图
+                  </button>
+                  <button
+                    type="button"
+                    :class="['detail-view-mode-button', { 'is-active': detailViewMode === 'all' }]"
+                    @click="detailViewMode = 'all'"
+                  >
+                    完整视图
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="doctor-journey-stage-list">
+              <button
+                v-for="stage in doctorJourneyStages"
+                :key="stage.key"
+                type="button"
+                :class="['doctor-journey-stage-button', { 'is-active': doctorJourneyStage === stage.key }]"
+                @click="openDoctorJourneyStage(stage.key)"
+              >
+                <strong>{{ stage.title }}</strong>
+                <span>{{ stage.shortHint }}</span>
+              </button>
+            </div>
+            <div class="doctor-journey-stage-note">
+              <strong>{{ activeDoctorJourneyStageTitle }}</strong>
+              <p>{{ activeDoctorJourneyStageHint }}</p>
+            </div>
+          </section>
+
           <section v-if="detailDraftNoticeText" class="card panel draft-recovery-panel">
             <div class="head">
               <div>
@@ -262,6 +335,7 @@
 
           <section
             v-if="detailArchiveSummary"
+            v-show="showDetailSection('archive')"
             ref="detailArchivePanelRef"
             :class="['card', 'panel', 'archive-panel', { 'focus-detail-panel': focusedDetailSection === 'archive' }]"
           >
@@ -337,6 +411,7 @@
 
           <section
             v-if="patientActionCards.length"
+            v-show="showDetailSection('patient_action')"
             ref="patientActionPanelRef"
             :class="['card', 'panel', 'patient-action-panel', { 'focus-detail-panel': focusedDetailSection === 'patient_action' }]"
           >
@@ -373,6 +448,7 @@
 
           <section
             v-if="workflowAssistantItems.length"
+            v-show="showDetailSection('assistant')"
             ref="workflowAssistantPanelRef"
             :class="['card', 'panel', 'workflow-assistant-panel', { 'focus-detail-panel': focusedDetailSection === 'assistant' }]"
           >
@@ -425,7 +501,7 @@
             </div>
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('assignment')" class="card panel">
               <div class="head">
                 <div>
                 <h3>认领信息</h3>
@@ -445,7 +521,7 @@
             <p v-if="claimContinuationHint" class="copy">{{ claimContinuationHint }}</p>
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('dispatch')" class="card panel">
             <div class="head">
               <div>
                 <h3>智能分配</h3>
@@ -467,13 +543,13 @@
             </div>
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('chief')" class="card panel">
             <h3>主诉与健康摘要</h3>
             <p class="copy">{{ detail.chiefComplaint || '暂无主诉信息' }}</p>
             <p class="copy">{{ detail.healthSummary || '暂无健康摘要' }}</p>
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('answers')" class="card panel">
             <h3>问诊答案</h3>
             <div v-if="detail.answers?.length" class="list">
               <article v-for="item in detail.answers" :key="`${item.fieldCode}-${item.id || item.fieldLabel}`" class="subcard">
@@ -488,7 +564,7 @@
             <el-empty v-else description="暂无问诊答案" />
           </section>
 
-          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'reply' }]">
+          <section v-show="showDetailSection('reply')" :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'reply' }]">
             <div class="head">
               <div>
                 <h3>医患沟通</h3>
@@ -714,7 +790,7 @@
             </div>
           </section>
 
-          <section v-if="canApplyAiDraft" class="card panel">
+          <section v-if="canApplyAiDraft" v-show="showDetailSection('ai_draft')" class="card panel">
             <div class="head">
               <div>
                 <h3>智能接诊草稿</h3>
@@ -741,7 +817,7 @@
             </div>
           </section>
 
-          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'handle' }]">
+          <section v-show="showDetailSection('handle')" :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'handle' }]">
             <div class="head">
               <div>
                 <h3>医生处理</h3>
@@ -881,210 +957,229 @@
                 </div>
               </article>
             </div>
+            <div class="handle-workspace-summary">
+              <span>处理摘要 {{ trimText(handleForm.summary) ? '已填写' : '待填写' }}</span>
+              <span>检查建议 {{ handleForm.checkSuggestions.length }} 项</span>
+              <span>处方药品 {{ effectivePrescriptionCount }} 项</span>
+              <span>内部备注 {{ trimText(handleForm.internalRemark) ? '已填写' : '未填写' }}</span>
+            </div>
             <el-form label-position="top" :disabled="!canEdit">
-              <el-form-item label="医生判断摘要">
-                <div v-if="sceneTemplates('handle_summary').length" class="template-tools">
-                  <el-select v-model="templateSelection.handle_summary" clearable filterable placeholder="选择摘要模板" style="width:240px">
-                    <el-option v-for="item in sceneTemplates('handle_summary')" :key="item.id" :label="item.title" :value="item.id" />
-                  </el-select>
-                  <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'replace')">覆盖填入</el-button>
-                  <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'append')">追加填入</el-button>
-                  <el-button text :loading="handleAiRegeneratingField === 'doctorSummary'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'doctorSummary')" @click="generateHandleAiDraft('doctorSummary')">智能重写</el-button>
-                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('handle_summary') || !trimText(handleAiDraft.doctorSummary)" @click="composeAiFieldWithTemplate('handle_summary', 'summary', handleAiDraft.doctorSummary, { label: '处理摘要', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
-                </div>
-                <el-input v-model="handleForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：当前暂无紧急风险，建议继续线上处理并观察变化。" />
-              </el-form-item>
-              <el-form-item label="处理建议">
-                <div v-if="sceneTemplates('medical_advice').length" class="template-tools">
-                  <el-select v-model="templateSelection.medical_advice" clearable filterable placeholder="选择处理建议模板" style="width:240px">
-                    <el-option v-for="item in sceneTemplates('medical_advice')" :key="item.id" :label="item.title" :value="item.id" />
-                  </el-select>
-                  <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'replace')">覆盖填入</el-button>
-                  <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'append')">追加填入</el-button>
-                  <el-button text :loading="handleAiRegeneratingField === 'medicalAdvice'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'medicalAdvice')" @click="generateHandleAiDraft('medicalAdvice')">智能重写</el-button>
-                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('medical_advice') || !trimText(handleAiDraft.medicalAdvice)" @click="composeAiFieldWithTemplate('medical_advice', 'medicalAdvice', handleAiDraft.medicalAdvice, { label: '处理建议', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
-                </div>
-                <el-input v-model="handleForm.medicalAdvice" type="textarea" :rows="4" maxlength="4000" show-word-limit placeholder="填写生活建议、用药建议、复诊建议等。" />
-              </el-form-item>
-              <el-form-item label="随访计划">
-                <div v-if="sceneTemplates('follow_up_plan').length" class="template-tools">
-                  <el-select v-model="templateSelection.follow_up_plan" clearable filterable placeholder="选择随访计划模板" style="width:240px">
-                    <el-option v-for="item in sceneTemplates('follow_up_plan')" :key="item.id" :label="item.title" :value="item.id" />
-                  </el-select>
-                  <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'replace')">覆盖填入</el-button>
-                  <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'append')">追加填入</el-button>
-                  <el-button text :loading="handleAiRegeneratingField === 'followUpPlan'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'followUpPlan')" @click="generateHandleAiDraft('followUpPlan')">智能重写</el-button>
-                  <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('follow_up_plan') || !trimText(handleAiDraft.followUpPlan)" @click="composeAiFieldWithTemplate('follow_up_plan', 'followUpPlan', handleAiDraft.followUpPlan, { label: '随访计划', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
-                </div>
-                <el-input v-model="handleForm.followUpPlan" maxlength="500" show-word-limit placeholder="例如：建议 3 天后复诊，如加重请线下就医。" />
-              </el-form-item>
-              <el-form-item label="结构化检查建议">
-                <div class="prescription-editor">
-                  <div class="prescription-editor-head">
-                    <div class="chips">
-                      <span>已配置 {{ handleForm.checkSuggestions.length }} 项</span>
+              <el-tabs v-model="handleWorkspaceTab" class="handle-workspace-tabs">
+                <el-tab-pane label="处理意见" name="summary">
+                  <el-form-item label="医生判断摘要">
+                    <div v-if="sceneTemplates('handle_summary').length" class="template-tools">
+                      <el-select v-model="templateSelection.handle_summary" clearable filterable placeholder="选择摘要模板" style="width:240px">
+                        <el-option v-for="item in sceneTemplates('handle_summary')" :key="item.id" :label="item.title" :value="item.id" />
+                      </el-select>
+                      <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'replace')">覆盖填入</el-button>
+                      <el-button text @click="applyTemplateToField('handle_summary', 'summary', 'append')">追加填入</el-button>
+                      <el-button text :loading="handleAiRegeneratingField === 'doctorSummary'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'doctorSummary')" @click="generateHandleAiDraft('doctorSummary')">智能重写</el-button>
+                      <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('handle_summary') || !trimText(handleAiDraft.doctorSummary)" @click="composeAiFieldWithTemplate('handle_summary', 'summary', handleAiDraft.doctorSummary, { label: '处理摘要', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
                     </div>
-                    <div class="actions">
-                      <el-button plain :disabled="!canEdit" @click="addCheckSuggestionRow()">添加检查建议</el-button>
+                    <el-input v-model="handleForm.summary" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：当前暂无紧急风险，建议继续线上处理并观察变化。" />
+                  </el-form-item>
+                  <el-form-item label="处理建议">
+                    <div v-if="sceneTemplates('medical_advice').length" class="template-tools">
+                      <el-select v-model="templateSelection.medical_advice" clearable filterable placeholder="选择处理建议模板" style="width:240px">
+                        <el-option v-for="item in sceneTemplates('medical_advice')" :key="item.id" :label="item.title" :value="item.id" />
+                      </el-select>
+                      <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'replace')">覆盖填入</el-button>
+                      <el-button text @click="applyTemplateToField('medical_advice', 'medicalAdvice', 'append')">追加填入</el-button>
+                      <el-button text :loading="handleAiRegeneratingField === 'medicalAdvice'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'medicalAdvice')" @click="generateHandleAiDraft('medicalAdvice')">智能重写</el-button>
+                      <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('medical_advice') || !trimText(handleAiDraft.medicalAdvice)" @click="composeAiFieldWithTemplate('medical_advice', 'medicalAdvice', handleAiDraft.medicalAdvice, { label: '处理建议', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
                     </div>
-                  </div>
-                  <div v-if="handleForm.checkSuggestions.length" class="list">
-                    <article
-                      v-for="(item, index) in handleForm.checkSuggestions"
-                      :key="item.clientKey"
-                      class="subcard"
-                    >
-                      <div class="head">
-                        <div>
-                          <strong>{{ item.itemName || `检查建议 ${index + 1}` }}</strong>
-                          <p class="copy">{{ checkSuggestionTypeLabel(item.itemType) }} / {{ checkSuggestionUrgencyLabel(item.urgencyLevel) }}</p>
+                    <el-input v-model="handleForm.medicalAdvice" type="textarea" :rows="4" maxlength="4000" show-word-limit placeholder="填写生活建议、用药建议、复诊建议等。" />
+                  </el-form-item>
+                  <el-form-item label="随访计划">
+                    <div v-if="sceneTemplates('follow_up_plan').length" class="template-tools">
+                      <el-select v-model="templateSelection.follow_up_plan" clearable filterable placeholder="选择随访计划模板" style="width:240px">
+                        <el-option v-for="item in sceneTemplates('follow_up_plan')" :key="item.id" :label="item.title" :value="item.id" />
+                      </el-select>
+                      <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'replace')">覆盖填入</el-button>
+                      <el-button text @click="applyTemplateToField('follow_up_plan', 'followUpPlan', 'append')">追加填入</el-button>
+                      <el-button text :loading="handleAiRegeneratingField === 'followUpPlan'" :disabled="!canEdit || handleAiDraftLoading || (!!handleAiRegeneratingField && handleAiRegeneratingField !== 'followUpPlan')" @click="generateHandleAiDraft('followUpPlan')">智能重写</el-button>
+                      <el-button text :disabled="!canEdit || handleAiBusy || !selectedReplyTemplate('follow_up_plan') || !trimText(handleAiDraft.followUpPlan)" @click="composeAiFieldWithTemplate('follow_up_plan', 'followUpPlan', handleAiDraft.followUpPlan, { label: '随访计划', applyTarget: 'handle_form' })">智能内容与模板拼装</el-button>
+                    </div>
+                    <el-input v-model="handleForm.followUpPlan" maxlength="500" show-word-limit placeholder="例如：建议 3 天后复诊，如加重请线下就医。" />
+                  </el-form-item>
+                </el-tab-pane>
+
+                <el-tab-pane :label="`检查建议 (${handleForm.checkSuggestions.length})`" name="checks">
+                  <el-form-item label="结构化检查建议">
+                    <div class="prescription-editor">
+                      <div class="prescription-editor-head">
+                        <div class="chips">
+                          <span>已配置 {{ handleForm.checkSuggestions.length }} 项</span>
                         </div>
-                        <el-button v-if="canEdit" link type="danger" @click="removeCheckSuggestionRow(index)">移除</el-button>
-                      </div>
-                      <div class="grid">
-                        <el-input v-model="item.itemName" maxlength="100" placeholder="检查项目，例如：血常规 / 胸部影像检查 / 病理活检" />
-                        <el-select v-model="item.itemType" placeholder="选择检查类型">
-                          <el-option v-for="option in checkSuggestionTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
-                        </el-select>
-                        <el-select v-model="item.urgencyLevel" placeholder="选择紧急程度">
-                          <el-option v-for="option in checkSuggestionUrgencyOptions" :key="option.value" :label="option.label" :value="option.value" />
-                        </el-select>
-                      </div>
-                      <el-input
-                        v-model="item.purpose"
-                        type="textarea"
-                        :rows="2"
-                        maxlength="300"
-                        show-word-limit
-                        placeholder="填写建议目的，例如：进一步排查感染指标、明确是否存在肺部炎症。"
-                      />
-                      <el-input
-                        v-model="item.attentionNote"
-                        type="textarea"
-                        :rows="2"
-                        maxlength="300"
-                        show-word-limit
-                        placeholder="填写注意事项，例如：空腹抽血、检查前避免剧烈运动。"
-                      />
-                    </article>
-                  </div>
-                  <div v-else class="prescription-empty">
-                    <p class="copy">{{ canEdit ? '当前还未配置结构化检查建议，可按需要补充化验、影像、病理等检查项目。' : '当前还未配置结构化检查建议。' }}</p>
-                  </div>
-                </div>
-              </el-form-item>
-              <el-form-item label="医生处方">
-                <div class="prescription-editor">
-                  <div class="prescription-editor-head">
-                    <div class="chips">
-                      <span>已配置 {{ effectivePrescriptionCount }} 项</span>
-                      <span v-if="prescriptionPreview.overallWarnings.length">提醒 {{ prescriptionPreview.overallWarnings.length }} 条</span>
-                      <span v-if="prescriptionConflictDetected">存在联用冲突</span>
-                    </div>
-                    <div class="actions">
-                      <el-button
-                        plain
-                        :loading="prescriptionPreviewLoading"
-                        :disabled="!detail?.id || !handleForm.prescriptions.length"
-                        @click="refreshPrescriptionPreview"
-                      >
-                        检测禁忌
-                      </el-button>
-                      <el-button plain :disabled="!canEdit || medicineLoading" @click="addPrescriptionRow()">
-                        添加药品
-                      </el-button>
-                    </div>
-                  </div>
-                  <el-alert
-                    v-if="!medicineLoading && !medicineOptions.length"
-                    title="当前还没有可用药品目录，请先由管理员维护药品与禁忌规则。"
-                    type="info"
-                    :closable="false"
-                    class="notice"
-                  />
-                  <el-alert
-                    v-if="prescriptionConflictDetected"
-                    title="系统已识别到不可同时用药，请先调整处方。"
-                    :description="prescriptionConflictWarningText"
-                    type="error"
-                    :closable="false"
-                    class="notice"
-                  />
-                  <el-alert
-                    v-if="prescriptionPreview.validationWarnings.length"
-                    title="当前处方内容还不完整。"
-                    :description="prescriptionValidationWarningText"
-                    type="warning"
-                    :closable="false"
-                    class="notice"
-                  />
-                  <el-alert
-                    v-if="!prescriptionConflictDetected && prescriptionPreview.overallWarnings.length"
-                    title="系统已生成用药禁忌提醒。"
-                    :description="prescriptionOverallWarningText"
-                    type="info"
-                    :closable="false"
-                    class="notice"
-                  />
-                  <div v-if="handleForm.prescriptions.length" class="prescription-list">
-                    <article
-                      v-for="(item, index) in handleForm.prescriptions"
-                      :key="item.clientKey"
-                      class="prescription-card"
-                    >
-                      <div class="prescription-card-head">
-                        <div>
-                          <strong>{{ prescriptionMedicineLabel(item) || `药品 ${index + 1}` }}</strong>
-                          <p class="copy" v-if="prescriptionMedicineMeta(item)">{{ prescriptionMedicineMeta(item) }}</p>
+                        <div class="actions">
+                          <el-button plain :disabled="!canEdit" @click="addCheckSuggestionRow()">添加检查建议</el-button>
                         </div>
-                        <el-button v-if="canEdit" link type="danger" @click="removePrescriptionRow(index)">移除</el-button>
                       </div>
-                      <div class="prescription-grid">
-                        <el-select
-                          v-model="item.medicineId"
-                          filterable
-                          clearable
-                          placeholder="选择药品"
-                          @change="handlePrescriptionMedicineChange(item)"
+                      <div v-if="handleForm.checkSuggestions.length" class="list">
+                        <article
+                          v-for="(item, index) in handleForm.checkSuggestions"
+                          :key="item.clientKey"
+                          class="subcard"
                         >
-                          <el-option
-                            v-for="option in medicineOptions"
-                            :key="option.id"
-                            :label="medicineOptionLabel(option)"
-                            :value="option.id"
+                          <div class="head">
+                            <div>
+                              <strong>{{ item.itemName || `检查建议 ${index + 1}` }}</strong>
+                              <p class="copy">{{ checkSuggestionTypeLabel(item.itemType) }} / {{ checkSuggestionUrgencyLabel(item.urgencyLevel) }}</p>
+                            </div>
+                            <el-button v-if="canEdit" link type="danger" @click="removeCheckSuggestionRow(index)">移除</el-button>
+                          </div>
+                          <div class="grid">
+                            <el-input v-model="item.itemName" maxlength="100" placeholder="检查项目，例如：血常规 / 胸部影像检查 / 病理活检" />
+                            <el-select v-model="item.itemType" placeholder="选择检查类型">
+                              <el-option v-for="option in checkSuggestionTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
+                            </el-select>
+                            <el-select v-model="item.urgencyLevel" placeholder="选择紧急程度">
+                              <el-option v-for="option in checkSuggestionUrgencyOptions" :key="option.value" :label="option.label" :value="option.value" />
+                            </el-select>
+                          </div>
+                          <el-input
+                            v-model="item.purpose"
+                            type="textarea"
+                            :rows="2"
+                            maxlength="300"
+                            show-word-limit
+                            placeholder="填写建议目的，例如：进一步排查感染指标、明确是否存在肺部炎症。"
                           />
-                        </el-select>
-                        <el-input v-model="item.dosage" maxlength="100" placeholder="单次剂量，例如 1 片 / 0.5g" />
-                        <el-input v-model="item.frequency" maxlength="100" placeholder="用药频次，例如 每日 3 次" />
-                        <el-input-number v-model="item.durationDays" :min="1" :max="365" style="width:100%" />
-                        <el-input
-                          v-model="item.medicationInstruction"
-                          maxlength="255"
-                          placeholder="服药说明，例如 饭后服用、多喝水"
-                        />
+                          <el-input
+                            v-model="item.attentionNote"
+                            type="textarea"
+                            :rows="2"
+                            maxlength="300"
+                            show-word-limit
+                            placeholder="填写注意事项，例如：空腹抽血、检查前避免剧烈运动。"
+                          />
+                        </article>
                       </div>
-                      <div v-if="prescriptionRowWarnings(item).length" class="prescription-warning-list">
-                        <p
-                          v-for="(warning, warningIndex) in prescriptionRowWarnings(item)"
-                          :key="`${item.clientKey}-warning-${warningIndex}`"
+                      <div v-else class="prescription-empty">
+                        <p class="copy">{{ canEdit ? '当前还未配置结构化检查建议，可按需要补充化验、影像、病理等检查项目。' : '当前还未配置结构化检查建议。' }}</p>
+                      </div>
+                    </div>
+                  </el-form-item>
+                </el-tab-pane>
+
+                <el-tab-pane :label="`处方用药 (${effectivePrescriptionCount})`" name="prescription">
+                  <el-form-item label="医生处方">
+                    <div class="prescription-editor">
+                      <div class="prescription-editor-head">
+                        <div class="chips">
+                          <span>已配置 {{ effectivePrescriptionCount }} 项</span>
+                          <span v-if="prescriptionPreview.overallWarnings.length">提醒 {{ prescriptionPreview.overallWarnings.length }} 条</span>
+                          <span v-if="prescriptionConflictDetected">存在联用冲突</span>
+                        </div>
+                        <div class="actions">
+                          <el-button
+                            plain
+                            :loading="prescriptionPreviewLoading"
+                            :disabled="!detail?.id || !handleForm.prescriptions.length"
+                            @click="refreshPrescriptionPreview"
+                          >
+                            检测禁忌
+                          </el-button>
+                          <el-button plain :disabled="!canEdit || medicineLoading" @click="addPrescriptionRow()">
+                            添加药品
+                          </el-button>
+                        </div>
+                      </div>
+                      <el-alert
+                        v-if="!medicineLoading && !medicineOptions.length"
+                        title="当前还没有可用药品目录，请先由管理员维护药品与禁忌规则。"
+                        type="info"
+                        :closable="false"
+                        class="notice"
+                      />
+                      <el-alert
+                        v-if="prescriptionConflictDetected"
+                        title="系统已识别到不可同时用药，请先调整处方。"
+                        :description="prescriptionConflictWarningText"
+                        type="error"
+                        :closable="false"
+                        class="notice"
+                      />
+                      <el-alert
+                        v-if="prescriptionPreview.validationWarnings.length"
+                        title="当前处方内容还不完整。"
+                        :description="prescriptionValidationWarningText"
+                        type="warning"
+                        :closable="false"
+                        class="notice"
+                      />
+                      <el-alert
+                        v-if="!prescriptionConflictDetected && prescriptionPreview.overallWarnings.length"
+                        title="系统已生成用药禁忌提醒。"
+                        :description="prescriptionOverallWarningText"
+                        type="info"
+                        :closable="false"
+                        class="notice"
+                      />
+                      <div v-if="handleForm.prescriptions.length" class="prescription-list">
+                        <article
+                          v-for="(item, index) in handleForm.prescriptions"
+                          :key="item.clientKey"
+                          class="prescription-card"
                         >
-                          {{ warning }}
-                        </p>
+                          <div class="prescription-card-head">
+                            <div>
+                              <strong>{{ prescriptionMedicineLabel(item) || `药品 ${index + 1}` }}</strong>
+                              <p class="copy" v-if="prescriptionMedicineMeta(item)">{{ prescriptionMedicineMeta(item) }}</p>
+                            </div>
+                            <el-button v-if="canEdit" link type="danger" @click="removePrescriptionRow(index)">移除</el-button>
+                          </div>
+                          <div class="prescription-grid">
+                            <el-select
+                              v-model="item.medicineId"
+                              filterable
+                              clearable
+                              placeholder="选择药品"
+                              @change="handlePrescriptionMedicineChange(item)"
+                            >
+                              <el-option
+                                v-for="option in medicineOptions"
+                                :key="option.id"
+                                :label="medicineOptionLabel(option)"
+                                :value="option.id"
+                              />
+                            </el-select>
+                            <el-input v-model="item.dosage" maxlength="100" placeholder="单次剂量，例如 1 片 / 0.5g" />
+                            <el-input v-model="item.frequency" maxlength="100" placeholder="用药频次，例如 每日 3 次" />
+                            <el-input-number v-model="item.durationDays" :min="1" :max="365" style="width:100%" />
+                            <el-input
+                              v-model="item.medicationInstruction"
+                              maxlength="255"
+                              placeholder="服药说明，例如 饭后服用、多喝水"
+                            />
+                          </div>
+                          <div v-if="prescriptionRowWarnings(item).length" class="prescription-warning-list">
+                            <p
+                              v-for="(warning, warningIndex) in prescriptionRowWarnings(item)"
+                              :key="`${item.clientKey}-warning-${warningIndex}`"
+                            >
+                              {{ warning }}
+                            </p>
+                          </div>
+                        </article>
                       </div>
-                    </article>
-                  </div>
-                  <div v-else class="prescription-empty">
-                    <p class="copy">{{ canEdit ? '当前未开具处方，可按需添加药品并自动检测禁忌与联用冲突。' : '当前未开具处方。' }}</p>
-                  </div>
-                </div>
-              </el-form-item>
-              <el-form-item label="内部备注">
-                <el-input v-model="handleForm.internalRemark" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="仅医生和管理员可见。" />
-              </el-form-item>
+                      <div v-else class="prescription-empty">
+                        <p class="copy">{{ canEdit ? '当前未开具处方，可按需添加药品并自动检测禁忌与联用冲突。' : '当前未开具处方。' }}</p>
+                      </div>
+                    </div>
+                  </el-form-item>
+                </el-tab-pane>
+
+                <el-tab-pane label="内部备注" name="remark">
+                  <el-form-item label="内部备注">
+                    <el-input v-model="handleForm.internalRemark" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="仅医生和管理员可见。" />
+                  </el-form-item>
+                </el-tab-pane>
+              </el-tabs>
             </el-form>
           </section>
 
-          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'conclusion' }]">
+          <section v-show="showDetailSection('conclusion')" :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'conclusion' }]">
             <div class="head">
               <div>
                 <h3>结构化结论</h3>
@@ -1228,7 +1323,7 @@
             </div>
           </section>
 
-          <section :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'followup' }]">
+          <section v-show="showDetailSection('followup')" :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'followup' }]">
             <div class="head">
               <div>
                 <h3>随访记录</h3>
@@ -1413,7 +1508,7 @@
             </div>
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('triage_result')" class="card panel">
             <h3>智能分诊结果</h3>
             <div v-if="detail.triageResult" class="subcard">
               <div class="chips">
@@ -1426,7 +1521,7 @@
             <el-empty v-else description="暂无 智能分诊结果" />
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('triage_context')" class="card panel">
             <div class="head">
               <div>
                 <h3>智能导诊上下文</h3>
@@ -1506,7 +1601,7 @@
             <el-empty v-else description="暂无 智能导诊留痕" />
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('rule_hits')" class="card panel">
             <h3>规则命中</h3>
             <el-table v-if="detail.ruleHits?.length" :data="detail.ruleHits" border>
               <el-table-column prop="ruleName" label="规则名称" min-width="160" />
@@ -1516,7 +1611,7 @@
             <el-empty v-else description="暂无规则命中记录" />
           </section>
 
-          <section class="card panel">
+          <section v-show="showDetailSection('triage_feedback')" class="card panel">
             <h3>用户反馈</h3>
             <div v-if="detail.triageFeedback" class="subcard">
               <div class="chips">
@@ -1532,6 +1627,7 @@
 
           <section
             ref="serviceFeedbackPanelRef"
+            v-show="showDetailSection('feedback')"
             :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'feedback' }]"
           >
             <h3>问诊服务评价</h3>
@@ -1610,6 +1706,38 @@
               </article>
             </div>
             <el-empty v-else description="患者暂未提交问诊服务评价" />
+          </section>
+
+          <section v-if="detail" class="doctor-action-bar">
+            <div class="doctor-action-bar-copy">
+              <strong>{{ detailActionBarTitle }}</strong>
+              <p>{{ detailActionBarHint }}</p>
+            </div>
+            <div class="doctor-action-bar-meta">
+              <span>{{ statusLabel(detail.status) }}</span>
+              <span>{{ assignmentStatusLabel(detail.doctorAssignment) }}</span>
+              <span v-if="doctorWorkflowPrimaryStep">下一步：{{ doctorWorkflowPrimaryStep.title }}</span>
+            </div>
+            <div class="doctor-action-bar-actions">
+              <el-button v-if="canClaimCurrent" type="primary" :loading="assignLoading && assignType==='claim'" @click="submitAssignment('claim', detail.id)">
+                {{ claimActionButtonLabel }}
+              </el-button>
+              <el-button v-if="canReleaseCurrent" type="warning" plain :loading="assignLoading && assignType==='release'" @click="submitAssignment('release', detail.id)">
+                释放问诊单
+              </el-button>
+              <el-button v-if="canEdit && detail.status !== 'completed'" type="warning" plain :loading="submitLoading && submitStatus==='processing'" @click="submitHandle('processing')">
+                标记处理中
+              </el-button>
+              <el-button v-if="canEdit" type="primary" :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='stay'" @click="submitHandle('completed')">
+                完成处理
+              </el-button>
+              <el-button v-if="canEdit && nextDetailRecord" plain type="success" :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='next'" @click="submitHandle('completed', { openNext: true })">
+                完成并看下一条
+              </el-button>
+              <el-button v-if="canSubmitFollowUp" plain @click="focusDetailActionSection('followup', detail.id)">
+                去登记随访
+              </el-button>
+            </div>
           </section>
         </template>
       </div>
@@ -1780,6 +1908,9 @@ const handleAiUsage = reactive(createEmptyFormAiUsage())
 const followUpAiUsage = reactive(createEmptyFormAiUsage())
 const messageAiScene = ref('opening')
 const workflowMessageDraftType = ref('doctor_plan')
+const handleWorkspaceTab = ref('summary')
+const detailViewMode = ref('guided')
+const doctorJourneyStage = ref('intake')
 const messageAiUsage = reactive(createEmptyMessageAiUsage())
 const detailBasicPanelRef = ref(null)
 const detailArchivePanelRef = ref(null)
@@ -2057,6 +2188,150 @@ const detailNavigationSectionItems = computed(() => {
   sections.push({ key: 'followup', label: '随访处理' })
   if (detail.value?.serviceFeedback) sections.push({ key: 'feedback', label: '服务评价' })
   return sections
+})
+const doctorWorkflowSteps = computed(() => {
+  if (!detail.value) return []
+  const record = detail.value
+  const hasMessages = detailMessageSummary.value.totalCount > 0
+  const hasHandleContent = !!(
+    trimText(handleForm.summary)
+    || trimText(handleForm.medicalAdvice)
+    || trimText(handleForm.followUpPlan)
+    || trimText(handleForm.internalRemark)
+    || handleForm.checkSuggestions.length
+    || buildPrescriptionSubmitPayload().length
+    || record.doctorHandle
+  )
+  const hasPrescriptionOrCheck = !!(handleForm.checkSuggestions.length || buildPrescriptionSubmitPayload().length || record.checkSuggestions?.length || record.prescriptions?.length)
+  const hasConclusion = hasDoctorConclusionContent.value
+  const followState = followUpState(record)
+  const canStartFollowUp = canSubmitFollowUp.value || ['pending', 'due_today', 'overdue'].includes(followState) || !!record.doctorFollowUps?.length
+  const steps = [
+    {
+      key: 'overview',
+      index: 1,
+      title: '查看概览与风险',
+      status: '先确认主诉、分诊建议和当前归属',
+      description: '先快速看清主诉、分诊等级、推荐动作、认领情况和是否存在高风险提示。',
+      target: 'basic',
+      actionLabel: '查看概览',
+      done: true,
+      state: 'done'
+    },
+    {
+      key: 'reply',
+      index: 2,
+      title: '沟通补充信息',
+      status: hasMessages ? '已有沟通记录' : '建议先发起首条沟通',
+      description: hasMessages
+        ? '查看患者补充信息、检查结果和恢复更新，必要时继续追问关键症状。'
+        : '先向患者确认关键症状变化或提醒补充图片、检查结果等资料。',
+      target: 'reply',
+      actionLabel: hasMessages ? '查看沟通' : '去沟通',
+      done: hasMessages,
+      state: hasMessages ? 'done' : 'todo'
+    },
+    {
+      key: 'handle',
+      index: 3,
+      title: '填写医生处理',
+      status: hasHandleContent ? '已开始填写' : '待填写处理意见',
+      description: '整理判断摘要、处理建议、检查建议和后续安排，必要时带入智能草稿。',
+      target: 'handle',
+      actionLabel: '填写处理',
+      done: hasHandleContent,
+      state: hasHandleContent ? 'done' : 'todo'
+    },
+    {
+      key: 'prescription',
+      index: 4,
+      title: '补充检查或处方',
+      status: hasPrescriptionOrCheck ? '已配置处方或检查建议' : '按需补充',
+      description: '在处理区补充检查建议和处方，并借助预览结果校验联用冲突与风险提示。',
+      target: 'handle',
+      actionLabel: '去补充',
+      done: hasPrescriptionOrCheck,
+      state: hasPrescriptionOrCheck ? 'done' : (hasHandleContent ? 'current' : 'todo')
+    },
+    {
+      key: 'conclusion',
+      index: 5,
+      title: '提交结构化结论',
+      status: hasConclusion ? '已形成结论' : '待完成结论',
+      description: '统一沉淀病情等级、处理去向、患者指导和与智能建议的一致性说明。',
+      target: 'conclusion',
+      actionLabel: '去结论',
+      done: hasConclusion,
+      state: hasConclusion ? 'done' : (hasHandleContent ? 'current' : 'todo')
+    }
+  ]
+
+  if (canStartFollowUp) {
+    steps.push({
+      key: 'followup',
+      index: 6,
+      title: '继续随访',
+      status: record.doctorFollowUps?.length ? '已有随访记录' : '待安排随访',
+      description: '问诊完成后继续跟进恢复情况、用药反馈和下次复诊节点，形成闭环。',
+      target: 'followup',
+      actionLabel: '去随访',
+      done: !!record.doctorFollowUps?.length,
+      state: !!record.doctorFollowUps?.length ? 'done' : (record.status === 'completed' ? 'current' : 'todo')
+    })
+  }
+
+  const firstCurrent = steps.find(item => item.state === 'current')
+  if (!firstCurrent) {
+    const firstTodo = steps.find(item => item.state === 'todo')
+    if (firstTodo) firstTodo.state = 'current'
+  }
+  return steps
+})
+const doctorWorkflowPrimaryStep = computed(() => doctorWorkflowSteps.value.find(item => item.state === 'current')
+  || doctorWorkflowSteps.value.find(item => item.state === 'todo')
+  || doctorWorkflowSteps.value[doctorWorkflowSteps.value.length - 1]
+  || null)
+const doctorWorkflowProgressText = computed(() => {
+  if (!doctorWorkflowSteps.value.length) return ''
+  const done = doctorWorkflowSteps.value.filter(item => item.done).length
+  return `已完成 ${done} / ${doctorWorkflowSteps.value.length} 步`
+})
+const doctorWorkflowLeadText = computed(() => {
+  if (!doctorWorkflowPrimaryStep.value) return '按接诊流程逐步处理，避免在多个卡片之间来回切换。'
+  return `建议先处理“${doctorWorkflowPrimaryStep.value.title}”，系统已把当前最需要操作的环节排在前面。`
+})
+const doctorJourneyStages = computed(() => ([
+  { key: 'intake', title: '接诊准备', shortHint: '先看风险、问诊资料和归属信息' },
+  { key: 'communication', title: '病情沟通', shortHint: '补问关键信息，理解患者动态' },
+  { key: 'plan', title: '处理与开立', shortHint: '形成处理意见、检查建议和处方' },
+  { key: 'conclusion', title: '结论提交', shortHint: '沉淀结构化结论并完成本次处理' },
+  { key: 'followup', title: '诊后跟进', shortHint: '查看评价、记录随访、持续闭环' }
+]))
+const doctorJourneyStageDescription = computed(() => {
+  if (detailViewMode.value === 'all') return '当前处于完整视图，系统会展示全部处理信息。'
+  return '引导视图会按当前接诊阶段筛出最相关的信息，减少一次性看到过多内容造成的负担。'
+})
+const activeDoctorJourneyStageTitle = computed(() => doctorJourneyStages.value.find(item => item.key === doctorJourneyStage.value)?.title || '接诊准备')
+const activeDoctorJourneyStageHint = computed(() => {
+  if (detailViewMode.value === 'all') return '完整视图已展示全部内容，你也可以随时切回引导视图，只看当前阶段最该处理的部分。'
+  return ({
+    intake: '先确认分诊风险、主诉、问诊答案、认领归属和智能分配，再决定是否进入沟通。',
+    communication: '这一阶段聚焦医患沟通、患者最新补充和智能导诊参考，先把关键信息问清楚。',
+    plan: '这一阶段只关注医生处理、检查建议、处方和智能草稿，尽快形成可执行的处理方案。',
+    conclusion: '这一阶段集中完成结构化结论，明确病情等级、处理去向和患者指导。',
+    followup: '这一阶段处理患者反馈、服务评价和随访记录，形成诊后闭环。'
+  })[doctorJourneyStage.value] || '按阶段推进当前问诊处理。'
+})
+const detailActionBarTitle = computed(() => {
+  if (canClaimCurrent.value) return '当前建议先认领问诊单'
+  if (doctorWorkflowPrimaryStep.value) return `当前建议：${doctorWorkflowPrimaryStep.value.title}`
+  return '继续完成当前问诊处理'
+})
+const detailActionBarHint = computed(() => {
+  if (canClaimCurrent.value) return claimContinuationHint.value || '认领后系统会把你带到当前最需要处理的环节。'
+  if (!canEdit.value) return assignmentHint.value
+  if (detail.value?.status === 'completed') return canSubmitFollowUp.value ? '当前问诊已完成，如需继续跟进可直接登记随访。' : '当前问诊已完成，可回看处理与服务评价。'
+  return doctorWorkflowLeadText.value
 })
 const latestDoctorMessage = computed(() => [...consultationMessages.value]
   .reverse()
@@ -2986,6 +3261,10 @@ function resolveDetailSectionElement(sectionKey) {
   if (sectionKey === 'assistant') return workflowAssistantPanelRef.value?.$el || workflowAssistantPanelRef.value
   if (sectionKey === 'handle') return detailHandlePanelRef.value?.$el || detailHandlePanelRef.value
   if (sectionKey === 'conclusion') return detailConclusionPanelRef.value?.$el || detailConclusionPanelRef.value
+  if (sectionKey === 'reply') return messageInputRef.value?.$el || messageInputRef.value?.textarea || messageInputRef.value
+  if (sectionKey === 'followup') return followUpActionButtonRef.value?.$el || followUpActionButtonRef.value
+  if (sectionKey === 'patient_action') return patientActionPanelRef.value?.$el || patientActionPanelRef.value
+  if (sectionKey === 'feedback') return serviceFeedbackPanelRef.value?.$el || serviceFeedbackPanelRef.value
   return null
 }
 
@@ -3021,6 +3300,45 @@ function jumpToDetailSection(sectionKey, detailId = null, options = {}) {
 function scrollToDetailSection(sectionKey) {
   if (!detail.value?.id) return
   jumpToDetailSection(sectionKey, detail.value.id)
+}
+
+function openDoctorJourneyStage(stageKey) {
+  doctorJourneyStage.value = stageKey || 'intake'
+  if (detailViewMode.value !== 'guided') detailViewMode.value = 'guided'
+}
+
+function showDetailSection(sectionKey) {
+  if (detailViewMode.value === 'all') return true
+  const stage = doctorJourneyStage.value || 'intake'
+  const stageMap = {
+    intake: ['basic', 'archive', 'assignment', 'dispatch', 'chief', 'answers', 'triage_result', 'triage_context', 'rule_hits'],
+    communication: ['patient_action', 'reply', 'ai_draft', 'triage_context'],
+    plan: ['assistant', 'reply', 'ai_draft', 'handle'],
+    conclusion: ['ai_draft', 'handle', 'conclusion'],
+    followup: ['followup', 'feedback', 'triage_feedback', 'patient_action', 'archive']
+  }
+  return (stageMap[stage] || stageMap.intake).includes(sectionKey)
+}
+
+function openWorkflowStep(step) {
+  if (!step || !detail.value?.id) return
+  if (step.key === 'overview') {
+    openDoctorJourneyStage('intake')
+  } else if (step.key === 'reply') {
+    openDoctorJourneyStage('communication')
+  } else if (['handle', 'prescription'].includes(step.key)) {
+    openDoctorJourneyStage('plan')
+  } else if (step.key === 'conclusion') {
+    openDoctorJourneyStage('conclusion')
+  } else if (step.key === 'followup') {
+    openDoctorJourneyStage('followup')
+  }
+  if (step.key === 'prescription') {
+    handleWorkspaceTab.value = 'prescription'
+  } else if (step.key === 'handle') {
+    handleWorkspaceTab.value = 'summary'
+  }
+  jumpToDetailSection(step.target, detail.value.id)
 }
 
 function openAdjacentDetail(step = 1) {
@@ -3376,6 +3694,17 @@ function openDetail(id, routeAction = '') {
     detail.value = data && typeof data === 'object' ? normalizeDoctorReminderRecord(data) : null
     messageAiScene.value = recommendMessageAiScene(detail.value, [])
     syncForms()
+    if (detail.value?.status === 'completed') {
+      doctorJourneyStage.value = 'followup'
+    } else if (hasDoctorConclusionContent.value) {
+      doctorJourneyStage.value = 'conclusion'
+    } else if (trimText(handleForm.summary) || trimText(handleForm.medicalAdvice) || handleForm.checkSuggestions.length || buildPrescriptionSubmitPayload().length) {
+      doctorJourneyStage.value = 'plan'
+    } else if (detailMessageSummary.value.totalCount > 0) {
+      doctorJourneyStage.value = 'communication'
+    } else {
+      doctorJourneyStage.value = 'intake'
+    }
     captureDoctorLocalDraftBaseline()
     restoreDoctorLocalDraft(id)
     loadConsultationMessages(id, { preserveScroll: false })
@@ -3387,6 +3716,10 @@ function openDetail(id, routeAction = '') {
       return
     }
     syncListQuery(id, '')
+    if (doctorWorkflowPrimaryStep.value?.target) {
+      jumpToDetailSection(doctorWorkflowPrimaryStep.value.target, id, { behavior: 'auto', syncQuery: false })
+      return
+    }
     if (workflowAssistantPrimarySectionKey.value) {
       jumpToDetailSection(workflowAssistantPrimarySectionKey.value, id, { behavior: 'auto', syncQuery: false })
       return
@@ -6142,6 +6475,116 @@ onMounted(() => {
   background: linear-gradient(180deg, rgba(30, 106, 134, 0.08), rgba(255, 255, 255, 0.97));
 }
 
+.workflow-step-panel {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.journey-stage-panel {
+  background: linear-gradient(180deg, rgba(27, 96, 116, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.handle-workspace-summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.handle-workspace-summary span {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.06);
+  color: #35535b;
+  font-size: 13px;
+}
+
+.handle-workspace-tabs {
+  margin-top: 8px;
+}
+
+.detail-view-mode-switch {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+}
+
+.detail-view-mode-button {
+  border: 0;
+  background: transparent;
+  color: #35535b;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.detail-view-mode-button.is-active {
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f6665;
+  box-shadow: 0 4px 12px rgba(19, 73, 80, 0.08);
+}
+
+.doctor-journey-stage-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.doctor-journey-stage-button {
+  border: 1px solid rgba(19, 73, 80, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  padding: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.doctor-journey-stage-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(15, 102, 101, 0.22);
+}
+
+.doctor-journey-stage-button.is-active {
+  border-color: rgba(15, 102, 101, 0.3);
+  box-shadow: 0 0 0 3px rgba(15, 102, 101, 0.1);
+}
+
+.doctor-journey-stage-button strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #244d56;
+}
+
+.doctor-journey-stage-button span {
+  color: var(--app-muted);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.doctor-journey-stage-note {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(19, 73, 80, 0.08);
+}
+
+.doctor-journey-stage-note strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #244d56;
+}
+
+.doctor-journey-stage-note p {
+  margin: 0;
+  color: #41575d;
+  line-height: 1.75;
+}
+
 .detail-nav-toolbar,
 .detail-nav-chip-list {
   display: flex;
@@ -6431,6 +6874,142 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.workflow-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workflow-step-item {
+  width: 100%;
+  border: 1px solid rgba(19, 73, 80, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.workflow-step-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(15, 102, 101, 0.24);
+  box-shadow: 0 10px 24px rgba(19, 73, 80, 0.08);
+}
+
+.workflow-step-item.is-active {
+  border-color: rgba(15, 102, 101, 0.3);
+  box-shadow: 0 0 0 3px rgba(15, 102, 101, 0.1);
+}
+
+.workflow-step-item.is-done {
+  background: rgba(230, 244, 242, 0.92);
+}
+
+.workflow-step-item.is-current {
+  background: rgba(239, 248, 255, 0.96);
+}
+
+.workflow-step-index {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(19, 73, 80, 0.08);
+  color: #1f5e67;
+  font-weight: 700;
+}
+
+.workflow-step-item.is-done .workflow-step-index {
+  background: rgba(36, 125, 78, 0.12);
+  color: #247d4e;
+}
+
+.workflow-step-item.is-current .workflow-step-index {
+  background: rgba(30, 106, 134, 0.14);
+  color: #1e6a86;
+}
+
+.workflow-step-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workflow-step-copy strong {
+  font-size: 15px;
+}
+
+.workflow-step-copy span {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.workflow-step-copy p {
+  margin: 0;
+  color: #41575d;
+  line-height: 1.65;
+}
+
+.workflow-step-action {
+  color: #1f5e67;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.doctor-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  border-radius: 24px;
+  border: 1px solid rgba(15, 102, 101, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -10px 28px rgba(19, 73, 80, 0.1);
+}
+
+.doctor-action-bar-copy strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #21484f;
+}
+
+.doctor-action-bar-copy p {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.7;
+}
+
+.doctor-action-bar-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 12px;
+}
+
+.doctor-action-bar-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.06);
+  color: #35535b;
+  font-size: 12px;
+}
+
+.doctor-action-bar-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .ai-message-banner {

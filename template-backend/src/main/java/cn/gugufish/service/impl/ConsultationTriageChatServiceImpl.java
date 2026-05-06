@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -55,6 +56,9 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
 
     @Resource
     AiTriageProperties properties;
+
+    @Resource
+    ConsultationDepartmentRoutingService consultationDepartmentRoutingService;
 
     @Override
     @Transactional
@@ -111,9 +115,27 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
                 .build());
         if (advice == null) return "AI 导诊暂时无法响应，请稍后重试";
 
+        String departmentSelectionMode = consultationDepartmentRoutingService.resolveDepartmentSelectionMode(record);
+        List<Map<String, Object>> availableDepartments = consultationDepartmentRoutingService.buildAvailableDepartmentPayload(record);
+        Integer entryDepartmentId = record.getDepartmentId();
+        String entryDepartmentName = record.getDepartmentName();
+        TriageResult triageResult = latestTriageResult(record.getId());
+        record = consultationDepartmentRoutingService.applyAiRecommendedDepartment(record, session, triageResult, advice);
+
         List<TriageMessage> messages = new ArrayList<>();
         messages.add(userMessage);
-        messages.addAll(buildAssistantMessages(session.getId(), record.getId(), advice, nextSort + 10, now));
+        messages.addAll(buildAssistantMessages(
+                session.getId(),
+                record.getId(),
+                record,
+                advice,
+                nextSort + 10,
+                now,
+                departmentSelectionMode,
+                availableDepartments,
+                entryDepartmentId,
+                entryDepartmentName
+        ));
         if (messages.size() <= 1) return "AI 导诊暂时没有生成有效回复";
 
         for (TriageMessage message : messages) {
@@ -129,9 +151,14 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
 
     private List<TriageMessage> buildAssistantMessages(Integer sessionId,
                                                        Integer consultationId,
+                                                       ConsultationRecord record,
                                                        AiTriageAdvice advice,
                                                        int startSort,
-                                                       Date now) {
+                                                       Date now,
+                                                       String departmentSelectionMode,
+                                                       List<Map<String, Object>> availableDepartments,
+                                                       Integer entryDepartmentId,
+                                                       String entryDepartmentName) {
         List<TriageMessage> messages = new ArrayList<>();
 
         String replyContent = buildReplyContent(advice);
@@ -143,7 +170,15 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
                     "ai_chat_reply",
                     "AI 导诊回复",
                     replyContent,
-                    buildReplyStructuredContent(consultationId, advice),
+                    buildReplyStructuredContent(
+                            consultationId,
+                            record,
+                            advice,
+                            departmentSelectionMode,
+                            availableDepartments,
+                            entryDepartmentId,
+                            entryDepartmentName
+                    ),
                     startSort,
                     now
             ));
@@ -159,7 +194,15 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
                     "ai_followup_questions",
                     "AI 建议补充信息",
                     questionContent,
-                    buildQuestionStructuredContent(consultationId, advice),
+                    buildQuestionStructuredContent(
+                            consultationId,
+                            record,
+                            advice,
+                            departmentSelectionMode,
+                            availableDepartments,
+                            entryDepartmentId,
+                            entryDepartmentName
+                    ),
                     startSort,
                     now
             ));
@@ -210,11 +253,24 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
         return JSON.toJSONString(payload);
     }
 
-    private String buildReplyStructuredContent(Integer consultationId, AiTriageAdvice advice) {
+    private String buildReplyStructuredContent(Integer consultationId,
+                                               ConsultationRecord record,
+                                               AiTriageAdvice advice,
+                                               String departmentSelectionMode,
+                                               List<Map<String, Object>> availableDepartments,
+                                               Integer entryDepartmentId,
+                                               String entryDepartmentName) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("consultationId", consultationId);
         payload.put("promptVersion", properties.getPromptVersion());
         payload.put("source", "deepseek");
+        payload.put("departmentSelectionMode", departmentSelectionMode);
+        payload.put("availableDepartments", availableDepartments);
+        payload.put("entryDepartmentId", entryDepartmentId);
+        payload.put("entryDepartmentName", entryDepartmentName);
+        payload.put("finalDepartmentId", record == null ? null : record.getDepartmentId());
+        payload.put("finalDepartmentName", record == null ? null : record.getDepartmentName());
+        payload.put("departmentRerouted", departmentRerouted(entryDepartmentId, entryDepartmentName, record));
         payload.put("reply", advice.getReply());
         payload.put("summary", advice.getSummary());
         payload.put("riskFlags", advice.getRiskFlags());
@@ -229,21 +285,30 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
         return JSON.toJSONString(payload);
     }
 
-    private String buildQuestionStructuredContent(Integer consultationId, AiTriageAdvice advice) {
+    private String buildQuestionStructuredContent(Integer consultationId,
+                                                  ConsultationRecord record,
+                                                  AiTriageAdvice advice,
+                                                  String departmentSelectionMode,
+                                                  List<Map<String, Object>> availableDepartments,
+                                                  Integer entryDepartmentId,
+                                                  String entryDepartmentName) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("consultationId", consultationId);
         payload.put("promptVersion", properties.getPromptVersion());
         payload.put("source", "deepseek");
+        payload.put("departmentSelectionMode", departmentSelectionMode);
+        payload.put("availableDepartments", availableDepartments);
+        payload.put("entryDepartmentId", entryDepartmentId);
+        payload.put("entryDepartmentName", entryDepartmentName);
+        payload.put("finalDepartmentId", record == null ? null : record.getDepartmentId());
+        payload.put("finalDepartmentName", record == null ? null : record.getDepartmentName());
+        payload.put("departmentRerouted", departmentRerouted(entryDepartmentId, entryDepartmentName, record));
         payload.put("nextQuestions", advice.getNextQuestions());
         return JSON.toJSONString(payload);
     }
 
     private List<ConsultationRecommendDoctorVO> parseDoctorCandidates(int consultationId) {
-        TriageResult triageResult = triageResultMapper.selectOne(Wrappers.<TriageResult>query()
-                .eq("consultation_id", consultationId)
-                .orderByDesc("is_final")
-                .orderByDesc("id")
-                .last("limit 1"));
+        TriageResult triageResult = latestTriageResult(consultationId);
         if (triageResult == null || !StringUtils.hasText(triageResult.getDoctorCandidatesJson())) return List.of();
         try {
             List<ConsultationRecommendDoctorVO> list = JSON.parseArray(triageResult.getDoctorCandidatesJson(), ConsultationRecommendDoctorVO.class);
@@ -251,6 +316,14 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
         } catch (Exception ignored) {
             return List.of();
         }
+    }
+
+    private TriageResult latestTriageResult(int consultationId) {
+        return triageResultMapper.selectOne(Wrappers.<TriageResult>query()
+                .eq("consultation_id", consultationId)
+                .orderByDesc("is_final")
+                .orderByDesc("id")
+                .last("limit 1"));
     }
 
     private int nextSort(Integer sessionId) {
@@ -279,6 +352,16 @@ public class ConsultationTriageChatServiceImpl implements ConsultationTriageChat
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int departmentRerouted(Integer entryDepartmentId, String entryDepartmentName, ConsultationRecord record) {
+        if (record == null) return 0;
+        if (entryDepartmentId != null || record.getDepartmentId() != null) {
+            return Objects.equals(entryDepartmentId, record.getDepartmentId()) ? 0 : 1;
+        }
+        String finalDepartmentName = trimToNull(record.getDepartmentName());
+        String initialDepartmentName = trimToNull(entryDepartmentName);
+        return Objects.equals(initialDepartmentName, finalDepartmentName) ? 0 : 1;
     }
 
     private String trimToNull(String value) {

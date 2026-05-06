@@ -103,6 +103,14 @@
             </article>
           </div>
 
+          <div v-if="routingSnapshot" class="record-chip-row is-subtle">
+            <span v-if="routingSnapshot.modeLabel">{{ routingSnapshot.modeLabel }}</span>
+            <span v-if="routingSnapshot.entryDepartmentName">入口科室：{{ routingSnapshot.entryDepartmentName }}</span>
+            <span v-if="routingSnapshot.recommendedDepartmentName">AI建议：{{ routingSnapshot.recommendedDepartmentName }}</span>
+            <span v-if="routingSnapshot.finalDepartmentName">最终科室：{{ routingSnapshot.finalDepartmentName }}</span>
+            <span v-if="routingSnapshot.statusLabel">{{ routingSnapshot.statusLabel }}</span>
+          </div>
+
           <div class="content-grid">
             <section class="card-section">
               <div class="section-head">
@@ -201,6 +209,12 @@
                     <span v-if="message.insight.recommendedDepartmentName">建议科室：{{ message.insight.recommendedDepartmentName }}</span>
                     <span v-if="message.insight.confidenceText">置信度：{{ message.insight.confidenceText }}</span>
                   </div>
+                  <div v-if="message.routingSnapshot" class="message-insight-tags">
+                    <span v-if="message.routingSnapshot.modeLabel">{{ message.routingSnapshot.modeLabel }}</span>
+                    <span v-if="message.routingSnapshot.entryDepartmentName">入口科室：{{ message.routingSnapshot.entryDepartmentName }}</span>
+                    <span v-if="message.routingSnapshot.finalDepartmentName">最终科室：{{ message.routingSnapshot.finalDepartmentName }}</span>
+                    <span v-if="message.routingSnapshot.statusLabel">{{ message.routingSnapshot.statusLabel }}</span>
+                  </div>
                   <p v-if="message.insight.doctorRecommendationReason" class="message-insight-copy">
                     <strong>推荐依据：</strong>{{ message.insight.doctorRecommendationReason }}
                   </p>
@@ -258,7 +272,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, post, resolveImagePath } from '@/net'
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
-import { resolveTriageMessageInsight } from '@/triage/insight'
+import { resolveDepartmentRoutingSnapshot, resolveTriageMessageInsight } from '@/triage/insight'
 
 const router = useRouter()
 const route = useRoute()
@@ -293,8 +307,17 @@ const completedCount = computed(() => records.value.filter(item => item.status =
 const doctorCandidates = computed(() => parseDoctorCandidates(detailRecord.value?.triageResult?.doctorCandidatesJson))
 const triageMessages = computed(() => (detailRecord.value?.triageSession?.messages || []).map(message => ({
   ...message,
-  insight: resolveTriageMessageInsight(message)
+  insight: resolveTriageMessageInsight(message),
+  routingSnapshot: resolveDepartmentRoutingSnapshot(
+    resolveTriageMessageInsight(message),
+    detailRecord.value?.departmentName || detailRecord.value?.triageResult?.departmentName || ''
+  )
 })))
+const routingSnapshot = computed(() => {
+  const latest = [...triageMessages.value].reverse().find(message => message.routingSnapshot)?.routingSnapshot || null
+  if (latest) return latest
+  return resolveDepartmentRoutingSnapshot(null, detailRecord.value?.departmentName || detailRecord.value?.triageResult?.departmentName || '')
+})
 const canSendTriageAiMessage = computed(() => !!detailRecord.value?.triageSession && !triageAiSending.value)
 const triageAiSendHint = computed(() => {
   if (!detailRecord.value?.triageSession) return '当前记录还没有生成导诊会话。'

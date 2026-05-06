@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -41,6 +42,7 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
     private final TriageMessageMapper triageMessageMapper;
     private final TriageResultMapper triageResultMapper;
     private final AiTriageService aiTriageService;
+    private final ConsultationDepartmentRoutingService consultationDepartmentRoutingService;
     private final AiTriageProperties properties;
 
     public ConsultationAiEnrichmentServiceImpl(ConsultationRecordMapper consultationRecordMapper,
@@ -49,6 +51,7 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
                                                TriageMessageMapper triageMessageMapper,
                                                TriageResultMapper triageResultMapper,
                                                AiTriageService aiTriageService,
+                                               ConsultationDepartmentRoutingService consultationDepartmentRoutingService,
                                                AiTriageProperties properties) {
         this.consultationRecordMapper = consultationRecordMapper;
         this.consultationRecordAnswerMapper = consultationRecordAnswerMapper;
@@ -56,6 +59,7 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
         this.triageMessageMapper = triageMessageMapper;
         this.triageResultMapper = triageResultMapper;
         this.aiTriageService = aiTriageService;
+        this.consultationDepartmentRoutingService = consultationDepartmentRoutingService;
         this.properties = properties;
     }
 
@@ -96,7 +100,22 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
                 .build());
         if (advice == null) return;
 
-        List<TriageMessage> messages = buildAiMessages(session.getId(), consultationId, advice);
+        String departmentSelectionMode = consultationDepartmentRoutingService.resolveDepartmentSelectionMode(record);
+        List<Map<String, Object>> availableDepartments = consultationDepartmentRoutingService.buildAvailableDepartmentPayload(record);
+        Integer entryDepartmentId = record.getDepartmentId();
+        String entryDepartmentName = record.getDepartmentName();
+        record = consultationDepartmentRoutingService.applyAiRecommendedDepartment(record, session, triageResult, advice);
+
+        List<TriageMessage> messages = buildAiMessages(
+                session.getId(),
+                consultationId,
+                record,
+                advice,
+                departmentSelectionMode,
+                availableDepartments,
+                entryDepartmentId,
+                entryDepartmentName
+        );
         if (messages.isEmpty()) return;
 
         for (TriageMessage message : messages) {
@@ -130,7 +149,12 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
 
     private List<TriageMessage> buildAiMessages(Integer sessionId,
                                                 int consultationId,
-                                                AiTriageAdvice advice) {
+                                                ConsultationRecord record,
+                                                AiTriageAdvice advice,
+                                                String departmentSelectionMode,
+                                                List<Map<String, Object>> availableDepartments,
+                                                Integer entryDepartmentId,
+                                                String entryDepartmentName) {
         Date now = new Date();
         int startSort = nextSort(sessionId);
         List<TriageMessage> messages = new ArrayList<>();
@@ -144,7 +168,15 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
                     "ai_triage_summary",
                     "AI 导诊建议",
                     summaryContent,
-                    buildSummaryStructuredContent(consultationId, advice),
+                    buildSummaryStructuredContent(
+                            consultationId,
+                            record,
+                            advice,
+                            departmentSelectionMode,
+                            availableDepartments,
+                            entryDepartmentId,
+                            entryDepartmentName
+                    ),
                     startSort,
                     now
             ));
@@ -160,7 +192,15 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
                     "ai_followup_questions",
                     "AI 建议补充信息",
                     nextQuestionContent,
-                    buildQuestionStructuredContent(consultationId, advice),
+                    buildQuestionStructuredContent(
+                            consultationId,
+                            record,
+                            advice,
+                            departmentSelectionMode,
+                            availableDepartments,
+                            entryDepartmentId,
+                            entryDepartmentName
+                    ),
                     startSort,
                     now
             ));
@@ -227,11 +267,24 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
                 .collect(Collectors.joining("、"));
     }
 
-    private String buildSummaryStructuredContent(int consultationId, AiTriageAdvice advice) {
+    private String buildSummaryStructuredContent(int consultationId,
+                                                ConsultationRecord record,
+                                                AiTriageAdvice advice,
+                                                String departmentSelectionMode,
+                                                List<Map<String, Object>> availableDepartments,
+                                                Integer entryDepartmentId,
+                                                String entryDepartmentName) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("consultationId", consultationId);
         payload.put("promptVersion", properties.getPromptVersion());
         payload.put("source", "deepseek");
+        payload.put("departmentSelectionMode", departmentSelectionMode);
+        payload.put("availableDepartments", availableDepartments);
+        payload.put("entryDepartmentId", entryDepartmentId);
+        payload.put("entryDepartmentName", entryDepartmentName);
+        payload.put("finalDepartmentId", record == null ? null : record.getDepartmentId());
+        payload.put("finalDepartmentName", record == null ? null : record.getDepartmentName());
+        payload.put("departmentRerouted", departmentRerouted(entryDepartmentId, entryDepartmentName, record));
         payload.put("summary", advice.getSummary());
         payload.put("riskFlags", advice.getRiskFlags());
         payload.put("recommendedDepartmentName", advice.getRecommendedDepartmentName());
@@ -245,13 +298,36 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
         return JSON.toJSONString(payload);
     }
 
-    private String buildQuestionStructuredContent(int consultationId, AiTriageAdvice advice) {
+    private String buildQuestionStructuredContent(int consultationId,
+                                                  ConsultationRecord record,
+                                                  AiTriageAdvice advice,
+                                                  String departmentSelectionMode,
+                                                  List<Map<String, Object>> availableDepartments,
+                                                  Integer entryDepartmentId,
+                                                  String entryDepartmentName) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("consultationId", consultationId);
         payload.put("promptVersion", properties.getPromptVersion());
         payload.put("source", "deepseek");
+        payload.put("departmentSelectionMode", departmentSelectionMode);
+        payload.put("availableDepartments", availableDepartments);
+        payload.put("entryDepartmentId", entryDepartmentId);
+        payload.put("entryDepartmentName", entryDepartmentName);
+        payload.put("finalDepartmentId", record == null ? null : record.getDepartmentId());
+        payload.put("finalDepartmentName", record == null ? null : record.getDepartmentName());
+        payload.put("departmentRerouted", departmentRerouted(entryDepartmentId, entryDepartmentName, record));
         payload.put("nextQuestions", advice.getNextQuestions());
         return JSON.toJSONString(payload);
+    }
+
+    private int departmentRerouted(Integer entryDepartmentId, String entryDepartmentName, ConsultationRecord record) {
+        if (record == null) return 0;
+        if (entryDepartmentId != null || record.getDepartmentId() != null) {
+            return Objects.equals(entryDepartmentId, record.getDepartmentId()) ? 0 : 1;
+        }
+        String finalDepartmentName = trimToNull(record.getDepartmentName());
+        String initialDepartmentName = trimToNull(entryDepartmentName);
+        return Objects.equals(initialDepartmentName, finalDepartmentName) ? 0 : 1;
     }
 
     private String visitTypeLabel(String visitType) {
@@ -270,5 +346,11 @@ public class ConsultationAiEnrichmentServiceImpl implements ConsultationAiEnrich
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) return null;
+        String text = value.trim();
+        return text.isEmpty() ? null : text;
     }
 }

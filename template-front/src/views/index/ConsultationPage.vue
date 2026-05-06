@@ -187,32 +187,28 @@
         <div class="panel-head">
           <div>
             <span class="panel-kicker">步骤一</span>
-            <h3>选择问诊分类</h3>
+            <h3>描述本次不适症状</h3>
+            <p>先告诉系统你哪里不舒服，系统会先匹配更合适的专科方向，再进入对应的问诊模板。</p>
           </div>
-          <el-button text @click="loadCategories">刷新分类</el-button>
+          <el-button text @click="loadCategories">刷新模板数据</el-button>
         </div>
 
-        <div v-if="categories.length" class="category-list">
-          <button
-            v-for="item in categories"
-            :key="item.id"
-            type="button"
-            :class="['category-card', { active: item.id === activeCategoryId }]"
-            @click="selectCategory(item)"
-          >
-            <span class="category-dept">{{ item.departmentName || '未配置科室' }}</span>
-            <strong>{{ item.name }}</strong>
-            <p>{{ item.description || item.defaultTemplateDescription || '用于装配对应场景下的问诊前置资料。' }}</p>
-            <div class="category-meta">
-              <span>{{ formatAmount(item.priceAmount) }}</span>
-              <span>{{ item.defaultTemplateName }}</span>
-              <span>{{ item.defaultTemplateFieldCount || 0 }} 项字段</span>
-            </div>
-          </button>
+        <div class="intake-block">
+          <el-input
+            v-model="intakeChiefComplaint"
+            type="textarea"
+            :rows="5"
+            maxlength="200"
+            show-word-limit
+            placeholder="例如：我的脚疼，走路时更明显，已经两天了。"
+          />
+          <div class="quick-chip-row">
+            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '我的脚疼，走路时更明显，已经两天了'">脚疼</button>
+            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '孩子发烧咳嗽，精神不太好'">孩子发烧</button>
+            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '身上起了红疹，还很痒'">皮疹瘙痒</button>
+            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '我想看体检报告，帮我解读一下'">报告解读</button>
+          </div>
         </div>
-        <el-empty v-else description="管理员尚未配置可用的问诊分类">
-          <el-button type="primary" @click="loadCategories">重新加载</el-button>
-        </el-empty>
 
         <div class="patient-block">
           <div class="panel-head compact">
@@ -259,21 +255,67 @@
             </div>
           </div>
         </div>
+
+        <div class="route-action-row">
+          <el-button
+            plain
+            :loading="routingLoading"
+            :disabled="!selectedPatientId || !intakeChiefComplaint.trim()"
+            @click="matchIntakeRoute('quick')"
+          >
+            快速匹配
+          </el-button>
+          <el-button
+            type="primary"
+            :loading="routingLoading"
+            :disabled="!selectedPatientId || !intakeChiefComplaint.trim()"
+            @click="matchIntakeRoute('ai')"
+          >
+            智能匹配
+          </el-button>
+        </div>
+
+        <div v-if="currentRouteSummary && currentCategory" class="route-result-card">
+          <div class="route-result-head">
+            <div>
+              <span class="panel-kicker">匹配结果</span>
+              <h4>{{ currentCategory.departmentName || '综合问诊' }}</h4>
+            </div>
+            <div class="route-result-tags">
+              <el-tag :type="currentRouteSummary.matchMode === 'quick' ? 'info' : 'primary'" effect="light">
+                {{ routeModeLabel }}
+              </el-tag>
+              <el-tag type="success" effect="light">
+                {{ routeSelectionLabel }}
+              </el-tag>
+            </div>
+          </div>
+          <p>{{ routeDescriptionText }}</p>
+          <div class="template-meta">
+            <span>问诊分类：{{ currentCategory.name }}</span>
+            <span>参考费用：{{ formatAmount(currentCategory.priceAmount) }}</span>
+            <span>模板：{{ template?.name || currentRouteSummary.template?.name || '-' }}</span>
+            <span v-if="currentRouteSummary.confidenceScore !== null && currentRouteSummary.confidenceScore !== undefined">
+              匹配置信度：{{ currentRouteSummary.confidenceScore }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div class="form-card">
         <div class="panel-head">
           <div>
             <span class="panel-kicker">步骤三</span>
-            <h3>填写问诊资料</h3>
+            <h3>填写专科问诊资料</h3>
             <p v-if="currentCategory">
               {{ currentCategory.name }}{{ currentCategory.departmentName ? ` · ${currentCategory.departmentName}` : '' }}
             </p>
+            <p v-else>完成智能匹配后，系统会自动加载对应专科模板。</p>
           </div>
           <div class="panel-actions">
             <el-button @click="resetForm" :disabled="!template">重置表单</el-button>
-            <el-button type="primary" :loading="submitting" :disabled="!template || !selectedPatientId" @click="submitConsultation">
-              提交并进入 智能导诊
+            <el-button type="primary" :loading="submitting" :disabled="!routeReady || !selectedPatientId" @click="submitConsultation">
+              提交并进入智能导诊
             </el-button>
           </div>
         </div>
@@ -284,11 +326,11 @@
           <span v-if="currentCategory.departmentName">科室：{{ currentCategory.departmentName }}</span>
         </div>
 
-        <el-skeleton v-if="templateLoading" :rows="8" animated />
+        <el-skeleton v-if="templateLoading || routingLoading" :rows="8" animated />
 
-        <template v-else-if="template">
+        <template v-else-if="template && currentRouteSummary">
           <el-alert
-            :title="template.description || '请根据实际情况填写当前问诊资料，提交后系统会自动进入 智能导诊工作区，继续生成建议和追问。'"
+            :title="template.description || routeDescriptionText"
             type="info"
             :closable="false"
             class="template-alert"
@@ -409,8 +451,11 @@
           </div>
         </template>
 
-        <el-empty v-else description="请选择问诊分类后开始填写资料">
-          <el-button type="primary" @click="loadCategories">重新加载分类</el-button>
+        <el-empty v-else description="请先完成症状描述与智能匹配，再开始填写专科问诊资料">
+          <div class="route-action-row">
+            <el-button plain :disabled="!selectedPatientId || !intakeChiefComplaint.trim()" @click="matchIntakeRoute('quick')">快速匹配</el-button>
+            <el-button type="primary" :disabled="!selectedPatientId || !intakeChiefComplaint.trim()" @click="matchIntakeRoute('ai')">智能匹配</el-button>
+          </div>
         </el-empty>
       </div>
     </section>
@@ -718,6 +763,13 @@
                 <strong>{{ detailRecord.departmentName || '待分配' }}</strong>
               </article>
             </div>
+            <div v-if="detailRoutingSnapshot" class="chip-row is-subtle">
+              <span v-if="detailRoutingSnapshot.modeLabel">{{ detailRoutingSnapshot.modeLabel }}</span>
+              <span v-if="detailRoutingSnapshot.entryDepartmentName">入口科室：{{ detailRoutingSnapshot.entryDepartmentName }}</span>
+              <span v-if="detailRoutingSnapshot.recommendedDepartmentName">AI建议：{{ detailRoutingSnapshot.recommendedDepartmentName }}</span>
+              <span v-if="detailRoutingSnapshot.finalDepartmentName">最终科室：{{ detailRoutingSnapshot.finalDepartmentName }}</span>
+              <span v-if="detailRoutingSnapshot.statusLabel">{{ detailRoutingSnapshot.statusLabel }}</span>
+            </div>
             <p><strong>系统建议：</strong>{{ detailRecord.triageSuggestion || '已保存当前问诊资料，请留意后续处理结果。' }}</p>
             <p v-if="detailRecord.triageRuleSummary"><strong>风险提示：</strong>{{ detailRecord.triageRuleSummary }}</p>
           </div>
@@ -780,6 +832,12 @@
                     <span v-if="message.insight.recommendedVisitType">建议方式：{{ message.insight.recommendedVisitType }}</span>
                     <span v-if="message.insight.recommendedDepartmentName">建议科室：{{ message.insight.recommendedDepartmentName }}</span>
                     <span v-if="message.insight.confidenceText">置信度：{{ message.insight.confidenceText }}</span>
+                  </div>
+                  <div v-if="message.routingSnapshot" class="session-message-insight-tags">
+                    <span v-if="message.routingSnapshot.modeLabel">{{ message.routingSnapshot.modeLabel }}</span>
+                    <span v-if="message.routingSnapshot.entryDepartmentName">入口科室：{{ message.routingSnapshot.entryDepartmentName }}</span>
+                    <span v-if="message.routingSnapshot.finalDepartmentName">最终科室：{{ message.routingSnapshot.finalDepartmentName }}</span>
+                    <span v-if="message.routingSnapshot.statusLabel">{{ message.routingSnapshot.statusLabel }}</span>
                   </div>
                   <p v-if="message.insight.doctorRecommendationReason" class="session-message-insight-copy">
                     <strong>推荐依据：</strong>{{ message.insight.doctorRecommendationReason }}
@@ -1730,7 +1788,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { authHeader, backendBaseUrl, download, get, post, resolveImagePath } from '@/net'
 import { comparisonStatusClass, comparisonStatusLabel } from '@/triage/comparison'
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
-import { resolveTriageMessageInsight } from '@/triage/insight'
+import { resolveDepartmentRoutingSnapshot, resolveTriageMessageInsight } from '@/triage/insight'
 import { isPendingServiceFeedbackRecord, serviceFeedbackBaseTime, serviceFeedbackReminderText } from '@/triage/reminder'
 
 const route = useRoute()
@@ -1740,6 +1798,7 @@ const patients = ref([])
 const histories = ref([])
 const records = ref([])
 const template = ref(null)
+const matchedCategory = ref(null)
 const activeCategoryId = ref(null)
 const selectedPatientId = ref(null)
 const historySectionRef = ref(null)
@@ -1766,6 +1825,7 @@ const recordStatusFilter = ref('')
 const recordProgressFilter = ref('all')
 const recordFollowUpFilter = ref('all')
 const templateLoading = ref(false)
+const routingLoading = ref(false)
 const historyLoading = ref(false)
 const submitting = ref(false)
 const detailVisible = ref(false)
@@ -1784,11 +1844,16 @@ const feedbackSubmitting = ref(false)
 const serviceFeedbackSubmitting = ref(false)
 const paymentSubmitting = ref(false)
 const formData = reactive({})
+const intakeChiefComplaint = ref('')
+const intakeRoute = ref(null)
+const intakeRoutePatientId = ref(null)
+const intakeMatchMode = ref('ai')
 const triageAiDraft = reactive({ content: '' })
 const messageDraft = reactive({ content: '', attachments: [], sceneType: '' })
 let detailSectionFocusTimer = null
 let conversationPollTimer = null
 let conversationPollBusy = false
+let suppressAutoTemplateLoad = false
 const CONVERSATION_POLL_INTERVAL = 12000
 const followUpRecoveryStatusOptions = [
   { label: '鏄庢樉濂借浆', value: 'improved' },
@@ -1860,6 +1925,12 @@ const uploadAction = computed(() => `${backendBaseUrl()}/api/image/cache`)
 const uploadHeaders = computed(() => authHeader())
 
 const currentCategory = computed(() => categories.value.find(item => item.id === activeCategoryId.value) || null)
+const currentRouteSummary = computed(() => ensureObject(intakeRoute.value))
+const isSmartRoutingCategory = computed(() => {
+  const code = `${currentCategory.value?.code || ''}`.trim().toUpperCase()
+  const departmentName = `${currentCategory.value?.departmentName || ''}`.trim()
+  return code === 'TEXT_CONSULT' || departmentName.includes('全科') || departmentName.includes('综合')
+})
 const selectedPatient = computed(() => patients.value.find(item => item.id === selectedPatientId.value) || null)
 const historyMap = computed(() => {
   const map = new Map()
@@ -1868,17 +1939,42 @@ const historyMap = computed(() => {
 })
 const currentHistory = computed(() => selectedPatientId.value ? historyMap.value.get(selectedPatientId.value) : null)
 const currentHealthSummary = computed(() => buildHealthSummary(currentHistory.value))
+const routeReady = computed(() => !!(activeCategoryId.value && template.value && currentRouteSummary.value))
+const routeDescriptionText = computed(() => {
+  const route = currentRouteSummary.value
+  if (!route) return '请先描述本次不适症状，系统会先为你匹配更合适的专科方向，再进入对应问诊模板。'
+  return route.routeReason || '系统已根据当前描述匹配到更合适的问诊方向。'
+})
+const routeSelectionLabel = computed(() => {
+  const route = currentRouteSummary.value
+  return route?.selectionModeLabel || (route?.selectionMode === 'ai_match' ? 'AI匹配' : '规则匹配')
+})
+const routeModeLabel = computed(() => {
+  const route = currentRouteSummary.value
+  return route?.matchModeLabel || (route?.matchMode === 'quick' ? '快速匹配' : '智能匹配')
+})
 const visibleFields = computed(() => {
   const fields = template.value?.fields || []
   return fields.filter(field => isFieldVisible(field))
 })
-const detailTriageMessages = computed(() => ensureArray(detailRecord.value?.triageSession?.messages).map(message => ({
-  ...message,
-  insight: resolveTriageMessageInsight(message)
-})))
+const detailTriageMessages = computed(() => ensureArray(detailRecord.value?.triageSession?.messages).map(message => {
+  const insight = resolveTriageMessageInsight(message)
+  return {
+    ...message,
+    insight,
+    routingSnapshot: resolveDepartmentRoutingSnapshot(
+      insight,
+      detailRecord.value?.departmentName || detailRecord.value?.triageResult?.departmentName || ''
+    )
+  }
+}))
 const latestTriageInsight = computed(() => [...detailTriageMessages.value]
   .reverse()
   .find(message => message.insight)?.insight || null)
+const detailRoutingSnapshot = computed(() => resolveDepartmentRoutingSnapshot(
+  latestTriageInsight.value,
+  detailRecord.value?.departmentName || detailRecord.value?.triageResult?.departmentName || ''
+))
 const canSendTriageAiMessage = computed(() => !!detailRecord.value?.triageSession)
 const triageAiSendHint = computed(() => {
   if (!detailRecord.value?.triageSession) return '当前问诊还没有导诊会话。'
@@ -2283,7 +2379,38 @@ const canSubmitServiceFeedback = computed(() => !!(
 ))
 
 watch(activeCategoryId, (value) => {
-  if (value) loadTemplate(value)
+  if (!value) {
+    template.value = null
+    clearFormData()
+    return
+  }
+  if (suppressAutoTemplateLoad) {
+    suppressAutoTemplateLoad = false
+    return
+  }
+  loadTemplate(value)
+  intakeRoute.value = null
+  intakeRoutePatientId.value = null
+})
+
+watch(selectedPatientId, (value, oldValue) => {
+  if (value === oldValue) return
+  if (!intakeRoute.value) return
+  intakeRoute.value = null
+  intakeRoutePatientId.value = null
+  activeCategoryId.value = null
+  template.value = null
+  clearFormData()
+})
+
+watch(intakeChiefComplaint, (value, oldValue) => {
+  if (value === oldValue) return
+  if (!intakeRoute.value) return
+  intakeRoute.value = null
+  intakeRoutePatientId.value = null
+  activeCategoryId.value = null
+  template.value = null
+  clearFormData()
 })
 
 watch(() => route.query, () => {
@@ -2499,9 +2626,6 @@ function loadCategories() {
   get('/api/user/consultation/category/list', (data) => {
     try {
       categories.value = ensureArray(data)
-      if (!activeCategoryId.value && categories.value.length) {
-        activeCategoryId.value = categories.value[0].id
-      }
     } catch (error) {
       console.error(error)
       categories.value = []
@@ -2517,6 +2641,7 @@ function loadTemplate(categoryId) {
     try {
       template.value = ensureObject(data)
       resetForm()
+      syncChiefComplaintToForm()
     } catch (error) {
       console.error(error)
       template.value = null
@@ -2572,7 +2697,63 @@ function loadFeedbackOptions() {
 
 function selectCategory(item) {
   if (activeCategoryId.value === item.id) return
+  intakeMatchMode.value = 'quick'
   activeCategoryId.value = item.id
+}
+
+function matchIntakeRoute(mode = 'ai') {
+  const chiefComplaint = `${intakeChiefComplaint.value || ''}`.trim()
+  if (!chiefComplaint) {
+    ElMessage.warning('请先描述本次不适症状')
+    return
+  }
+  if (!selectedPatientId.value) {
+    ElMessage.warning('请先选择就诊人')
+    return
+  }
+
+  intakeMatchMode.value = mode === 'quick' ? 'quick' : 'ai'
+  routingLoading.value = true
+  post('/api/user/consultation/intake/route', {
+    patientId: selectedPatientId.value,
+    chiefComplaint,
+    matchMode: intakeMatchMode.value
+  }, (data) => {
+    routingLoading.value = false
+    try {
+      const route = ensureObject(data)
+      const category = ensureObject(route?.category)
+      const routeTemplate = ensureObject(route?.template)
+      if (!route || !category || !routeTemplate?.id) {
+        throw new Error('Invalid intake route payload')
+      }
+
+      intakeRoute.value = route
+      intakeRoutePatientId.value = selectedPatientId.value
+      suppressAutoTemplateLoad = true
+      activeCategoryId.value = category.id
+      template.value = routeTemplate
+      resetForm()
+      syncChiefComplaintToForm()
+      ElMessage.success(intakeMatchMode.value === 'quick' ? '已完成快速匹配' : '已完成智能匹配')
+    } catch (error) {
+      console.error(error)
+      intakeRoute.value = null
+      intakeRoutePatientId.value = null
+      activeCategoryId.value = null
+      template.value = null
+      clearFormData()
+      ElMessage.warning('匹配结果处理失败，请稍后重试')
+    }
+  }, (message) => {
+    routingLoading.value = false
+    intakeRoute.value = null
+    intakeRoutePatientId.value = null
+    activeCategoryId.value = null
+    template.value = null
+    clearFormData()
+    ElMessage.warning(message || (intakeMatchMode.value === 'quick' ? '快速匹配失败，请稍后重试' : '智能匹配失败，请稍后重试'))
+  })
 }
 
 function resetForm() {
@@ -2580,6 +2761,7 @@ function resetForm() {
   ;(template.value?.fields || []).forEach(field => {
     formData[field.fieldCode] = initialFieldValue(field)
   })
+  syncChiefComplaintToForm()
 }
 
 function clearFormData() {
@@ -2591,6 +2773,18 @@ function initialFieldValue(field) {
   if (field.fieldType === 'switch') return field.defaultValue === '1' ? '1' : '0'
   if (field.fieldType === 'number') return field.defaultValue ? Number(field.defaultValue) : null
   return field.defaultValue || ''
+}
+
+function syncChiefComplaintToForm() {
+  const text = `${intakeChiefComplaint.value || ''}`.trim()
+  if (!text || !template.value?.fields?.length) return
+  const preferred = ['chief_complaint', 'main_issue', 'skin_problem', 'disease_name', 'abnormal_focus']
+  const targetField = template.value.fields.find(field => preferred.includes(field.fieldCode))
+    || template.value.fields.find(field => ['textarea', 'input'].includes(field.fieldType))
+  if (!targetField) return
+  const currentValue = `${formData[targetField.fieldCode] || ''}`.trim()
+  if (currentValue) return
+  formData[targetField.fieldCode] = text
 }
 
 function fieldOptions(field) {
@@ -2843,8 +3037,8 @@ function submitConsultation() {
     ElMessage.warning('请先选择就诊人')
     return
   }
-  if (!activeCategoryId.value || !template.value) {
-    ElMessage.warning('请先选择问诊分类')
+  if (!activeCategoryId.value || !template.value || !intakeRoute.value) {
+    ElMessage.warning('请先完成症状描述并进行智能匹配')
     return
   }
 
@@ -4635,6 +4829,63 @@ onMounted(() => {
 
 .compact {
   margin-top: 20px;
+}
+
+.intake-block,
+.route-result-card {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(17, 70, 77, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.route-result-card {
+  background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.94));
+}
+
+.quick-chip-row,
+.route-action-row,
+.route-result-head {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.quick-chip-row,
+.route-action-row {
+  margin-top: 14px;
+}
+
+.route-result-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.route-result-head h4 {
+  margin: 6px 0 0;
+}
+
+.route-result-card p {
+  margin: 12px 0 0;
+  color: #637b84;
+  line-height: 1.75;
+}
+
+.quick-chip {
+  padding: 8px 14px;
+  border: 1px solid rgba(15, 102, 101, 0.14);
+  border-radius: 999px;
+  background: rgba(15, 102, 101, 0.06);
+  color: #225862;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.quick-chip:hover {
+  border-color: rgba(15, 102, 101, 0.3);
+  background: rgba(15, 102, 101, 0.12);
+  transform: translateY(-1px);
 }
 
 .category-list,

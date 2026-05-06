@@ -693,6 +693,9 @@ CONSULTATION_AI_TRIAGE_PROMPT_VERSION</pre>
           <div v-if="auditMetaTags(item).length" class="audit-tag-row">
             <span v-for="tag in auditMetaTags(item)" :key="tag">{{ tag }}</span>
           </div>
+          <p v-if="item.insight?.availableDepartments?.length" class="copy">
+            <strong>候选科室：</strong>{{ auditAvailableDepartmentText(item) }}
+          </p>
           <div v-if="item.insight?.recommendedDoctors?.length" class="audit-tag-row">
             <span v-for="doctor in item.insight.recommendedDoctors" :key="`${item.messageId}-${doctor}`">推荐 {{ doctor }}</span>
           </div>
@@ -1720,12 +1723,29 @@ function auditMetaTags(item) {
   const tags = []
   if (item.insight?.recommendedVisitType) tags.push(`建议方式：${item.insight.recommendedVisitType}`)
   if (item.insight?.recommendedDepartmentName) tags.push(`建议科室：${item.insight.recommendedDepartmentName}`)
+  if (item.insight?.departmentSelectionMode === 'general_entry') tags.push('综合入口分诊')
+  if (item.insight?.departmentSelectionMode === 'locked_department') tags.push('固定科室判断')
   if (item.insight?.confidenceText) tags.push(`置信度：${item.insight.confidenceText}`)
   if (item.insight?.promptVersion) tags.push(`提示词版本：${item.insight.promptVersion}`)
   if (item.insight?.source) tags.push(`来源：${sourceLabel(item.insight.source)}`)
   if (item.insight?.shouldEscalateToHuman === 1) tags.push('建议医生接管')
   if (item.insight?.suggestOfflineImmediately === 1) tags.push('建议尽快线下')
   return tags.slice(0, 6)
+}
+
+function auditAvailableDepartmentText(item) {
+  const departments = Array.isArray(item?.insight?.availableDepartments) ? item.insight.availableDepartments : []
+  if (!departments.length) return ''
+  return departments
+    .slice(0, 8)
+    .map(department => {
+      const tags = []
+      if (department.current === 1) tags.push('当前')
+      if (department.fallback === 1) tags.push('兜底')
+      const suffix = tags.length ? `（${tags.join(' / ')}）` : ''
+      return `${department.name}${suffix}`
+    })
+    .join('、')
 }
 
 function showAuditReply(item) {
