@@ -274,6 +274,30 @@
             </div>
           </section>
 
+          <section v-if="doctorCurrentTaskCard" class="card panel doctor-todo-panel">
+            <div class="doctor-todo-main">
+              <div class="doctor-todo-copy">
+                <span class="section-tag">当前待办</span>
+                <h3>{{ doctorCurrentTaskCard.title }}</h3>
+                <p>{{ doctorCurrentTaskCard.description }}</p>
+                <div class="chips">
+                  <span>{{ doctorWorkflowProgressText }}</span>
+                  <span v-for="item in doctorCurrentTaskTags" :key="`doctor-task-tag-${item}`">{{ item }}</span>
+                </div>
+              </div>
+              <div class="doctor-todo-actions">
+                <el-button
+                  :type="doctorCurrentTaskCard.buttonType || 'primary'"
+                  :plain="doctorCurrentTaskCard.buttonType !== 'primary'"
+                  :disabled="doctorCurrentTaskCard.disabled"
+                  @click="runWorkflowAssistantAction(doctorCurrentTaskCard.action)"
+                >
+                  {{ doctorCurrentTaskCard.buttonLabel }}
+                </el-button>
+              </div>
+            </div>
+          </section>
+
           <section v-if="doctorJourneyStages.length" class="card panel journey-stage-panel">
             <div class="head">
               <div>
@@ -1708,6 +1732,38 @@
             <el-empty v-else description="患者暂未提交问诊服务评价" />
           </section>
 
+          <section
+            v-if="detail && detail.status !== 'completed' && (canEdit || canClaimCurrent) && handleCompletionChecklistItems.length"
+            class="card panel completion-checklist-panel"
+          >
+            <div class="head">
+              <div>
+                <h3>完成前检查</h3>
+                <p>{{ handleCompletionChecklistLeadText }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ handleCompletionChecklistSummary }}</span>
+                <span v-if="handleCompletionChecklistReady">可以直接完成处理</span>
+              </div>
+            </div>
+            <div class="completion-checklist-list">
+              <button
+                v-for="item in handleCompletionChecklistItems"
+                :key="item.key"
+                type="button"
+                :class="['completion-checklist-item', { 'is-done': item.done, 'is-pending': !item.done }]"
+                @click="openHandleCompletionItem(item)"
+              >
+                <span class="completion-checklist-state">{{ item.done ? '已完成' : '待补充' }}</span>
+                <div class="completion-checklist-copy">
+                  <strong>{{ item.label }}</strong>
+                  <p>{{ item.done ? item.successHint : item.hint }}</p>
+                </div>
+                <span class="completion-checklist-action">{{ item.done ? '查看' : '去处理' }}</span>
+              </button>
+            </div>
+          </section>
+
           <section v-if="detail" class="doctor-action-bar">
             <div class="doctor-action-bar-copy">
               <strong>{{ detailActionBarTitle }}</strong>
@@ -1717,10 +1773,19 @@
               <span>{{ statusLabel(detail.status) }}</span>
               <span>{{ assignmentStatusLabel(detail.doctorAssignment) }}</span>
               <span v-if="doctorWorkflowPrimaryStep">下一步：{{ doctorWorkflowPrimaryStep.title }}</span>
+              <span v-if="detail.status !== 'completed'">{{ handleCompletionChecklistSummary }}</span>
             </div>
             <div class="doctor-action-bar-actions">
               <el-button v-if="canClaimCurrent" type="primary" :loading="assignLoading && assignType==='claim'" @click="submitAssignment('claim', detail.id)">
                 {{ claimActionButtonLabel }}
+              </el-button>
+              <el-button
+                v-else-if="doctorActionBarGuideAction"
+                plain
+                type="primary"
+                @click="runWorkflowAssistantAction(doctorActionBarGuideAction.action)"
+              >
+                {{ doctorActionBarGuideAction.label }}
               </el-button>
               <el-button v-if="canReleaseCurrent" type="warning" plain :loading="assignLoading && assignType==='release'" @click="submitAssignment('release', detail.id)">
                 释放问诊单
@@ -2300,6 +2365,24 @@ const doctorWorkflowLeadText = computed(() => {
   if (!doctorWorkflowPrimaryStep.value) return '按接诊流程逐步处理，避免在多个卡片之间来回切换。'
   return `建议先处理“${doctorWorkflowPrimaryStep.value.title}”，系统已把当前最需要操作的环节排在前面。`
 })
+const doctorCurrentTaskCard = computed(() => {
+  const action = workflowAssistantPrimaryAction.value
+  if (!action) return null
+  return {
+    title: action.title,
+    description: action.description,
+    buttonLabel: action.buttonLabel || '立即处理',
+    buttonType: action.buttonType || 'primary',
+    action: action.action,
+    disabled: action.disabled === true
+  }
+})
+const doctorCurrentTaskTags = computed(() => {
+  const tags = []
+  if (doctorWorkflowPrimaryStep.value?.title) tags.push(`推荐步骤：${doctorWorkflowPrimaryStep.value.title}`)
+  if (workflowAssistantPrimarySectionLabel.value) tags.push(`推荐定位：${workflowAssistantPrimarySectionLabel.value}`)
+  return [...new Set(tags)].slice(0, 2)
+})
 const doctorJourneyStages = computed(() => ([
   { key: 'intake', title: '接诊准备', shortHint: '先看风险、问诊资料和归属信息' },
   { key: 'communication', title: '病情沟通', shortHint: '补问关键信息，理解患者动态' },
@@ -2332,6 +2415,113 @@ const detailActionBarHint = computed(() => {
   if (!canEdit.value) return assignmentHint.value
   if (detail.value?.status === 'completed') return canSubmitFollowUp.value ? '当前问诊已完成，如需继续跟进可直接登记随访。' : '当前问诊已完成，可回看处理与服务评价。'
   return doctorWorkflowLeadText.value
+})
+const handleCompletionChecklistItems = computed(() => {
+  if (!detail.value) return []
+  const hasSummary = !!trimText(handleForm.summary)
+  const hasMedicalAdvice = !!trimText(handleForm.medicalAdvice)
+  const hasConditionLevel = !!conclusionForm.conditionLevel
+  const hasDisposition = !!conclusionForm.disposition
+  const hasAiConsistency = conclusionForm.isConsistentWithAi !== null
+  const hasFollowUpDays = conclusionForm.needFollowUp !== 1 || !!conclusionForm.followUpWithinDays
+  const hasMismatchReason = conclusionForm.isConsistentWithAi !== 0
+    || conclusionForm.aiMismatchReasons.length > 0
+    || !!trimText(conclusionForm.aiMismatchRemark)
+  const prescriptionValidMessage = validatePrescriptionRowsForSubmit()
+  return [
+    {
+      key: 'summary',
+      label: '医生判断摘要',
+      done: hasSummary,
+      hint: '先补充本次病情判断摘要，说明当前风险和核心结论。',
+      successHint: '已填写医生判断摘要。',
+      action: 'handle'
+    },
+    {
+      key: 'advice',
+      label: '处理建议',
+      done: hasMedicalAdvice,
+      hint: '完成处理前需要补充面向患者的处理建议。',
+      successHint: '已填写处理建议。',
+      action: 'handle'
+    },
+    {
+      key: 'condition_level',
+      label: '病情等级',
+      done: hasConditionLevel,
+      hint: '请在结构化结论中选择病情等级。',
+      successHint: `已选择病情等级：${conditionLevelLabel(conclusionForm.conditionLevel)}`,
+      action: 'conclusion'
+    },
+    {
+      key: 'disposition',
+      label: '处理去向',
+      done: hasDisposition,
+      hint: '请在结构化结论中明确处理去向。',
+      successHint: `已选择处理去向：${dispositionLabel(conclusionForm.disposition)}`,
+      action: 'conclusion'
+    },
+    {
+      key: 'ai_consistency',
+      label: '与智能建议一致性',
+      done: hasAiConsistency && hasMismatchReason,
+      hint: conclusionForm.isConsistentWithAi === 0 && !hasMismatchReason
+        ? '当前已选择不一致，还需要补充差异原因或说明。'
+        : '请补充与智能建议是否一致，便于后续复盘。',
+      successHint: conclusionForm.isConsistentWithAi === 0
+        ? '已补充与智能建议不一致的说明。'
+        : '已完成智能一致性判断。',
+      action: 'conclusion'
+    },
+    {
+      key: 'followup_days',
+      label: '随访时效',
+      done: hasFollowUpDays,
+      hint: '当前标记为需要随访，请补充建议随访时效。',
+      successHint: conclusionForm.needFollowUp === 1
+        ? `已填写建议随访时效：${conclusionForm.followUpWithinDays} 天`
+        : '当前无需补充随访时效。',
+      action: 'conclusion',
+      hidden: conclusionForm.needFollowUp !== 1
+    },
+    {
+      key: 'prescription_validation',
+      label: '处方基础校验',
+      done: !prescriptionValidMessage && !prescriptionConflictDetected.value,
+      hint: prescriptionValidMessage || prescriptionConflictWarningText.value || '请先检查处方填写和联用冲突。',
+      successHint: effectivePrescriptionCount.value ? '当前处方基础校验已通过。' : '当前未开具处方，无需额外校验。',
+      action: 'handle'
+    }
+  ].filter(item => !item.hidden)
+})
+const handleCompletionChecklistReady = computed(() => handleCompletionChecklistItems.value.every(item => item.done))
+const handleCompletionChecklistSummary = computed(() => {
+  const total = handleCompletionChecklistItems.value.length
+  if (!total) return '当前暂无完成前检查项'
+  const done = handleCompletionChecklistItems.value.filter(item => item.done).length
+  return `完成前检查 ${done} / ${total}`
+})
+const handleCompletionChecklistLeadText = computed(() => {
+  if (handleCompletionChecklistReady.value) return '当前关键提交项已经补齐，可以直接完成处理或继续补充处方、检查和备注。'
+  const firstPending = handleCompletionChecklistItems.value.find(item => !item.done)
+  return firstPending ? `建议先补齐“${firstPending.label}”，这样完成处理时不会来回查找缺失项。` : '请按检查项逐步补齐当前问诊内容。'
+})
+const doctorActionBarGuideAction = computed(() => {
+  if (canClaimCurrent.value || detail.value?.status === 'completed') return null
+  const pendingChecklist = handleCompletionChecklistItems.value.find(item => !item.done)
+  if (pendingChecklist) {
+    return {
+      action: pendingChecklist.action,
+      label: `去补 ${pendingChecklist.label}`
+    }
+  }
+  if (doctorCurrentTaskCard.value?.action) {
+    return {
+      action: doctorCurrentTaskCard.value.action,
+      label: doctorCurrentTaskCard.value.buttonLabel || '去下一步'
+    }
+  }
+  return null
 })
 const latestDoctorMessage = computed(() => [...consultationMessages.value]
   .reverse()
@@ -3188,6 +3378,19 @@ function resolveConsultationAction(value) {
   const action = trimText(value)
   return ['basic', 'archive', 'patient_action', 'assistant', 'reply', 'handle', 'conclusion', 'followup', 'feedback'].includes(action) ? action : ''
 }
+function consultationActionStage(action) {
+  return ({
+    basic: 'intake',
+    archive: 'intake',
+    assistant: 'intake',
+    patient_action: 'communication',
+    reply: 'communication',
+    handle: 'plan',
+    conclusion: 'conclusion',
+    followup: 'followup',
+    feedback: 'followup'
+  })[resolveConsultationAction(action)] || ''
+}
 function currentDoctorConsultationPath(path = route.path) {
   return ['/doctor/consultation', '/doctor/medical-record', '/doctor/prescription'].includes(path)
     ? path
@@ -3218,6 +3421,10 @@ function markFocusedDetailSection(sectionKey) {
 }
 function focusDetailActionSection(action, detailId = null, options = {}) {
   const targetAction = resolveConsultationAction(action)
+  const targetStage = consultationActionStage(targetAction)
+  if (targetStage && detailViewMode.value === 'guided' && doctorJourneyStage.value !== targetStage) {
+    doctorJourneyStage.value = targetStage
+  }
   if (!['reply', 'followup', 'patient_action', 'feedback'].includes(targetAction)) {
     if (['basic', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetAction)) {
       focusDetailPanelSection(targetAction, detailId, options)
@@ -3270,6 +3477,10 @@ function resolveDetailSectionElement(sectionKey) {
 
 function focusDetailPanelSection(sectionKey, detailId = null, options = {}) {
   const targetSection = resolveConsultationAction(sectionKey)
+  const targetStage = consultationActionStage(targetSection)
+  if (targetStage && detailViewMode.value === 'guided' && doctorJourneyStage.value !== targetStage) {
+    doctorJourneyStage.value = targetStage
+  }
   if (!['basic', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetSection)) return
   const {
     behavior = 'smooth',
@@ -3411,6 +3622,11 @@ function runWorkflowAssistantAction(action) {
   if (['basic', 'archive', 'assistant', 'reply', 'handle', 'conclusion', 'followup', 'feedback', 'patient_action'].includes(action)) {
     jumpToDetailSection(action, detail.value.id)
   }
+}
+
+function openHandleCompletionItem(item) {
+  if (!item?.action || !detail.value?.id) return
+  jumpToDetailSection(item.action, detail.value.id)
 }
 
 function isEditableShortcutTarget(target) {
@@ -6479,8 +6695,16 @@ onMounted(() => {
   background: linear-gradient(180deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.98));
 }
 
+.doctor-todo-panel {
+  background: linear-gradient(180deg, rgba(22, 119, 115, 0.12), rgba(255, 255, 255, 0.98));
+}
+
 .journey-stage-panel {
   background: linear-gradient(180deg, rgba(27, 96, 116, 0.08), rgba(255, 255, 255, 0.98));
+}
+
+.completion-checklist-panel {
+  background: linear-gradient(180deg, rgba(210, 155, 47, 0.12), rgba(255, 255, 255, 0.98));
 }
 
 .handle-workspace-summary {
@@ -6647,6 +6871,31 @@ onMounted(() => {
   color: #264952;
 }
 
+.doctor-todo-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+}
+
+.doctor-todo-copy h3 {
+  margin: 10px 0 8px;
+  color: #1e4950;
+}
+
+.doctor-todo-copy p {
+  margin: 0 0 14px;
+  color: #48656d;
+  line-height: 1.75;
+}
+
+.doctor-todo-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
 .workflow-assistant-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6709,6 +6958,83 @@ onMounted(() => {
 
 .workflow-assistant-actions {
   margin-top: auto;
+}
+
+.completion-checklist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.completion-checklist-item {
+  width: 100%;
+  border: 1px solid rgba(19, 73, 80, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.completion-checklist-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(210, 155, 47, 0.24);
+  box-shadow: 0 10px 24px rgba(117, 89, 23, 0.08);
+}
+
+.completion-checklist-item.is-done {
+  background: rgba(236, 248, 241, 0.9);
+}
+
+.completion-checklist-item.is-pending {
+  background: rgba(255, 251, 238, 0.94);
+}
+
+.completion-checklist-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #35535b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.completion-checklist-item.is-done .completion-checklist-state {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.completion-checklist-item.is-pending .completion-checklist-state {
+  background: rgba(210, 155, 47, 0.16);
+  color: #8f6514;
+}
+
+.completion-checklist-copy {
+  min-width: 0;
+}
+
+.completion-checklist-copy strong {
+  display: block;
+  color: #31474d;
+}
+
+.completion-checklist-copy p {
+  margin: 6px 0 0;
+  color: #48656d;
+  line-height: 1.7;
+}
+
+.completion-checklist-action {
+  color: #1f5e67;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .detail-section-anchor {
@@ -7631,6 +7957,15 @@ onMounted(() => {
   .workspace-mode-card {
     flex-direction: column;
   }
+
+  .doctor-todo-main,
+  .completion-checklist-item {
+    grid-template-columns: 1fr;
+  }
+
+  .completion-checklist-item {
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 760px) {
@@ -7652,6 +7987,7 @@ onMounted(() => {
   .head,
   .toolbar,
   .actions,
+  .doctor-todo-main,
   .prescription-editor-head,
   .prescription-card-head,
   .archive-toolbar,
@@ -7680,6 +8016,11 @@ onMounted(() => {
 
   .triage-session-head {
     flex-direction: column;
+  }
+
+  .doctor-todo-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 </style>
