@@ -190,28 +190,150 @@
       </el-table>
     </section>
 
-    <el-drawer v-model="detailVisible" :title="detailDrawerTitle" size="70%" destroy-on-close>
-      <div v-loading="detailLoading" class="drawer-body">
+    <el-drawer
+      v-model="detailVisible"
+      :title="detailDrawerTitle"
+      size="78%"
+      destroy-on-close
+      class="consultation-detail-drawer"
+    >
+      <div v-loading="detailLoading" class="drawer-body consultation-detail-body">
         <template v-if="detail">
+          <section class="consultation-detail-hero">
+            <div class="detail-hero-main">
+              <div class="detail-patient-mark">
+                {{ detailPatientInitial }}
+              </div>
+              <div class="detail-hero-copy">
+                <span class="section-tag">接诊概览</span>
+                <h2>{{ detail.patientName || '未命名就诊人' }}</h2>
+                <p>{{ detail.chiefComplaint || '暂无主诉信息' }}</p>
+                <div class="detail-hero-tags">
+                  <el-tag effect="light" :type="statusTagType(detail.status)">{{ statusLabel(detail.status) }}</el-tag>
+                  <el-tag effect="light">{{ detail.triageLevelName || '待评估' }}</el-tag>
+                  <el-tag effect="light" type="success">{{ assignmentStatusLabel(detail.doctorAssignment) }}</el-tag>
+                  <el-tag v-if="detail.departmentName" effect="plain">{{ detail.departmentName }}</el-tag>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-hero-task">
+              <span>当前卡点</span>
+              <strong>{{ detailActionBarTitle }}</strong>
+              <p>{{ detailActionBarHint }}</p>
+              <div class="detail-hero-actions">
+                <el-button
+                  v-if="canClaimCurrent"
+                  type="primary"
+                  :loading="assignLoading && assignType==='claim'"
+                  @click="submitAssignment('claim', detail.id)"
+                >
+                  {{ claimActionButtonLabel }}
+                </el-button>
+                <el-button
+                  v-else-if="doctorActionBarGuideAction"
+                  type="primary"
+                  plain
+                  @click="runWorkflowAssistantAction(doctorActionBarGuideAction.action)"
+                >
+                  {{ doctorActionBarGuideAction.label }}
+                </el-button>
+                <el-button v-if="canReleaseCurrent" plain type="warning" :loading="assignLoading && assignType==='release'" @click="submitAssignment('release', detail.id)">
+                  释放问诊单
+                </el-button>
+              </div>
+            </div>
+
+            <div class="detail-hero-metrics">
+              <article>
+                <span>提交时间</span>
+                <strong>{{ formatDate(detail.createTime) }}</strong>
+              </article>
+              <article>
+                <span>沟通进度</span>
+                <strong>{{ detailMessageSummary.totalCount }} 条</strong>
+                <small v-if="detailMessageSummary.unreadCount">未读 {{ detailMessageSummary.unreadCount }} 条</small>
+              </article>
+              <article>
+                <span>完成前检查</span>
+                <strong>{{ handleCompletionChecklistSummary }}</strong>
+              </article>
+              <article>
+                <span>收费状态</span>
+                <strong>{{ paymentStatusLabel(detail.payment) }}</strong>
+              </article>
+            </div>
+          </section>
+
           <section
             ref="detailBasicPanelRef"
-            :class="['card', 'panel', { 'focus-detail-panel': focusedDetailSection === 'basic' }]"
+            :class="['card', 'panel', 'detail-basic-panel', { 'focus-detail-panel': focusedDetailSection === 'basic' }]"
           >
-            <h3>基本信息</h3>
-            <el-descriptions :column="2" border>
-              <el-descriptions-item label="问诊单号">{{ detail.consultationNo || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="就诊人">{{ detail.patientName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="问诊分类">{{ detail.categoryName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="所属科室">{{ detail.departmentName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="分诊等级">{{ detail.triageLevelName || '待评估' }}</el-descriptions-item>
-              <el-descriptions-item label="建议动作">{{ triageActionLabel(detail.triageActionType) }}</el-descriptions-item>
-              <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
-              <el-descriptions-item label="提交时间">{{ formatDate(detail.createTime) }}</el-descriptions-item>
-              <el-descriptions-item label="收费金额">{{ formatAmount(detail.payment?.amount) }}</el-descriptions-item>
-              <el-descriptions-item label="收费状态">{{ paymentStatusLabel(detail.payment) }}</el-descriptions-item>
-              <el-descriptions-item label="支付方式">{{ paymentChannelLabel(detail.payment?.paymentChannel) }}</el-descriptions-item>
-              <el-descriptions-item label="支付时间">{{ formatDate(detail.payment?.paidTime) }}</el-descriptions-item>
-            </el-descriptions>
+            <div class="detail-panel-title">
+              <div>
+                <h3>基本信息</h3>
+                <p>先确认患者、科室、分诊和归属，再进入沟通与处理。</p>
+              </div>
+              <div class="chips">
+                <span>{{ detail.consultationNo || '-' }}</span>
+                <span>{{ formatDate(detail.createTime) }}</span>
+              </div>
+            </div>
+            <div class="detail-basic-grid">
+              <article>
+                <span>问诊分类</span>
+                <strong>{{ detail.categoryName || '-' }}</strong>
+              </article>
+              <article>
+                <span>所属科室</span>
+                <strong>{{ detail.departmentName || '-' }}</strong>
+              </article>
+              <article>
+                <span>分诊等级</span>
+                <strong>{{ detail.triageLevelName || '待评估' }}</strong>
+              </article>
+              <article>
+                <span>建议动作</span>
+                <strong>{{ triageActionLabel(detail.triageActionType) }}</strong>
+              </article>
+            </div>
+            <el-collapse v-model="detailInfoCollapse" class="detail-basic-collapse">
+              <el-collapse-item title="查看收费与支付信息" name="payment">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="问诊单号">{{ detail.consultationNo || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="就诊人">{{ detail.patientName || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
+                  <el-descriptions-item label="提交时间">{{ formatDate(detail.createTime) }}</el-descriptions-item>
+                  <el-descriptions-item label="收费金额">{{ formatAmount(detail.payment?.amount) }}</el-descriptions-item>
+                  <el-descriptions-item label="收费状态">{{ paymentStatusLabel(detail.payment) }}</el-descriptions-item>
+                  <el-descriptions-item label="支付方式">{{ paymentChannelLabel(detail.payment?.paymentChannel) }}</el-descriptions-item>
+                  <el-descriptions-item label="支付时间">{{ formatDate(detail.payment?.paidTime) }}</el-descriptions-item>
+                </el-descriptions>
+              </el-collapse-item>
+            </el-collapse>
+          </section>
+
+          <section
+            v-if="detail.status !== 'completed' && handleCompletionChecklistItems.length"
+            class="detail-readiness-strip"
+          >
+            <div class="detail-readiness-copy">
+              <span>{{ handleCompletionChecklistSummary }}</span>
+              <strong>{{ handleCompletionChecklistReady ? '必要项已补齐' : '完成处理前还缺这些' }}</strong>
+              <p>{{ handleCompletionChecklistLeadText }}</p>
+            </div>
+            <div class="detail-readiness-items">
+              <button
+                v-for="item in priorityCompletionItems"
+                :key="`priority-${item.key}`"
+                type="button"
+                :class="['detail-readiness-item', { 'is-done': item.done }]"
+                @click="openHandleCompletionItem(item)"
+              >
+                <span>{{ item.done ? '已完成' : '待补充' }}</span>
+                <strong>{{ item.label }}</strong>
+              </button>
+            </div>
           </section>
 
           <section v-if="isMedicalRecordMode" class="card panel medical-record-panel">
@@ -430,35 +552,53 @@
             </div>
           </section>
 
-          <section class="card panel detail-nav-panel">
-            <div class="head">
-              <div>
-                <h3>{{ detailNavigationTitle }}</h3>
-                <p>{{ detailNavigationDescription }}</p>
-              </div>
-              <div class="chips">
-                <span v-if="detailRecordPositionLabel">{{ detailRecordPositionLabel }}</span>
-                <span v-if="filteredRecords.length">当前筛选 {{ filteredRecords.length }} 条</span>
-                <span v-if="filteredRecords.length > 1">可用组合快捷键配合左右方向键切换</span>
-              </div>
-            </div>
-            <div class="detail-nav-toolbar">
-              <el-button plain :disabled="!previousDetailRecord || detailLoading" @click="openAdjacentDetail(-1)">上一条</el-button>
-              <el-button plain :disabled="!nextDetailRecord || detailLoading" @click="openAdjacentDetail(1)">下一条</el-button>
-              <span class="detail-nav-meta">{{ detailRecordPositionLabel || '当前问诊不在当前筛选结果中，暂时无法使用相邻切换。' }}</span>
-            </div>
-            <div v-if="detailNavigationSectionItems.length" class="detail-nav-chip-list">
-              <button
-                v-for="item in detailNavigationSectionItems"
-                :key="item.key"
-                type="button"
-                :class="['detail-nav-chip', { 'is-active': focusedDetailSection === item.key }]"
-                @click="scrollToDetailSection(item.key)"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          </section>
+          <div class="detail-workspace-shell">
+            <aside class="detail-sidebar">
+              <section class="card panel detail-nav-panel">
+                <div class="detail-sidebar-title">
+                  <div>
+                    <h3>{{ detailNavigationTitle }}</h3>
+                    <p>{{ detailNavigationDescription }}</p>
+                  </div>
+                </div>
+                <div class="detail-nav-toolbar">
+                  <el-button plain :disabled="!previousDetailRecord || detailLoading" @click="openAdjacentDetail(-1)">上一条</el-button>
+                  <el-button plain :disabled="!nextDetailRecord || detailLoading" @click="openAdjacentDetail(1)">下一条</el-button>
+                  <span class="detail-nav-meta">{{ detailRecordPositionLabel || '当前问诊不在当前筛选结果中，暂时无法使用相邻切换。' }}</span>
+                </div>
+                <div class="detail-sidebar-meta">
+                  <span v-if="filteredRecords.length">当前筛选 {{ filteredRecords.length }} 条</span>
+                  <span v-if="filteredRecords.length > 1">Alt + ← / → 切换</span>
+                </div>
+                <div v-if="detailNavigationSectionItems.length" class="detail-nav-chip-list">
+                  <button
+                    v-for="item in detailNavigationSectionItems"
+                    :key="item.key"
+                    type="button"
+                    :class="['detail-nav-chip', { 'is-active': focusedDetailSection === item.key }]"
+                    @click="scrollToDetailSection(item.key)"
+                  >
+                    {{ item.label }}
+                  </button>
+                </div>
+                <article v-if="doctorCurrentTaskCard && !isMedicalRecordMode && !isPrescriptionMode" class="detail-sidebar-task">
+                  <span>推荐下一步</span>
+                  <strong>{{ doctorCurrentTaskCard.title }}</strong>
+                  <p>{{ doctorCurrentTaskCard.description }}</p>
+                  <el-button
+                    size="small"
+                    :type="doctorCurrentTaskCard.buttonType || 'primary'"
+                    :plain="doctorCurrentTaskCard.buttonType !== 'primary'"
+                    :disabled="doctorCurrentTaskCard.disabled"
+                    @click="runWorkflowAssistantAction(doctorCurrentTaskCard.action)"
+                  >
+                    {{ doctorCurrentTaskCard.buttonLabel }}
+                  </el-button>
+                </article>
+              </section>
+            </aside>
+
+            <div class="detail-workspace-main">
 
           <section v-if="doctorWorkflowSteps.length && !isMedicalRecordMode && !isPrescriptionMode" class="card panel workflow-step-panel">
             <div class="head">
@@ -2018,16 +2158,17 @@
             </div>
           </section>
 
-          <section v-if="detail && !isMedicalRecordMode && !isPrescriptionMode" class="doctor-action-bar">
-            <div class="doctor-action-bar-copy">
-              <strong>{{ detailActionBarTitle }}</strong>
-              <p>{{ detailActionBarHint }}</p>
-            </div>
-            <div class="doctor-action-bar-meta">
-              <span>{{ statusLabel(detail.status) }}</span>
-              <span>{{ assignmentStatusLabel(detail.doctorAssignment) }}</span>
-              <span v-if="doctorWorkflowPrimaryStep">下一步：{{ doctorWorkflowPrimaryStep.title }}</span>
-              <span v-if="detail.status !== 'completed'">{{ handleCompletionChecklistSummary }}</span>
+          <section v-if="detail && !isMedicalRecordMode && !isPrescriptionMode" class="card panel doctor-action-bar">
+            <div class="doctor-action-bar-head">
+              <div class="doctor-action-bar-copy">
+                <h3>收尾操作</h3>
+                <p>{{ detail.status === 'completed' ? '当前问诊已完成，可继续回看记录或登记随访。' : handleCompletionChecklistLeadText }}</p>
+              </div>
+              <div class="doctor-action-bar-meta">
+                <span>{{ statusLabel(detail.status) }}</span>
+                <span>{{ assignmentStatusLabel(detail.doctorAssignment) }}</span>
+                <span v-if="detail.status !== 'completed'">{{ handleCompletionChecklistSummary }}</span>
+              </div>
             </div>
             <div class="doctor-action-bar-actions">
               <el-button v-if="canClaimCurrent" type="primary" :loading="assignLoading && assignType==='claim'" @click="submitAssignment('claim', detail.id)">
@@ -2058,6 +2199,8 @@
               </el-button>
             </div>
           </section>
+            </div>
+          </div>
         </template>
       </div>
     </el-drawer>
@@ -2229,6 +2372,7 @@ const messageAiScene = ref('opening')
 const workflowMessageDraftType = ref('doctor_plan')
 const handleWorkspaceTab = ref('summary')
 const detailViewMode = ref('guided')
+const detailInfoCollapse = ref([])
 const doctorJourneyStage = ref('intake')
 const messageAiUsage = reactive(createEmptyMessageAiUsage())
 const detailBasicPanelRef = ref(null)
@@ -2462,6 +2606,10 @@ const detailDrawerTitle = computed(() => {
   if (isMedicalRecordMode.value) return '电子病历书写'
   if (isPrescriptionMode.value) return '处方与检查建议'
   return '问诊详情'
+})
+const detailPatientInitial = computed(() => {
+  const name = trimText(detail.value?.patientName)
+  return (name || '患').slice(0, 1)
 })
 const detailNavigationTitle = computed(() => isMedicalRecordMode.value ? '病历书写导航' : '连续处理导航')
 const detailNavigationDescription = computed(() => {
@@ -2960,6 +3108,11 @@ const handleCompletionChecklistItems = computed(() => {
   ].filter(item => !item.hidden)
 })
 const handleCompletionChecklistReady = computed(() => handleCompletionChecklistItems.value.every(item => item.done))
+const priorityCompletionItems = computed(() => {
+  const items = handleCompletionChecklistItems.value
+  const pending = items.filter(item => !item.done)
+  return (pending.length ? pending : items).slice(0, 4)
+})
 const handleCompletionChecklistSummary = computed(() => {
   const total = handleCompletionChecklistItems.value.length
   if (!total) return '当前暂无完成前检查项'
@@ -7218,6 +7371,325 @@ onMounted(() => {
   gap: 16px;
 }
 
+.consultation-detail-body {
+  gap: 14px;
+}
+
+.consultation-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(19, 73, 80, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(15, 102, 101, 0.12), rgba(255, 255, 255, 0.92) 42%),
+    linear-gradient(45deg, rgba(210, 155, 47, 0.12), rgba(255, 255, 255, 0) 48%);
+  box-shadow: 0 16px 34px rgba(24, 62, 69, 0.1);
+}
+
+.detail-hero-main {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.detail-patient-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: #0f6665;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 700;
+  box-shadow: 0 10px 22px rgba(15, 102, 101, 0.18);
+}
+
+.detail-hero-copy {
+  min-width: 0;
+}
+
+.detail-hero-copy h2 {
+  margin: 8px 0 8px;
+  color: #183e45;
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.detail-hero-copy p {
+  margin: 0;
+  color: #405a61;
+  line-height: 1.75;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.detail-hero-tags,
+.detail-hero-actions,
+.detail-hero-metrics,
+.detail-readiness-items,
+.detail-sidebar-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.detail-hero-tags {
+  margin-top: 12px;
+}
+
+.detail-hero-task {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(210, 155, 47, 0.18);
+}
+
+.detail-hero-task > span,
+.detail-hero-metrics article span,
+.detail-basic-grid article span,
+.detail-readiness-copy span,
+.detail-sidebar-task span {
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.detail-hero-task strong {
+  color: #244d56;
+  font-size: 18px;
+}
+
+.detail-hero-task p {
+  margin: 0;
+  color: #50646a;
+  line-height: 1.65;
+}
+
+.detail-hero-actions {
+  margin-top: auto;
+}
+
+.detail-hero-metrics {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.detail-hero-metrics article,
+.detail-basic-grid article {
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(19, 73, 80, 0.08);
+}
+
+.detail-hero-metrics article strong,
+.detail-basic-grid article strong {
+  display: block;
+  margin-top: 6px;
+  color: #244d56;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.detail-hero-metrics article small {
+  display: block;
+  margin-top: 4px;
+  color: #8f6514;
+}
+
+.detail-panel-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.detail-panel-title h3 {
+  margin: 0;
+}
+
+.detail-panel-title p {
+  margin: 6px 0 0;
+  color: var(--app-muted);
+  line-height: 1.65;
+}
+
+.detail-basic-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-basic-collapse {
+  margin-top: 12px;
+}
+
+:deep(.detail-basic-collapse .el-collapse-item__header) {
+  padding: 0 4px;
+  color: #27646d;
+  font-weight: 600;
+}
+
+:deep(.detail-basic-collapse .el-collapse-item__content) {
+  padding-bottom: 0;
+}
+
+.detail-readiness-strip {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(210, 155, 47, 0.18);
+  background: linear-gradient(135deg, rgba(255, 251, 238, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.detail-readiness-copy strong {
+  display: block;
+  margin-top: 4px;
+  color: #6c4c11;
+  font-size: 18px;
+}
+
+.detail-readiness-copy p {
+  margin: 6px 0 0;
+  color: #665738;
+  line-height: 1.65;
+}
+
+.detail-readiness-items {
+  align-content: start;
+  justify-content: flex-end;
+}
+
+.detail-readiness-item {
+  min-width: 136px;
+  border: 1px solid rgba(210, 155, 47, 0.18);
+  border-radius: 14px;
+  background: #fffaf0;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.detail-readiness-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(210, 155, 47, 0.36);
+  box-shadow: 0 10px 20px rgba(117, 89, 23, 0.08);
+}
+
+.detail-readiness-item.is-done {
+  background: #effaf4;
+  border-color: rgba(77, 168, 132, 0.22);
+}
+
+.detail-readiness-item span {
+  display: block;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.detail-readiness-item strong {
+  display: block;
+  margin-top: 4px;
+  color: #244d56;
+}
+
+.detail-workspace-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+.detail-sidebar {
+  grid-column: 2;
+  grid-row: 1;
+  position: sticky;
+  top: 12px;
+  z-index: 7;
+}
+
+.detail-workspace-main {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.detail-sidebar-title h3 {
+  margin: 0;
+  color: #244d56;
+}
+
+.detail-sidebar-title p {
+  margin: 6px 0 0;
+  color: var(--app-muted);
+  line-height: 1.6;
+}
+
+.detail-sidebar-meta {
+  margin: 12px 0;
+}
+
+.detail-sidebar-meta span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #35535b;
+  font-size: 12px;
+}
+
+.detail-sidebar .detail-nav-chip-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.detail-sidebar .detail-nav-chip {
+  width: 100%;
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.detail-sidebar-task {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(30, 106, 134, 0.1);
+}
+
+.detail-sidebar-task strong {
+  display: block;
+  margin-top: 6px;
+  color: #244d56;
+}
+
+.detail-sidebar-task p {
+  margin: 8px 0 12px;
+  color: #48656d;
+  line-height: 1.6;
+}
+
 .copy {
   margin: 0;
   line-height: 1.8;
@@ -8099,21 +8571,21 @@ onMounted(() => {
 }
 
 .workflow-step-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
 }
 
 .workflow-step-item {
   width: 100%;
   border: 1px solid rgba(19, 73, 80, 0.1);
-  border-radius: 20px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.88);
-  padding: 16px 18px;
+  padding: 14px;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 12px;
   text-align: left;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
@@ -8139,9 +8611,9 @@ onMounted(() => {
 }
 
 .workflow-step-index {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8180,28 +8652,35 @@ onMounted(() => {
   margin: 0;
   color: #41575d;
   line-height: 1.65;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .workflow-step-action {
+  grid-column: 1 / -1;
+  justify-self: flex-start;
   color: #1f5e67;
   font-size: 13px;
   white-space: nowrap;
 }
 
 .doctor-action-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 8;
-  border-radius: 24px;
-  border: 1px solid rgba(15, 102, 101, 0.14);
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 -10px 28px rgba(19, 73, 80, 0.1);
+  border-color: rgba(15, 102, 101, 0.12);
+  background: linear-gradient(135deg, rgba(15, 102, 101, 0.08), rgba(255, 255, 255, 0.98));
 }
 
-.doctor-action-bar-copy strong {
-  display: block;
-  margin-bottom: 6px;
+.doctor-action-bar-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.doctor-action-bar-copy h3 {
+  margin: 0 0 6px;
   color: #21484f;
 }
 
@@ -8215,7 +8694,7 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin: 14px 0 12px;
+  justify-content: flex-end;
 }
 
 .doctor-action-bar-meta span {
@@ -8232,6 +8711,7 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .ai-message-banner {
@@ -8841,6 +9321,8 @@ onMounted(() => {
 @media (max-width: 1100px) {
   .stats,
   .grid,
+  .detail-hero-metrics,
+  .detail-basic-grid,
   .consultation-hub-grid,
   .prescription-grid,
   .patient-action-grid,
@@ -8852,6 +9334,27 @@ onMounted(() => {
   .medical-record-highlight-list,
   .triage-doctor-list,
   .conclusion-compare-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .consultation-detail-hero,
+  .detail-readiness-strip,
+  .detail-workspace-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-sidebar,
+  .detail-workspace-main {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .detail-sidebar {
+    position: static;
+    order: -1;
+  }
+
+  .detail-sidebar .detail-nav-chip-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -8876,6 +9379,8 @@ onMounted(() => {
 
   .stats,
   .grid,
+  .detail-hero-metrics,
+  .detail-basic-grid,
   .consultation-hub-grid,
   .prescription-grid,
   .patient-action-grid,
@@ -8890,6 +9395,25 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .detail-hero-main,
+  .detail-panel-title,
+  .detail-readiness-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-panel-title {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .detail-sidebar .detail-nav-chip-list {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-readiness-items {
+    justify-content: flex-start;
+  }
+
   .medical-record-progress-list {
     grid-template-columns: 1fr;
   }
@@ -8898,6 +9422,7 @@ onMounted(() => {
   .toolbar,
   .actions,
   .doctor-todo-main,
+  .doctor-action-bar-head,
   .prescription-editor-head,
   .prescription-card-head,
   .archive-toolbar,
@@ -8943,6 +9468,11 @@ onMounted(() => {
 
   .doctor-todo-actions {
     width: 100%;
+    justify-content: flex-start;
+  }
+
+  .doctor-action-bar-meta,
+  .doctor-action-bar-actions {
     justify-content: flex-start;
   }
 }

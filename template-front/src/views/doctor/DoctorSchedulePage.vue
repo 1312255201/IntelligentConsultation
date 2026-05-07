@@ -23,7 +23,7 @@
       <div class="panel-head">
         <div>
           <h3>我的排班概览</h3>
-          <p>这里先提供只读排班视图，方便医生确认接诊时段、方式与号源余量。</p>
+          <p>可用于确认接诊时段、方式与号源余量。</p>
         </div>
         <el-button @click="loadSchedules">刷新</el-button>
       </div>

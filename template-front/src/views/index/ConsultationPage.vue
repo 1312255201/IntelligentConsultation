@@ -466,7 +466,7 @@
           <span class="panel-kicker">历史记录</span>
           <h3>问诊记录</h3>
         </div>
-        <el-button @click="loadRecords">刷新记录</el-button>
+        <el-button @click="refreshRecords">刷新记录</el-button>
       </div>
 
       <div class="history-toolbar">
@@ -493,7 +493,7 @@
         </el-select>
       </div>
 
-      <el-table :data="filteredRecords" v-loading="historyLoading" border :row-class-name="recordRowClassName">
+      <el-table :data="filteredRecords" :row-key="row => row.id" v-loading="historyLoading" border :row-class-name="recordRowClassName">
         <el-table-column label="初步分诊" min-width="140" align="center">
           <template #default="{ row }">
             <span class="triage-badge" :style="triageBadgeStyle(row.triageLevelColor)">
@@ -556,10 +556,12 @@
             {{ formatDate(row.createTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="190" fixed="right">
+        <el-table-column label="操作" width="190" fixed="right" class-name="record-action-column">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openRecordDetail(row)">查看详情</el-button>
-            <el-button link type="success" @click="openTriageWorkspace(row.id)">智能导诊</el-button>
+            <div class="record-action-cell">
+              <el-button link type="primary" @click="openRecordDetail(row)">查看详情</el-button>
+              <el-button link type="success" @click="openTriageWorkspace(row.id)">智能导诊</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -2662,10 +2664,22 @@ function loadRecords(callback) {
   historyLoading.value = true
   get('/api/user/consultation/record/list', (data) => {
     try {
-      records.value = ensureArray(data)
+      const nextRecords = ensureArray(data)
         .map(item => normalizeConsultationRecord(item))
         .filter(Boolean)
-      callback?.(records.value)
+        .slice()
+        .sort((left, right) => compareDateDesc(left?.createTime, right?.createTime) || compareNumber(Number(right?.id || 0), Number(left?.id || 0)))
+      records.value = nextRecords
+      if (detailVisible.value && detailRecord.value?.id) {
+        const latestCurrent = nextRecords.find(item => item.id === detailRecord.value.id)
+        if (latestCurrent) {
+          detailRecord.value = {
+            ...detailRecord.value,
+            ...latestCurrent
+          }
+        }
+      }
+      callback?.(nextRecords)
       autoOpenRecordDetail()
     } catch (error) {
       console.error(error)
@@ -2676,6 +2690,14 @@ function loadRecords(callback) {
     }
   }, () => {
     historyLoading.value = false
+  })
+}
+
+function refreshRecords(options = {}) {
+  const { syncDetail = true, reloadConversation = true } = options
+  loadRecords(() => {
+    if (!syncDetail || !detailVisible.value || !detailRecord.value?.id) return
+    refreshRecordDetail(detailRecord.value.id, { reloadConversation })
   })
 }
 
@@ -5807,6 +5829,22 @@ onMounted(() => {
   line-height: 1.8;
 }
 
+.record-action-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 40px;
+  padding: 4px 0;
+}
+
+:deep(.el-table__fixed-right .el-table__fixed-body-wrapper td.el-table__cell),
+:deep(.el-table__fixed-right .el-table__header-wrapper th.el-table__cell),
+:deep(.el-table__fixed .el-table__fixed-body-wrapper td.el-table__cell),
+:deep(.el-table__fixed .el-table__header-wrapper th.el-table__cell) {
+  background: #fdfefe;
+}
+
 :deep(.el-table .record-row-unread td.el-table__cell) {
   background: rgba(77, 168, 132, 0.08);
 }
@@ -5816,6 +5854,21 @@ onMounted(() => {
 }
 
 :deep(.el-table .record-row-due-today td.el-table__cell) {
+  background: rgba(210, 155, 47, 0.09);
+}
+
+:deep(.el-table__fixed-right .record-row-unread td.el-table__cell),
+:deep(.el-table__fixed .record-row-unread td.el-table__cell) {
+  background: rgba(77, 168, 132, 0.08);
+}
+
+:deep(.el-table__fixed-right .record-row-overdue td.el-table__cell),
+:deep(.el-table__fixed .record-row-overdue td.el-table__cell) {
+  background: rgba(214, 95, 80, 0.09);
+}
+
+:deep(.el-table__fixed-right .record-row-due-today td.el-table__cell),
+:deep(.el-table__fixed .record-row-due-today td.el-table__cell) {
   background: rgba(210, 155, 47, 0.09);
 }
 
