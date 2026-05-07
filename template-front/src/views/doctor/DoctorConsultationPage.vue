@@ -190,7 +190,7 @@
       </el-table>
     </section>
 
-    <el-drawer v-model="detailVisible" title="问诊详情" size="70%" destroy-on-close>
+    <el-drawer v-model="detailVisible" :title="detailDrawerTitle" size="70%" destroy-on-close>
       <div v-loading="detailLoading" class="drawer-body">
         <template v-if="detail">
           <section
@@ -214,11 +214,227 @@
             </el-descriptions>
           </section>
 
+          <section v-if="isMedicalRecordMode" class="card panel medical-record-panel">
+            <div class="head">
+              <div>
+                <span class="section-tag">病历工作区</span>
+                <h3>电子病历书写</h3>
+                <p>{{ medicalRecordLeadText }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ medicalRecordProgressText }}</span>
+                <span>{{ statusLabel(detail.status) }}</span>
+                <span>{{ assignmentStatusLabel(detail.doctorAssignment) }}</span>
+              </div>
+            </div>
+            <div class="medical-record-grid">
+              <article class="medical-record-card">
+                <strong>本次问诊摘要</strong>
+                <p>{{ detail.chiefComplaint || '暂无主诉信息' }}</p>
+                <p>{{ detail.healthSummary || '暂无健康摘要' }}</p>
+                <div class="chips">
+                  <span>{{ detail.categoryName || '未分类' }}</span>
+                  <span>{{ detail.departmentName || '未分配科室' }}</span>
+                  <span>{{ detail.triageLevelName || '待评估' }}</span>
+                </div>
+              </article>
+              <article class="medical-record-card">
+                <strong>病历书写进度</strong>
+                <div class="medical-record-progress-list">
+                  <button
+                    v-for="item in medicalRecordProgressItems"
+                    :key="item.key"
+                    type="button"
+                    :class="['medical-record-progress-item', { 'is-done': item.done }]"
+                    @click="jumpToDetailSection(item.action, detail.id)"
+                  >
+                    <span>{{ item.label }}</span>
+                    <small>{{ item.done ? '已填写' : '待填写' }}</small>
+                  </button>
+                </div>
+                <div class="actions medical-record-actions">
+                  <el-button plain type="primary" @click="jumpToDetailSection('handle', detail.id)">去写病历摘要</el-button>
+                  <el-button type="primary" @click="jumpToDetailSection('conclusion', detail.id)">去写结构化结论</el-button>
+                </div>
+              </article>
+            </div>
+            <div v-if="medicalRecordAnswerHighlights.length" class="medical-record-highlight-list">
+              <article v-for="item in medicalRecordAnswerHighlights" :key="item.label" class="medical-record-highlight-item">
+                <strong>{{ item.label }}</strong>
+                <p>{{ item.value }}</p>
+              </article>
+            </div>
+            <div class="medical-record-writing-grid">
+              <article class="medical-record-writing-card">
+                <div class="medical-record-writing-head">
+                  <div>
+                    <strong>病历正文</strong>
+                    <p>先把本次判断摘要、处理建议和随访计划补齐，再继续完善结构化结论。</p>
+                  </div>
+                  <span>{{ trimText(handleForm.summary) ? '已开始书写' : '尚未开始' }}</span>
+                </div>
+                <div class="medical-record-writing-preview">
+                  <p><strong>判断摘要：</strong>{{ trimText(handleForm.summary) || '暂未填写医生判断摘要' }}</p>
+                  <p><strong>处理建议：</strong>{{ trimText(handleForm.medicalAdvice) || '暂未填写处理建议' }}</p>
+                  <p><strong>随访计划：</strong>{{ trimText(handleForm.followUpPlan) || '暂未填写随访计划' }}</p>
+                </div>
+                <div class="actions medical-record-actions">
+                  <el-button plain type="primary" @click="openMedicalRecordEditor('summary')">去写病历正文</el-button>
+                  <el-button plain @click="openMedicalRecordEditor('checks')">补充检查或处方</el-button>
+                </div>
+              </article>
+              <article class="medical-record-writing-card">
+                <div class="medical-record-writing-head">
+                  <div>
+                    <strong>病历结论</strong>
+                    <p>将病情等级、处理去向、诊断方向和患者指导沉淀为结构化结论，便于后续统计与复盘。</p>
+                  </div>
+                  <span>{{ hasDoctorConclusionContent ? '已填写' : '待填写' }}</span>
+                </div>
+                <div class="medical-record-writing-preview">
+                  <p><strong>病情等级：</strong>{{ conclusionForm.conditionLevel ? conditionLevelLabel(conclusionForm.conditionLevel) : '待填写' }}</p>
+                  <p><strong>处理去向：</strong>{{ conclusionForm.disposition ? dispositionLabel(conclusionForm.disposition) : '待填写' }}</p>
+                  <p><strong>诊断方向：</strong>{{ trimText(conclusionForm.diagnosisDirection) || '待填写' }}</p>
+                  <p><strong>患者指导：</strong>{{ trimText(conclusionForm.patientInstruction) || '待填写' }}</p>
+                </div>
+                <div class="actions medical-record-actions">
+                  <el-button type="primary" @click="openMedicalRecordEditor('conclusion')">去写病历结论</el-button>
+                  <el-button plain @click="openMedicalRecordEditor('reply')">查看沟通记录</el-button>
+                </div>
+              </article>
+            </div>
+            <div v-if="detail && detail.status !== 'completed' && (canEdit || canClaimCurrent)" class="medical-record-save-bar">
+              <div class="medical-record-save-copy">
+                <strong>{{ medicalRecordActionTitle }}</strong>
+                <p>{{ medicalRecordActionHint }}</p>
+              </div>
+              <div class="medical-record-save-actions">
+                <el-button v-if="canClaimCurrent" type="primary" :loading="assignLoading && assignType==='claim'" @click="submitAssignment('claim', detail.id)">
+                  {{ claimActionButtonLabel }}
+                </el-button>
+                <template v-else>
+                  <el-button type="warning" plain :disabled="!canEdit || detail.status === 'completed'" :loading="submitLoading && submitStatus==='processing'" @click="submitHandle('processing')">
+                    暂存病历
+                  </el-button>
+                  <el-button type="primary" :disabled="!canEdit" :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='stay'" @click="submitHandle('completed')">
+                    完成病历
+                  </el-button>
+                  <el-button plain type="success" :disabled="!canEdit || !nextDetailRecord" :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='next'" @click="submitHandle('completed', { openNext: true })">
+                    完成并写下一份
+                  </el-button>
+                </template>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="isPrescriptionMode" class="card panel prescription-workspace-panel">
+            <div class="head">
+              <div>
+                <span class="section-tag">处方工作区</span>
+                <h3>处方开具与检查建议</h3>
+                <p>{{ prescriptionWorkspaceLeadText }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ prescriptionWorkspaceProgressText }}</span>
+                <span>{{ effectivePrescriptionCount }} 项处方</span>
+                <span>{{ handleForm.checkSuggestions.length }} 项检查建议</span>
+              </div>
+            </div>
+            <div class="medical-record-grid">
+              <article class="medical-record-card">
+                <strong>当前处方风险</strong>
+                <p>{{ prescriptionWorkspaceRiskSummary }}</p>
+                <div class="chips">
+                  <span v-if="prescriptionConflictDetected">存在联用冲突</span>
+                  <span v-else>未发现联用冲突</span>
+                  <span v-if="prescriptionPreview.validationWarnings.length">校验提醒 {{ prescriptionPreview.validationWarnings.length }} 条</span>
+                  <span v-else>无基础校验异常</span>
+                </div>
+                <div class="actions medical-record-actions">
+                  <el-button plain type="primary" @click="openPrescriptionWorkspace('prescription')">去开处方</el-button>
+                  <el-button plain :disabled="!detail?.id || !handleForm.prescriptions.length" :loading="prescriptionPreviewLoading" @click="refreshPrescriptionPreview">刷新禁忌检测</el-button>
+                </div>
+              </article>
+              <article class="medical-record-card">
+                <strong>患者补充与反馈</strong>
+                <p>{{ prescriptionWorkspacePatientInsight }}</p>
+                <div class="chips">
+                  <span v-if="latestPatientCheckResultUpdate">已补充检查结果</span>
+                  <span v-if="latestMedicationFeedback">已提交用药反馈</span>
+                  <span v-if="!latestPatientCheckResultUpdate && !latestMedicationFeedback">暂未收到新补充</span>
+                </div>
+                <div class="actions medical-record-actions">
+                  <el-button plain type="primary" @click="openPrescriptionWorkspace('checks')">去写检查建议</el-button>
+                  <el-button plain @click="openPrescriptionWorkspace(latestMedicationFeedback ? 'handle' : 'reply')">
+                    {{ latestMedicationFeedback ? '查看用药反馈' : '查看沟通记录' }}
+                  </el-button>
+                </div>
+              </article>
+            </div>
+            <div class="prescription-workspace-grid">
+              <article class="prescription-workspace-card">
+                <div class="prescription-workspace-card-head">
+                  <div>
+                    <strong>检查建议</strong>
+                    <p>先明确还需要哪些化验、影像或复查项目，再决定是否同步开具处方。</p>
+                  </div>
+                  <span>{{ handleForm.checkSuggestions.length }} 项</span>
+                </div>
+                <div class="prescription-workspace-preview">
+                  <p v-if="handleForm.checkSuggestions.length"><strong>最近建议：</strong>{{ handleForm.checkSuggestions[0]?.itemName || '未命名检查建议' }}</p>
+                  <p v-else>当前还未补充结构化检查建议。</p>
+                </div>
+                <div class="actions medical-record-actions">
+                  <el-button type="primary" @click="openPrescriptionWorkspace('checks')">补充检查建议</el-button>
+                </div>
+              </article>
+              <article class="prescription-workspace-card">
+                <div class="prescription-workspace-card-head">
+                  <div>
+                    <strong>处方用药</strong>
+                    <p>围绕药品选择、剂量频次、疗程和禁忌提醒连续处理，减少开药时来回切页。</p>
+                  </div>
+                  <span>{{ effectivePrescriptionCount }} 项</span>
+                </div>
+                <div class="prescription-workspace-preview">
+                  <p v-if="effectivePrescriptionCount"><strong>当前处方：</strong>{{ prescriptionWorkspaceMedicineSummary }}</p>
+                  <p v-else>当前还未录入处方药品。</p>
+                </div>
+                <div class="actions medical-record-actions">
+                  <el-button type="primary" @click="openPrescriptionWorkspace('prescription')">去开处方</el-button>
+                  <el-button plain @click="openPrescriptionWorkspace('conclusion')">补充患者指导</el-button>
+                </div>
+              </article>
+            </div>
+            <div v-if="detail && detail.status !== 'completed' && (canEdit || canClaimCurrent)" class="medical-record-save-bar">
+              <div class="medical-record-save-copy">
+                <strong>{{ prescriptionWorkspaceActionTitle }}</strong>
+                <p>{{ prescriptionWorkspaceActionHint }}</p>
+              </div>
+              <div class="medical-record-save-actions">
+                <el-button v-if="canClaimCurrent" type="primary" :loading="assignLoading && assignType==='claim'" @click="submitAssignment('claim', detail.id)">
+                  {{ claimActionButtonLabel }}
+                </el-button>
+                <template v-else>
+                  <el-button type="warning" plain :disabled="!canEdit || detail.status === 'completed'" :loading="submitLoading && submitStatus==='processing'" @click="submitHandle('processing')">
+                    暂存处方区
+                  </el-button>
+                  <el-button type="primary" :disabled="!canEdit" :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='stay'" @click="submitHandle('completed')">
+                    完成处方处理
+                  </el-button>
+                  <el-button plain type="success" :disabled="!canEdit || !nextDetailRecord" :loading="submitLoading && submitStatus==='completed' && handleSubmitMode==='next'" @click="submitHandle('completed', { openNext: true })">
+                    完成并看下一条
+                  </el-button>
+                </template>
+              </div>
+            </div>
+          </section>
+
           <section class="card panel detail-nav-panel">
             <div class="head">
               <div>
-                <h3>连续处理导航</h3>
-                <p>按当前筛选结果连续查看问诊，并快速跳到常用处理区，不用关闭详情抽屉。</p>
+                <h3>{{ detailNavigationTitle }}</h3>
+                <p>{{ detailNavigationDescription }}</p>
               </div>
               <div class="chips">
                 <span v-if="detailRecordPositionLabel">{{ detailRecordPositionLabel }}</span>
@@ -244,7 +460,7 @@
             </div>
           </section>
 
-          <section v-if="doctorWorkflowSteps.length" class="card panel workflow-step-panel">
+          <section v-if="doctorWorkflowSteps.length && !isMedicalRecordMode && !isPrescriptionMode" class="card panel workflow-step-panel">
             <div class="head">
               <div>
                 <h3>接诊流程</h3>
@@ -274,7 +490,7 @@
             </div>
           </section>
 
-          <section v-if="doctorCurrentTaskCard" class="card panel doctor-todo-panel">
+          <section v-if="doctorCurrentTaskCard && !isMedicalRecordMode && !isPrescriptionMode" class="card panel doctor-todo-panel">
             <div class="doctor-todo-main">
               <div class="doctor-todo-copy">
                 <span class="section-tag">当前待办</span>
@@ -298,7 +514,45 @@
             </div>
           </section>
 
-          <section v-if="doctorJourneyStages.length" class="card panel journey-stage-panel">
+          <section v-if="detail && consultationModeWorkspaceCards.length && !isMedicalRecordMode && !isPrescriptionMode" class="card panel consultation-hub-panel">
+            <div class="head">
+              <div>
+                <span class="section-tag">接诊总控台</span>
+                <h3>下一步去哪里处理</h3>
+                <p>{{ consultationHubLeadText }}</p>
+              </div>
+              <div class="chips">
+                <span>{{ consultationHubSummaryText }}</span>
+                <span v-if="doctorWorkflowPrimaryStep">当前推荐 {{ doctorWorkflowPrimaryStep.title }}</span>
+              </div>
+            </div>
+            <div class="consultation-hub-grid">
+              <article v-for="item in consultationModeWorkspaceCards" :key="item.key" class="consultation-hub-card">
+                <div class="consultation-hub-card-head">
+                  <div>
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.description }}</p>
+                  </div>
+                  <span :class="['consultation-hub-status', `is-${item.tone || 'info'}`]">{{ item.status }}</span>
+                </div>
+                <div class="consultation-hub-card-meta">
+                  <span v-for="tag in item.tags" :key="`${item.key}-${tag}`">{{ tag }}</span>
+                </div>
+                <div class="actions consultation-hub-actions">
+                  <el-button
+                    :type="item.buttonType || 'primary'"
+                    :plain="item.buttonType !== 'primary'"
+                    :disabled="item.disabled"
+                    @click="runConsultationHubAction(item.action)"
+                  >
+                    {{ item.buttonLabel }}
+                  </el-button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section v-if="doctorJourneyStages.length && !isMedicalRecordMode && !isPrescriptionMode" class="card panel journey-stage-panel">
             <div class="head">
               <div>
                 <h3>阶段工作台</h3>
@@ -567,13 +821,13 @@
             </div>
           </section>
 
-          <section v-show="showDetailSection('chief')" class="card panel">
+          <section v-show="showDetailSection('chief')" ref="detailChiefPanelRef" class="card panel">
             <h3>主诉与健康摘要</h3>
             <p class="copy">{{ detail.chiefComplaint || '暂无主诉信息' }}</p>
             <p class="copy">{{ detail.healthSummary || '暂无健康摘要' }}</p>
           </section>
 
-          <section v-show="showDetailSection('answers')" class="card panel">
+          <section v-show="showDetailSection('answers')" ref="detailAnswersPanelRef" class="card panel">
             <h3>问诊答案</h3>
             <div v-if="detail.answers?.length" class="list">
               <article v-for="item in detail.answers" :key="`${item.fieldCode}-${item.id || item.fieldLabel}`" class="subcard">
@@ -1733,7 +1987,7 @@
           </section>
 
           <section
-            v-if="detail && detail.status !== 'completed' && (canEdit || canClaimCurrent) && handleCompletionChecklistItems.length"
+            v-if="detail && detail.status !== 'completed' && (canEdit || canClaimCurrent) && handleCompletionChecklistItems.length && !isMedicalRecordMode && !isPrescriptionMode"
             class="card panel completion-checklist-panel"
           >
             <div class="head">
@@ -1764,7 +2018,7 @@
             </div>
           </section>
 
-          <section v-if="detail" class="doctor-action-bar">
+          <section v-if="detail && !isMedicalRecordMode && !isPrescriptionMode" class="doctor-action-bar">
             <div class="doctor-action-bar-copy">
               <strong>{{ detailActionBarTitle }}</strong>
               <p>{{ detailActionBarHint }}</p>
@@ -1984,6 +2238,8 @@ const detailHandlePanelRef = ref(null)
 const detailConclusionPanelRef = ref(null)
 const messageInputRef = ref(null)
 const messageBoardRef = ref(null)
+const detailChiefPanelRef = ref(null)
+const detailAnswersPanelRef = ref(null)
 const messagePendingNewCount = ref(0)
 const messagePendingNewLabel = ref('')
 const messageLastSyncedAt = ref(null)
@@ -2071,6 +2327,8 @@ const consultationViewMode = computed(() => {
   if (route.path === '/doctor/prescription') return 'prescription'
   return 'consultation'
 })
+const isMedicalRecordMode = computed(() => consultationViewMode.value === 'medical-record')
+const isPrescriptionMode = computed(() => consultationViewMode.value === 'prescription')
 const consultationFilterVisibility = computed(() => {
   if (consultationViewMode.value === 'medical-record') {
     return { message: true, dispatch: false, followUp: true, patientAction: false, risk: false }
@@ -2200,6 +2458,17 @@ const consultationListEmptyDescription = computed(() => {
   if (hasNonDefaultListFilters.value) return '当前筛选下暂无匹配问诊，可恢复默认视图后继续查看。'
   return consultationViewConfig.value.emptyDescription
 })
+const detailDrawerTitle = computed(() => {
+  if (isMedicalRecordMode.value) return '电子病历书写'
+  if (isPrescriptionMode.value) return '处方与检查建议'
+  return '问诊详情'
+})
+const detailNavigationTitle = computed(() => isMedicalRecordMode.value ? '病历书写导航' : '连续处理导航')
+const detailNavigationDescription = computed(() => {
+  if (isMedicalRecordMode.value) return '围绕病历摘要、结构化结论和保存动作连续书写，不用退出当前记录。'
+  if (isPrescriptionMode.value) return '围绕检查建议、处方校验和风险提醒连续处理，不用关闭详情抽屉。'
+  return '按当前筛选结果连续查看问诊，并快速跳到常用处理区，不用关闭详情抽屉。'
+})
 const detailMessageSummary = computed(() => getMessageSummary(detail.value))
 const messageSyncText = computed(() => {
   if (messageSyncStatus.value === 'failed') {
@@ -2224,6 +2493,174 @@ const messagePendingNewText = computed(() => {
   return label ? `${label}，跳到最新` : '收到新消息，跳到最新'
 })
 const detailArchiveSummary = computed(() => detail.value?.archiveSummary || null)
+const medicalRecordProgressItems = computed(() => [
+  { key: 'summary', label: '病历摘要', done: !!trimText(handleForm.summary), action: 'handle' },
+  { key: 'advice', label: '处理建议', done: !!trimText(handleForm.medicalAdvice), action: 'handle' },
+  { key: 'diagnosis', label: '诊断方向', done: !!trimText(conclusionForm.diagnosisDirection), action: 'conclusion' },
+  { key: 'condition', label: '病情等级', done: !!conclusionForm.conditionLevel, action: 'conclusion' },
+  { key: 'disposition', label: '处理去向', done: !!conclusionForm.disposition, action: 'conclusion' },
+  { key: 'instruction', label: '患者指导', done: !!trimText(conclusionForm.patientInstruction), action: 'conclusion' }
+])
+const medicalRecordProgressText = computed(() => {
+  const total = medicalRecordProgressItems.value.length
+  const done = medicalRecordProgressItems.value.filter(item => item.done).length
+  return `已完成 ${done} / ${total} 项`
+})
+const medicalRecordLeadText = computed(() => {
+  const firstPending = medicalRecordProgressItems.value.find(item => !item.done)
+  if (!firstPending) return '当前病历核心内容已经基本补齐，可继续复核后完成本次处理。'
+  return `建议先补齐“${firstPending.label}”，再完成病历保存，这样整体书写会更连贯。`
+})
+const medicalRecordActionTitle = computed(() => {
+  if (canClaimCurrent.value) return '先认领当前病历，再进入书写'
+  if (handleCompletionChecklistReady.value) return '病历核心内容已补齐，可以直接完成病历'
+  const firstPending = handleCompletionChecklistItems.value.find(item => !item.done)
+  return firstPending ? `建议继续补齐“${firstPending.label}”` : '继续完善当前病历'
+})
+const medicalRecordActionHint = computed(() => {
+  if (canClaimCurrent.value) return claimContinuationHint.value || '认领后系统会自动把你带到最需要处理的病历区域。'
+  if (handleCompletionChecklistReady.value) return '当前病历摘要、处理建议和结构化结论已经基本完整，可直接保存完成。'
+  const firstPending = handleCompletionChecklistItems.value.find(item => !item.done)
+  return firstPending ? `${firstPending.hint} 补齐后再完成病历，会更顺手。` : '可以先暂存病历，再继续补充细节。'
+})
+const prescriptionWorkspaceProgressText = computed(() => {
+  const parts = [
+    handleForm.checkSuggestions.length > 0,
+    effectivePrescriptionCount.value > 0,
+    !prescriptionConflictDetected.value && !prescriptionValidationWarningText.value,
+    !!trimText(conclusionForm.patientInstruction)
+  ]
+  const done = parts.filter(Boolean).length
+  return `已完成 ${done} / 4 项`
+})
+const prescriptionWorkspaceLeadText = computed(() => {
+  if (prescriptionConflictDetected.value) return '当前处方已识别到联用冲突，建议先调整药品组合，再继续提交处理。'
+  if (prescriptionValidationWarningText.value) return '当前处方仍有基础字段待补充，建议先完善剂量、频次或疗程。'
+  if (!effectivePrescriptionCount.value && !handleForm.checkSuggestions.length) return '建议先判断是否需要补充检查建议，再决定是否开具处方。'
+  if (!trimText(conclusionForm.patientInstruction)) return '处方和检查建议补齐后，记得同步补充患者指导，方便患者按要求执行。'
+  return '当前处方区核心信息已基本齐全，可继续复核禁忌提醒后完成本次处理。'
+})
+const prescriptionWorkspaceRiskSummary = computed(() => {
+  if (prescriptionConflictDetected.value) return prescriptionConflictWarningText.value
+  if (prescriptionValidationWarningText.value) return prescriptionValidationWarningText.value
+  if (prescriptionOverallWarningText.value) return prescriptionOverallWarningText.value
+  if (!effectivePrescriptionCount.value) return '当前还未录入处方药品，系统会在你填写后自动进行禁忌与联用检测。'
+  return '当前处方未识别到联用冲突，可继续结合患者情况复核用药合理性。'
+})
+const prescriptionWorkspacePatientInsight = computed(() => {
+  if (latestMedicationFeedback.value) {
+    return latestMedicationFeedback.value.feedbackSummary
+      || latestMedicationFeedback.value.doctorQuestion
+      || '患者已补充最新用药反馈，建议回看后再决定是否调整处方。'
+  }
+  if (latestPatientCheckResultUpdate.value) {
+    return latestPatientCheckResultUpdate.value.content || '患者已补充最新检查结果，建议结合结果继续开具检查建议或处方。'
+  }
+  return '当前暂未收到新的检查结果或用药反馈，可先完成检查建议与处方录入。'
+})
+const prescriptionWorkspaceMedicineSummary = computed(() => effectivePrescriptionRows()
+  .map(item => prescriptionMedicineLabel(item))
+  .filter(Boolean)
+  .slice(0, 3)
+  .join('、'))
+const prescriptionWorkspaceActionTitle = computed(() => {
+  if (canClaimCurrent.value) return '先认领当前问诊，再进入处方处理'
+  if (prescriptionConflictDetected.value) return '当前处方存在联用冲突，建议先调整后再提交'
+  if (prescriptionValidationWarningText.value) return '当前处方仍有待补充字段，建议先完善后再提交'
+  if (!trimText(conclusionForm.patientInstruction)) return '记得补充患者指导，避免患者拿到处方后执行不清晰'
+  return '当前处方区可以继续暂存，也可以直接完成本次处理'
+})
+const prescriptionWorkspaceActionHint = computed(() => {
+  if (canClaimCurrent.value) return claimContinuationHint.value || '认领后系统会自动把你带到最需要处理的处方区域。'
+  if (prescriptionConflictDetected.value) return prescriptionConflictWarningText.value
+  if (prescriptionValidationWarningText.value) return prescriptionValidationWarningText.value
+  if (!trimText(conclusionForm.patientInstruction)) return '建议在结构化结论里补充患者指导要点，把用药和复查注意事项一起交代清楚。'
+  return '当前未识别到处方冲突，检查建议、处方和患者指导补齐后即可完成处理。'
+})
+const consultationModeWorkspaceCards = computed(() => {
+  if (!detail.value || isMedicalRecordMode.value || isPrescriptionMode.value) return []
+  const detailId = detail.value.id
+  const canRoute = !!detailId
+  const conversationPending = !hasDoctorReplyInDetail.value || hasUnreadMessages(detail.value) || waitingDoctorReply(detail.value)
+  const hasPrescriptionWork = effectivePrescriptionCount.value > 0
+    || handleForm.checkSuggestions.length > 0
+    || !!latestMedicationFeedback.value
+    || !!latestPatientCheckResultUpdate.value
+  return [
+    {
+      key: 'reply',
+      title: '先沟通补充病情',
+      description: conversationPending
+        ? '当前仍建议先和患者确认症状变化、检查结果或补充图片，再进入后续处理。'
+        : '当前沟通已建立，如需继续追问或同步建议，可随时回到沟通区。',
+      status: conversationPending ? '优先处理' : '可继续补充',
+      tone: conversationPending ? 'warning' : 'success',
+      tags: [
+        detailMessageSummary.value.totalCount ? `沟通 ${detailMessageSummary.value.totalCount} 条` : '尚无沟通',
+        hasUnreadMessages(detail.value) ? `未读 ${getMessageSummary(detail.value).unreadCount} 条` : '沟通已查看'
+      ],
+      buttonLabel: conversationPending ? '去沟通区' : '查看沟通',
+      buttonType: conversationPending ? 'primary' : 'default',
+      action: 'reply',
+      disabled: !canRoute
+    },
+    {
+      key: 'medical_record',
+      title: '进入病历书写',
+      description: '适合沉淀医生判断摘要、处理建议、病情等级和患者指导，完成本次病历记录。',
+      status: hasDoctorConclusionContent.value ? '已开始书写' : trimText(handleForm.summary) ? '已写摘要' : '待书写',
+      tone: hasDoctorConclusionContent.value ? 'success' : trimText(handleForm.summary) ? 'warning' : 'info',
+      tags: [
+        trimText(handleForm.summary) ? '已有病历摘要' : '暂无病历摘要',
+        hasDoctorConclusionContent.value ? '已有结构化结论' : '待补结构化结论'
+      ],
+      buttonLabel: '去病历页',
+      buttonType: 'primary',
+      action: 'open_medical_record',
+      disabled: !canRoute
+    },
+    {
+      key: 'prescription',
+      title: '进入处方与检查区',
+      description: '适合集中处理检查建议、处方录入、禁忌校验和患者用药反馈。',
+      status: prescriptionConflictDetected.value
+        ? '存在冲突待处理'
+        : hasPrescriptionWork
+          ? '已有处方或检查内容'
+          : '待评估是否开具',
+      tone: prescriptionConflictDetected.value ? 'danger' : hasPrescriptionWork ? 'warning' : 'info',
+      tags: [
+        effectivePrescriptionCount.value ? `处方 ${effectivePrescriptionCount.value} 项` : '暂无处方',
+        handleForm.checkSuggestions.length ? `检查建议 ${handleForm.checkSuggestions.length} 项` : '暂无检查建议'
+      ],
+      buttonLabel: prescriptionConflictDetected.value ? '去调整处方' : '去处方页',
+      buttonType: prescriptionConflictDetected.value ? 'warning' : 'primary',
+      action: 'open_prescription',
+      disabled: !canRoute
+    }
+  ]
+})
+const consultationHubLeadText = computed(() => {
+  const recommended = consultationModeWorkspaceCards.value.find(item => item.tone === 'warning' || item.tone === 'danger')
+  return recommended
+    ? `建议先处理“${recommended.title}”，系统已经把当前问诊最需要推进的工作区单独拎出来。`
+    : '当前沟通、病历和处方都可以继续推进，你可以按本次接诊重点直接进入对应工作区。'
+})
+const consultationHubSummaryText = computed(() => {
+  if (!consultationModeWorkspaceCards.value.length) return '暂无可用工作区'
+  const active = consultationModeWorkspaceCards.value.filter(item => item.tone === 'warning' || item.tone === 'danger').length
+  return active > 0 ? `当前有 ${active} 个优先处理方向` : '当前各工作区状态平稳'
+})
+const medicalRecordAnswerHighlights = computed(() => {
+  const answers = Array.isArray(detail.value?.answers) ? detail.value.answers : []
+  return answers
+    .filter(item => item?.fieldType !== 'upload' && trimText(displayAnswer(item)))
+    .slice(0, 6)
+    .map(item => ({
+      label: item.fieldLabel || '问诊信息',
+      value: abbreviateText(displayAnswer(item), 80)
+    }))
+})
 const detailDraftNoticeText = computed(() => {
   if (!detail.value?.id || !doctorLocalDraftSavedAt.value) return ''
   if (doctorLocalDraftRestoredAt.value) {
@@ -2243,6 +2680,34 @@ const detailRecordPositionLabel = computed(() => {
   return `当前位于筛选结果第 ${detailRecordIndex.value + 1} / ${filteredRecords.value.length} 条`
 })
 const detailNavigationSectionItems = computed(() => {
+  if (isMedicalRecordMode.value) {
+    const sections = [
+      { key: 'basic', label: '基本信息' },
+      { key: 'chief', label: '主诉摘要' },
+      { key: 'answers', label: '问诊信息' },
+      { key: 'reply', label: '医患沟通' },
+      { key: 'handle', label: '病历正文' },
+      { key: 'conclusion', label: '病历结论' }
+    ]
+    if (detailArchiveSummary.value) sections.splice(1, 0, { key: 'archive', label: '归档摘要' })
+    if (detail.value?.doctorFollowUps?.length || canSubmitFollowUp.value) sections.push({ key: 'followup', label: '随访处理' })
+    if (detail.value?.serviceFeedback) sections.push({ key: 'feedback', label: '服务评价' })
+    return sections
+  }
+  if (isPrescriptionMode.value) {
+    const sections = [
+      { key: 'basic', label: '基本信息' },
+      { key: 'chief', label: '主诉摘要' },
+      { key: 'reply', label: '医患沟通' },
+      { key: 'handle', label: '处方与检查' },
+      { key: 'conclusion', label: '患者指导' }
+    ]
+    if (detailArchiveSummary.value) sections.splice(1, 0, { key: 'archive', label: '归档摘要' })
+    if (detail.value?.medicationFeedbacks?.length || detail.value?.reportFeedbacks?.length) sections.splice(3, 0, { key: 'answers', label: '补充信息' })
+    if (detail.value?.doctorFollowUps?.length || canSubmitFollowUp.value) sections.push({ key: 'followup', label: '随访处理' })
+    if (detail.value?.serviceFeedback) sections.push({ key: 'feedback', label: '服务评价' })
+    return sections
+  }
   const sections = [{ key: 'basic', label: '基本信息' }]
   if (detailArchiveSummary.value) sections.push({ key: 'archive', label: '归档摘要' })
   if (patientActionCards.value.length) sections.push({ key: 'patient_action', label: '患者动作' })
@@ -3376,11 +3841,13 @@ const workflowAssistantLeadText = computed(() => {
 
 function resolveConsultationAction(value) {
   const action = trimText(value)
-  return ['basic', 'archive', 'patient_action', 'assistant', 'reply', 'handle', 'conclusion', 'followup', 'feedback'].includes(action) ? action : ''
+  return ['basic', 'chief', 'answers', 'archive', 'patient_action', 'assistant', 'reply', 'handle', 'conclusion', 'followup', 'feedback'].includes(action) ? action : ''
 }
 function consultationActionStage(action) {
   return ({
     basic: 'intake',
+    chief: 'intake',
+    answers: 'intake',
     archive: 'intake',
     assistant: 'intake',
     patient_action: 'communication',
@@ -3397,7 +3864,7 @@ function currentDoctorConsultationPath(path = route.path) {
     : '/doctor/consultation'
 }
 function resolveDefaultConsultationAction(path = route.path) {
-  if (path === '/doctor/medical-record') return 'conclusion'
+  if (path === '/doctor/medical-record') return 'handle'
   if (path === '/doctor/prescription') return 'handle'
   return ''
 }
@@ -3426,7 +3893,7 @@ function focusDetailActionSection(action, detailId = null, options = {}) {
     doctorJourneyStage.value = targetStage
   }
   if (!['reply', 'followup', 'patient_action', 'feedback'].includes(targetAction)) {
-    if (['basic', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetAction)) {
+    if (['basic', 'chief', 'answers', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetAction)) {
       focusDetailPanelSection(targetAction, detailId, options)
     }
     return
@@ -3464,6 +3931,8 @@ function focusDetailActionSection(action, detailId = null, options = {}) {
 
 function resolveDetailSectionElement(sectionKey) {
   if (sectionKey === 'basic') return detailBasicPanelRef.value?.$el || detailBasicPanelRef.value
+  if (sectionKey === 'chief') return detailChiefPanelRef.value?.$el || detailChiefPanelRef.value
+  if (sectionKey === 'answers') return detailAnswersPanelRef.value?.$el || detailAnswersPanelRef.value
   if (sectionKey === 'archive') return detailArchivePanelRef.value?.$el || detailArchivePanelRef.value
   if (sectionKey === 'assistant') return workflowAssistantPanelRef.value?.$el || workflowAssistantPanelRef.value
   if (sectionKey === 'handle') return detailHandlePanelRef.value?.$el || detailHandlePanelRef.value
@@ -3481,7 +3950,7 @@ function focusDetailPanelSection(sectionKey, detailId = null, options = {}) {
   if (targetStage && detailViewMode.value === 'guided' && doctorJourneyStage.value !== targetStage) {
     doctorJourneyStage.value = targetStage
   }
-  if (!['basic', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetSection)) return
+  if (!['basic', 'chief', 'answers', 'archive', 'assistant', 'handle', 'conclusion'].includes(targetSection)) return
   const {
     behavior = 'smooth',
     block = 'start',
@@ -3519,6 +3988,32 @@ function openDoctorJourneyStage(stageKey) {
 }
 
 function showDetailSection(sectionKey) {
+  if (isMedicalRecordMode.value) {
+    const medicalRecordSections = ['basic', 'chief', 'answers', 'archive', 'reply', 'handle', 'conclusion', 'followup', 'feedback']
+    if (detailViewMode.value === 'all') return medicalRecordSections.includes(sectionKey)
+    const stage = doctorJourneyStage.value || 'intake'
+    const stageMap = {
+      intake: ['basic', 'chief', 'answers', 'archive'],
+      communication: ['chief', 'answers', 'reply', 'archive'],
+      plan: ['handle', 'reply', 'chief', 'answers'],
+      conclusion: ['handle', 'conclusion', 'archive'],
+      followup: ['followup', 'feedback', 'archive']
+    }
+    return (stageMap[stage] || stageMap.intake).includes(sectionKey)
+  }
+  if (isPrescriptionMode.value) {
+    const prescriptionSections = ['basic', 'chief', 'answers', 'archive', 'reply', 'handle', 'conclusion', 'followup', 'feedback']
+    if (detailViewMode.value === 'all') return prescriptionSections.includes(sectionKey)
+    const stage = doctorJourneyStage.value || 'plan'
+    const stageMap = {
+      intake: ['basic', 'chief', 'archive'],
+      communication: ['reply', 'chief', 'answers'],
+      plan: ['handle', 'reply', 'answers', 'chief'],
+      conclusion: ['handle', 'conclusion', 'archive'],
+      followup: ['followup', 'feedback', 'archive']
+    }
+    return (stageMap[stage] || stageMap.plan).includes(sectionKey)
+  }
   if (detailViewMode.value === 'all') return true
   const stage = doctorJourneyStage.value || 'intake'
   const stageMap = {
@@ -3550,6 +4045,58 @@ function openWorkflowStep(step) {
     handleWorkspaceTab.value = 'summary'
   }
   jumpToDetailSection(step.target, detail.value.id)
+}
+
+function openMedicalRecordEditor(target = 'summary') {
+  if (!detail.value?.id) return
+  if (target === 'summary') {
+    handleWorkspaceTab.value = 'summary'
+    jumpToDetailSection('handle', detail.value.id)
+    return
+  }
+  if (target === 'checks') {
+    handleWorkspaceTab.value = 'checks'
+    jumpToDetailSection('handle', detail.value.id)
+    return
+  }
+  if (target === 'prescription') {
+    handleWorkspaceTab.value = 'prescription'
+    jumpToDetailSection('handle', detail.value.id)
+    return
+  }
+  if (target === 'conclusion') {
+    jumpToDetailSection('conclusion', detail.value.id)
+    return
+  }
+  if (target === 'reply') {
+    jumpToDetailSection('reply', detail.value.id)
+  }
+}
+
+function openPrescriptionWorkspace(target = 'prescription') {
+  if (!detail.value?.id) return
+  if (target === 'checks') {
+    handleWorkspaceTab.value = 'checks'
+    jumpToDetailSection('handle', detail.value.id)
+    return
+  }
+  if (target === 'prescription') {
+    handleWorkspaceTab.value = 'prescription'
+    jumpToDetailSection('handle', detail.value.id)
+    return
+  }
+  if (target === 'handle') {
+    handleWorkspaceTab.value = 'summary'
+    jumpToDetailSection('handle', detail.value.id)
+    return
+  }
+  if (target === 'conclusion') {
+    jumpToDetailSection('conclusion', detail.value.id)
+    return
+  }
+  if (target === 'reply') {
+    jumpToDetailSection('reply', detail.value.id)
+  }
 }
 
 function openAdjacentDetail(step = 1) {
@@ -3730,6 +4277,28 @@ function syncListQuery(detailId = null, action = '') {
   if (isSameConsultationRouteQuery(nextQuery)) return
   router.replace({ path: currentDoctorConsultationPath(), query: nextQuery })
 }
+
+function openConsultationWorkspacePath(path, detailId = null, action = '') {
+  const targetPath = ['/doctor/consultation', '/doctor/medical-record', '/doctor/prescription'].includes(path)
+    ? path
+    : '/doctor/consultation'
+  const query = consultationRouteQuery(detailId, action)
+  router.push({ path: targetPath, query })
+}
+
+function runConsultationHubAction(action) {
+  if (!detail.value?.id || !action) return
+  if (action === 'open_medical_record') {
+    openConsultationWorkspacePath('/doctor/medical-record', detail.value.id, 'handle')
+    return
+  }
+  if (action === 'open_prescription') {
+    openConsultationWorkspacePath('/doctor/prescription', detail.value.id, 'handle')
+    return
+  }
+  runWorkflowAssistantAction(action)
+}
+
 function applyRouteFilters() {
   const defaults = buildModeDefaultFilters(route.path)
   const messageValue = trimText(route.query.messageFilter)
@@ -6679,6 +7248,14 @@ onMounted(() => {
   background: linear-gradient(180deg, rgba(225, 179, 63, 0.12), rgba(255, 255, 255, 0.96));
 }
 
+.medical-record-panel {
+  background: linear-gradient(180deg, rgba(30, 106, 134, 0.1), rgba(255, 255, 255, 0.98));
+}
+
+.prescription-workspace-panel {
+  background: linear-gradient(180deg, rgba(120, 89, 22, 0.12), rgba(255, 255, 255, 0.98));
+}
+
 .detail-nav-panel {
   background: linear-gradient(180deg, rgba(19, 73, 80, 0.08), rgba(255, 255, 255, 0.96));
 }
@@ -6697,6 +7274,10 @@ onMounted(() => {
 
 .doctor-todo-panel {
   background: linear-gradient(180deg, rgba(22, 119, 115, 0.12), rgba(255, 255, 255, 0.98));
+}
+
+.consultation-hub-panel {
+  background: linear-gradient(180deg, rgba(32, 96, 134, 0.1), rgba(255, 255, 255, 0.98));
 }
 
 .journey-stage-panel {
@@ -6902,6 +7483,12 @@ onMounted(() => {
   gap: 14px;
 }
 
+.consultation-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .workflow-assistant-card {
   display: flex;
   flex-direction: column;
@@ -6910,6 +7497,86 @@ onMounted(() => {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.consultation-hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(27, 96, 116, 0.1);
+}
+
+.consultation-hub-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.consultation-hub-card-head strong {
+  display: block;
+  color: #244d56;
+  margin-bottom: 6px;
+}
+
+.consultation-hub-card-head p {
+  margin: 0;
+  color: #48656d;
+  line-height: 1.75;
+}
+
+.consultation-hub-card-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.consultation-hub-card-meta span,
+.consultation-hub-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.consultation-hub-card-meta span {
+  background: rgba(19, 73, 80, 0.08);
+  color: #35535b;
+}
+
+.consultation-hub-status {
+  background: rgba(30, 106, 134, 0.12);
+  color: #1d627a;
+}
+
+.consultation-hub-status.is-success {
+  background: rgba(77, 168, 132, 0.16);
+  color: #1f6f4f;
+}
+
+.consultation-hub-status.is-warning {
+  background: rgba(210, 155, 47, 0.14);
+  color: #8f6514;
+}
+
+.consultation-hub-status.is-danger {
+  background: rgba(214, 95, 80, 0.14);
+  color: #9f4336;
+}
+
+.consultation-hub-status.is-info {
+  background: rgba(30, 106, 134, 0.12);
+  color: #1d627a;
+}
+
+.consultation-hub-actions {
+  margin-top: auto;
 }
 
 .workflow-assistant-card-head {
@@ -7037,6 +7704,157 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.medical-record-writing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.prescription-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.medical-record-writing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(19, 73, 80, 0.08);
+}
+
+.prescription-workspace-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(132, 102, 33, 0.1);
+}
+
+.medical-record-writing-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.prescription-workspace-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.medical-record-writing-head strong {
+  display: block;
+  color: #244d56;
+  margin-bottom: 6px;
+}
+
+.prescription-workspace-card-head strong {
+  display: block;
+  color: #5e4b1f;
+  margin-bottom: 6px;
+}
+
+.medical-record-writing-head p {
+  margin: 0;
+  color: #48656d;
+  line-height: 1.75;
+}
+
+.prescription-workspace-card-head p {
+  margin: 0;
+  color: #635947;
+  line-height: 1.75;
+}
+
+.medical-record-writing-head span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(19, 73, 80, 0.08);
+  color: #35535b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.prescription-workspace-card-head span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(132, 102, 33, 0.1);
+  color: #6b531b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.medical-record-writing-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prescription-workspace-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.medical-record-writing-preview p {
+  margin: 0;
+  color: #41575d;
+  line-height: 1.75;
+}
+
+.prescription-workspace-preview p {
+  margin: 0;
+  color: #4f4a3f;
+  line-height: 1.75;
+}
+
+.medical-record-save-bar {
+  margin-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(19, 73, 80, 0.08);
+}
+
+.medical-record-save-copy strong {
+  display: block;
+  color: #244d56;
+  margin-bottom: 6px;
+}
+
+.medical-record-save-copy p {
+  margin: 0;
+  color: #48656d;
+  line-height: 1.75;
+}
+
+.medical-record-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .detail-section-anchor {
   width: 100%;
   height: 0;
@@ -7137,6 +7955,84 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.medical-record-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.medical-record-card,
+.medical-record-highlight-item {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(17, 70, 77, 0.08);
+}
+
+.medical-record-card strong,
+.medical-record-highlight-item strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #274c55;
+}
+
+.medical-record-card p,
+.medical-record-highlight-item p {
+  margin: 0 0 10px;
+  color: #48656d;
+  line-height: 1.75;
+}
+
+.medical-record-progress-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.medical-record-progress-item {
+  border: 1px solid rgba(19, 73, 80, 0.1);
+  border-radius: 16px;
+  background: rgba(19, 73, 80, 0.04);
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.medical-record-progress-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(30, 106, 134, 0.24);
+  box-shadow: 0 10px 20px rgba(30, 106, 134, 0.08);
+}
+
+.medical-record-progress-item.is-done {
+  background: rgba(230, 244, 242, 0.9);
+}
+
+.medical-record-progress-item span {
+  display: block;
+  color: #31474d;
+  font-weight: 600;
+}
+
+.medical-record-progress-item small {
+  display: block;
+  margin-top: 6px;
+  color: var(--app-muted);
+}
+
+.medical-record-actions {
+  margin-top: 14px;
+}
+
+.medical-record-highlight-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
 }
 
 .archive-card,
@@ -7945,10 +8841,15 @@ onMounted(() => {
 @media (max-width: 1100px) {
   .stats,
   .grid,
+  .consultation-hub-grid,
   .prescription-grid,
   .patient-action-grid,
   .workflow-assistant-grid,
   .archive-grid,
+  .medical-record-grid,
+  .medical-record-writing-grid,
+  .prescription-workspace-grid,
+  .medical-record-highlight-list,
   .triage-doctor-list,
   .conclusion-compare-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7975,12 +8876,21 @@ onMounted(() => {
 
   .stats,
   .grid,
+  .consultation-hub-grid,
   .prescription-grid,
   .patient-action-grid,
   .workflow-assistant-grid,
   .archive-grid,
+  .medical-record-grid,
+  .medical-record-writing-grid,
+  .prescription-workspace-grid,
+  .medical-record-highlight-list,
   .triage-doctor-list,
   .conclusion-compare-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .medical-record-progress-list {
     grid-template-columns: 1fr;
   }
 
@@ -8012,6 +8922,19 @@ onMounted(() => {
 
   .message-card {
     max-width: 100%;
+  }
+
+  .medical-record-writing-head,
+  .prescription-workspace-card-head,
+  .consultation-hub-card-head,
+  .medical-record-save-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .medical-record-save-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .triage-session-head {
