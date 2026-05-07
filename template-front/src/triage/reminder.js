@@ -200,9 +200,9 @@ export function followUpReminderText(record) {
 export function serviceFeedbackReminderText(record) {
   const doctorName = currentDoctorName(record)
   if (doctorName) {
-    return `鏈闂瘖宸茬敱 ${doctorName} 瀹屾垚澶勭悊锛屾杩庤ˉ鍏呮湇鍔¤瘎鍒嗗拰闂鏄惁宸茶В鍐炽€?`
+    return `本次问诊已由 ${doctorName} 完成处理，欢迎补充服务评分和问题是否已解决。`
   }
-  return '鏈闂瘖宸插畬鎴愬尰鐢熷鐞嗭紝娆㈣繋琛ュ厖鏈嶅姟璇勫垎骞舵彁浜ら棶棰樻槸鍚﹀凡瑙ｅ喅銆?'
+  return '本次问诊已完成医生处理，欢迎补充服务评分并提交问题是否已解决。'
 }
 
 export function primaryReminderLabel(record) {
