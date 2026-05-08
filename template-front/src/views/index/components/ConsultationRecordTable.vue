@@ -258,7 +258,10 @@ defineExpose({ scrollIntoView })
   gap: 10px;
   flex-wrap: wrap;
   min-height: 40px;
-  padding: 4px 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(253, 254, 254, 0.98);
+  box-shadow: inset 1px 0 0 rgba(15, 102, 101, 0.08);
 }
 
 :deep(.el-table__fixed-right .el-table__fixed-body-wrapper td.el-table__cell),
@@ -266,6 +269,13 @@ defineExpose({ scrollIntoView })
 :deep(.el-table__fixed .el-table__fixed-body-wrapper td.el-table__cell),
 :deep(.el-table__fixed .el-table__header-wrapper th.el-table__cell) {
   background: #fdfefe;
+}
+
+:deep(.el-table .record-action-column.el-table__cell),
+:deep(.el-table__fixed-right .record-action-column.el-table__cell),
+:deep(.el-table__fixed .record-action-column.el-table__cell),
+:deep(.el-table__fixed-right-patch) {
+  background: #fdfefe !important;
 }
 
 :deep(.el-table .record-row-unread td.el-table__cell) {

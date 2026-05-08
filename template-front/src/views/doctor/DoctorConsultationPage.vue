@@ -654,7 +654,10 @@
             </div>
           </section>
 
-          <section v-if="detail && consultationModeWorkspaceCards.length && !isMedicalRecordMode && !isPrescriptionMode" class="card panel consultation-hub-panel">
+          <section
+            v-if="detail && consultationModeWorkspaceCards.length && !isMedicalRecordMode && !isPrescriptionMode && detailViewMode === 'all'"
+            class="card panel consultation-hub-panel"
+          >
             <div class="head">
               <div>
                 <span class="section-tag">接诊总控台</span>
@@ -2865,7 +2868,8 @@ const detailNavigationSectionItems = computed(() => {
   sections.push({ key: 'conclusion', label: '结构化结论' })
   sections.push({ key: 'followup', label: '随访处理' })
   if (detail.value?.serviceFeedback) sections.push({ key: 'feedback', label: '服务评价' })
-  return sections
+  if (detailViewMode.value === 'all') return sections
+  return sections.filter(item => showDetailSection(item.key))
 })
 const doctorWorkflowSteps = computed(() => {
   if (!detail.value) return []
@@ -4170,11 +4174,11 @@ function showDetailSection(sectionKey) {
   if (detailViewMode.value === 'all') return true
   const stage = doctorJourneyStage.value || 'intake'
   const stageMap = {
-    intake: ['basic', 'archive', 'assignment', 'dispatch', 'chief', 'answers', 'triage_result', 'triage_context', 'rule_hits'],
-    communication: ['patient_action', 'reply', 'ai_draft', 'triage_context'],
+    intake: ['basic', 'assignment', 'dispatch', 'chief', 'answers', 'triage_result'],
+    communication: ['patient_action', 'reply', 'ai_draft'],
     plan: ['assistant', 'reply', 'ai_draft', 'handle'],
-    conclusion: ['ai_draft', 'handle', 'conclusion'],
-    followup: ['followup', 'feedback', 'triage_feedback', 'patient_action', 'archive']
+    conclusion: ['assistant', 'handle', 'conclusion', 'archive'],
+    followup: ['patient_action', 'followup', 'feedback', 'archive']
   }
   return (stageMap[stage] || stageMap.intake).includes(sectionKey)
 }
@@ -4614,6 +4618,7 @@ function openDetail(id, routeAction = '') {
   flushDoctorLocalDraftBeforeReset()
   detailVisible.value = true
   detailLoading.value = true
+  detailViewMode.value = 'guided'
   if (!medicineOptions.value.length && !medicineLoading.value) loadMedicineOptions(true)
   stopMessagePolling()
   clearMessageNewState()
