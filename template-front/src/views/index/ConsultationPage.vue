@@ -39,533 +39,39 @@
       </article>
     </section>
 
-    <section class="reminder-grid">
-      <article class="reminder-card">
-        <div class="reminder-head">
-          <div>
-            <span class="panel-kicker">评价提醒</span>
-            <h3>待评价</h3>
-            <p>医生完成处理后，可在这里快速补充服务评分、问题是否解决和本次问诊体验。</p>
-          </div>
-          <el-tag type="info" effect="light">{{ pendingServiceFeedbackCount }}</el-tag>
-        </div>
-        <div v-if="pendingServiceFeedbackRecords.length" class="reminder-list">
-          <button
-            v-for="item in pendingServiceFeedbackRecords"
-            :key="`feedback-${item.id}`"
-            type="button"
-            class="reminder-item"
-            @click="openRecordDetail(item, { action: 'feedback' })"
-          >
-            <div class="reminder-item-head">
-              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
-              <span>{{ serviceFeedbackTimeText(item) }}</span>
-            </div>
-            <p>{{ serviceFeedbackReminderText(item) }}</p>
-            <div class="reminder-item-meta">
-              <span>{{ item.categoryName || '未分类' }}</span>
-              <span>待提交服务评价</span>
-            </div>
-          </button>
-        </div>
-        <el-empty v-else description="当前没有待评价的问诊" />
-        <div class="reminder-foot">
-          <el-button text @click="applyRecordQuickFilter({ progress: 'pending_feedback' })">只看待评价</el-button>
-        </div>
-      </article>
+    <ConsultationRemindersPanel
+      :panel-state="reminderPanelState"
+      :helpers="reminderPanelHelpers"
+      @open-record-detail="openRecordDetail"
+      @apply-record-quick-filter="applyRecordQuickFilter"
+    />
 
-      <article class="reminder-card">
-        <div class="reminder-head">
-          <div>
-            <span class="panel-kicker">消息提醒</span>
-            <h3>医生新回复</h3>
-            <p>优先查看医生刚回复的问诊，避免错过进一步处理建议。</p>
-          </div>
-          <el-tag type="success" effect="light">{{ unreadDoctorReplyCount }}</el-tag>
-        </div>
-        <div v-if="unreadReplyRecords.length" class="reminder-list">
-          <button
-            v-for="item in unreadReplyRecords"
-            :key="`reply-${item.id}`"
-            type="button"
-            class="reminder-item"
-            @click="openRecordDetail(item, { action: 'conversation' })"
-          >
-            <div class="reminder-item-head">
-              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
-              <span>{{ formatDate(getMessageSummary(item).latestTime) }}</span>
-            </div>
-            <p>{{ recordMessagePreview(item) }}</p>
-            <div class="reminder-item-meta">
-              <span>{{ item.categoryName || '未分类' }}</span>
-              <span>未读 {{ getMessageSummary(item).unreadCount }} 条</span>
-            </div>
-          </button>
-        </div>
-        <el-empty v-else description="当前没有新的医生回复" />
-        <div class="reminder-foot">
-          <el-button text @click="applyRecordQuickFilter({ progress: 'doctor_replied' })">只看医生新回复</el-button>
-        </div>
-      </article>
+    <ConsultationIntakePanel
+      :state="intakePanelState"
+      :helpers="intakePanelHelpers"
+      v-model:selectedPatientId="selectedPatientId"
+      v-model:intakeChiefComplaint="intakeChiefComplaint"
+      @refresh-categories="loadCategories"
+      @go-patient-management="router.push('/index/patient')"
+      @go-health-management="router.push('/index/health')"
+      @match-route="matchIntakeRoute"
+      @reset-form="resetForm"
+      @submit-consultation="submitConsultation"
+    />
 
-      <article class="reminder-card">
-        <div class="reminder-head">
-          <div>
-            <span class="panel-kicker">待处理</span>
-            <h3>待医生处理</h3>
-            <p>这些问诊还在等待医生接手或继续处理，可随时补充更多症状与资料。</p>
-          </div>
-          <el-tag type="warning" effect="light">{{ waitingDoctorHandleCount }}</el-tag>
-        </div>
-        <div v-if="waitingDoctorRecords.length" class="reminder-list">
-          <button
-            v-for="item in waitingDoctorRecords"
-            :key="`waiting-${item.id}`"
-            type="button"
-            class="reminder-item"
-            @click="openRecordDetail(item, { action: 'conversation' })"
-          >
-            <div class="reminder-item-head">
-              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
-              <span>{{ formatDate(item.createTime) }}</span>
-            </div>
-            <p>{{ recordProgressHint(item) }}</p>
-            <div class="reminder-item-meta">
-              <span>{{ item.categoryName || '未分类' }}</span>
-              <span>{{ smartDispatchStatusLabel(item.smartDispatch) }}</span>
-            </div>
-          </button>
-        </div>
-        <el-empty v-else description="当前没有待医生处理的问诊" />
-        <div class="reminder-foot">
-          <el-button text @click="applyRecordQuickFilter({ progress: 'waiting_doctor' })">只看待处理问诊</el-button>
-        </div>
-      </article>
-
-      <article class="reminder-card reminder-card-followup">
-        <div class="reminder-head">
-          <div>
-            <span class="panel-kicker">随访提醒</span>
-            <h3>待随访提醒</h3>
-            <p>及时查看需要继续跟进的问诊，尤其是今日到期和已逾期的随访。</p>
-          </div>
-          <div class="reminder-tags">
-            <el-tag type="primary" effect="light">{{ pendingFollowUpCount }}</el-tag>
-            <el-tag v-if="dueTodayFollowUpCount" type="warning" effect="light">今日 {{ dueTodayFollowUpCount }}</el-tag>
-            <el-tag v-if="overdueFollowUpCount" type="danger" effect="light">逾期 {{ overdueFollowUpCount }}</el-tag>
-          </div>
-        </div>
-        <div v-if="followUpReminderRecords.length" class="reminder-list">
-          <button
-            v-for="item in followUpReminderRecords"
-            :key="`followup-${item.id}`"
-            type="button"
-            :class="['reminder-item', followUpReminderItemClass(item)]"
-            @click="openRecordDetail(item, { action: 'followup' })"
-          >
-            <div class="reminder-item-head">
-              <strong>{{ item.patientName || '未命名就诊人' }}</strong>
-              <span>{{ followUpLine(item) }}</span>
-            </div>
-            <p>{{ item?.doctorConclusion?.patientInstruction || item?.doctorHandle?.followUpPlan || '医生已建议继续关注恢复情况。' }}</p>
-            <div class="reminder-item-meta">
-              <span>{{ item.categoryName || '未分类' }}</span>
-              <span>{{ followUpTagLabel(item) }}</span>
-            </div>
-          </button>
-        </div>
-        <el-empty v-else description="当前没有待随访问诊" />
-        <div class="reminder-foot">
-          <el-button text @click="applyRecordQuickFilter({ followUp: 'pending' })">只看待随访</el-button>
-          <el-button v-if="overdueFollowUpCount" text type="danger" @click="applyRecordQuickFilter({ followUp: 'overdue' })">优先看逾期</el-button>
-        </div>
-      </article>
-    </section>
-
-    <section class="entry-layout">
-      <div class="side-card">
-        <div class="panel-head">
-          <div>
-            <span class="panel-kicker">步骤一</span>
-            <h3>描述本次不适症状</h3>
-            <p>先告诉系统你哪里不舒服，系统会先匹配更合适的专科方向，再进入对应的问诊模板。</p>
-          </div>
-          <el-button text @click="loadCategories">刷新模板数据</el-button>
-        </div>
-
-        <div class="intake-block">
-          <el-input
-            v-model="intakeChiefComplaint"
-            type="textarea"
-            :rows="5"
-            maxlength="200"
-            show-word-limit
-            placeholder="例如：我的脚疼，走路时更明显，已经两天了。"
-          />
-          <div class="quick-chip-row">
-            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '我的脚疼，走路时更明显，已经两天了'">脚疼</button>
-            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '孩子发烧咳嗽，精神不太好'">孩子发烧</button>
-            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '身上起了红疹，还很痒'">皮疹瘙痒</button>
-            <button type="button" class="quick-chip" @click="intakeChiefComplaint = '我想看体检报告，帮我解读一下'">报告解读</button>
-          </div>
-        </div>
-
-        <div class="patient-block">
-          <div class="panel-head compact">
-            <div>
-              <span class="panel-kicker">步骤二</span>
-              <h3>选择就诊人</h3>
-            </div>
-            <el-button text @click="router.push('/index/patient')">去管理</el-button>
-          </div>
-
-          <el-select
-            v-model="selectedPatientId"
-            filterable
-            style="width: 100%"
-            placeholder="请选择就诊人"
-          >
-            <el-option
-              v-for="item in patients"
-              :key="item.id"
-              :label="`${item.name} / ${relationLabel(item.relationType)}${item.isDefault === 1 ? ' / 默认' : ''}`"
-              :value="item.id"
-            />
-          </el-select>
-
-          <div v-if="selectedPatient" class="patient-card">
-            <div class="patient-top">
-              <div>
-                <strong>{{ selectedPatient.name }}</strong>
-                <span>{{ relationLabel(selectedPatient.relationType) }}</span>
-              </div>
-              <el-tag :type="selectedPatient.status === 1 ? 'success' : 'info'" effect="light">
-                {{ selectedPatient.status === 1 ? '可用' : '停用' }}
-              </el-tag>
-            </div>
-            <div class="patient-meta">
-              <span>性别：{{ genderLabel(selectedPatient.gender) }}</span>
-              <span>年龄：{{ selectedPatient.age ?? '-' }}</span>
-              <span>电话：{{ selectedPatient.phone || '-' }}</span>
-            </div>
-            <div class="health-summary">
-              <strong>健康档案摘要</strong>
-              <p>{{ currentHealthSummary }}</p>
-              <el-button text @click="router.push('/index/health')">去完善健康档案</el-button>
-            </div>
-          </div>
-        </div>
-
-        <div class="route-action-row">
-          <el-button
-            plain
-            :loading="routingLoading"
-            :disabled="!selectedPatientId || !intakeChiefComplaint.trim()"
-            @click="matchIntakeRoute('quick')"
-          >
-            快速匹配
-          </el-button>
-          <el-button
-            type="primary"
-            :loading="routingLoading"
-            :disabled="!selectedPatientId || !intakeChiefComplaint.trim()"
-            @click="matchIntakeRoute('ai')"
-          >
-            智能匹配
-          </el-button>
-        </div>
-
-        <div v-if="currentRouteSummary && currentCategory" class="route-result-card">
-          <div class="route-result-head">
-            <div>
-              <span class="panel-kicker">匹配结果</span>
-              <h4>{{ currentCategory.departmentName || '综合问诊' }}</h4>
-            </div>
-            <div class="route-result-tags">
-              <el-tag :type="currentRouteSummary.matchMode === 'quick' ? 'info' : 'primary'" effect="light">
-                {{ routeModeLabel }}
-              </el-tag>
-              <el-tag type="success" effect="light">
-                {{ routeSelectionLabel }}
-              </el-tag>
-            </div>
-          </div>
-          <p>{{ routeDescriptionText }}</p>
-          <div class="template-meta">
-            <span>问诊分类：{{ currentCategory.name }}</span>
-            <span>参考费用：{{ formatAmount(currentCategory.priceAmount) }}</span>
-            <span>模板：{{ template?.name || currentRouteSummary.template?.name || '-' }}</span>
-            <span v-if="currentRouteSummary.confidenceScore !== null && currentRouteSummary.confidenceScore !== undefined">
-              匹配置信度：{{ currentRouteSummary.confidenceScore }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-card">
-        <div class="panel-head">
-          <div>
-            <span class="panel-kicker">步骤三</span>
-            <h3>填写专科问诊资料</h3>
-            <p v-if="currentCategory">
-              {{ currentCategory.name }}{{ currentCategory.departmentName ? ` · ${currentCategory.departmentName}` : '' }}
-            </p>
-            <p v-else>完成智能匹配后，系统会自动加载对应专科模板。</p>
-          </div>
-          <div class="panel-actions">
-            <el-button @click="resetForm" :disabled="!template">重置表单</el-button>
-            <el-button type="primary" :loading="submitting" :disabled="!routeReady || !selectedPatientId" @click="submitConsultation">
-              提交并进入智能导诊
-            </el-button>
-          </div>
-        </div>
-
-        <div v-if="currentCategory" class="template-meta">
-          <span>分类：{{ currentCategory.name }}</span>
-          <span>参考费用：{{ formatAmount(currentCategory.priceAmount) }}</span>
-          <span v-if="currentCategory.departmentName">科室：{{ currentCategory.departmentName }}</span>
-        </div>
-
-        <el-skeleton v-if="templateLoading || routingLoading" :rows="8" animated />
-
-        <template v-else-if="template && currentRouteSummary">
-          <el-alert
-            :title="template.description || routeDescriptionText"
-            type="info"
-            :closable="false"
-            class="template-alert"
-          />
-
-          <div class="template-meta">
-            <span>模板：{{ template.name }}</span>
-            <span>版本：V{{ template.version }}</span>
-            <span>字段数：{{ visibleFields.length }}</span>
-          </div>
-
-          <div class="field-list">
-            <article
-              v-for="field in visibleFields"
-              :key="field.fieldCode"
-              class="field-card"
-            >
-              <div class="field-head">
-                <div>
-                  <strong>{{ field.fieldLabel }}</strong>
-                  <span>{{ fieldTypeLabel(field.fieldType) }}{{ field.isRequired === 1 ? ' · 必填' : ' · 选填' }}</span>
-                </div>
-                <small v-if="field.helpText">{{ field.helpText }}</small>
-              </div>
-
-              <template v-if="field.fieldType === 'input'">
-                <el-input v-model="formData[field.fieldCode]" :placeholder="field.placeholder || `请输入${field.fieldLabel}`" />
-              </template>
-
-              <template v-else-if="field.fieldType === 'textarea'">
-                <el-input
-                  v-model="formData[field.fieldCode]"
-                  type="textarea"
-                  :rows="4"
-                  :placeholder="field.placeholder || `请输入${field.fieldLabel}`"
-                />
-              </template>
-
-              <template v-else-if="field.fieldType === 'single_select'">
-                <el-select v-model="formData[field.fieldCode]" style="width: 100%" :placeholder="field.placeholder || `请选择${field.fieldLabel}`">
-                  <el-option
-                    v-for="option in fieldOptions(field)"
-                    :key="option"
-                    :label="option"
-                    :value="option"
-                  />
-                </el-select>
-              </template>
-
-              <template v-else-if="field.fieldType === 'multi_select'">
-                <el-select
-                  v-model="formData[field.fieldCode]"
-                  multiple
-                  filterable
-                  collapse-tags
-                  collapse-tags-tooltip
-                  style="width: 100%"
-                  :placeholder="field.placeholder || `请选择${field.fieldLabel}`"
-                >
-                  <el-option
-                    v-for="option in fieldOptions(field)"
-                    :key="option"
-                    :label="option"
-                    :value="option"
-                  />
-                </el-select>
-              </template>
-
-              <template v-else-if="field.fieldType === 'date'">
-                <el-date-picker
-                  v-model="formData[field.fieldCode]"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  style="width: 100%"
-                  :placeholder="field.placeholder || `请选择${field.fieldLabel}`"
-                />
-              </template>
-
-              <template v-else-if="field.fieldType === 'number'">
-                <el-input-number v-model="formData[field.fieldCode]" :min="0" :max="999999" style="width: 100%" />
-              </template>
-
-              <template v-else-if="field.fieldType === 'switch'">
-                <el-switch
-                  v-model="formData[field.fieldCode]"
-                  active-value="1"
-                  inactive-value="0"
-                  inline-prompt
-                  active-text="是"
-                  inactive-text="否"
-                />
-              </template>
-
-              <template v-else-if="field.fieldType === 'upload'">
-                <div class="upload-row">
-                  <el-upload
-                    :action="uploadAction"
-                    :headers="uploadHeaders"
-                    :show-file-list="false"
-                    accept="image/*"
-                    :before-upload="beforeImageUpload"
-                    :on-success="(response) => handleUploadSuccess(field, response)"
-                    :on-error="handleUploadError"
-                  >
-                    <el-button type="primary" plain>上传图片资料</el-button>
-                  </el-upload>
-                  <span class="upload-tip">{{ field.helpText || '当前阶段支持上传图片资料。' }}</span>
-                </div>
-                <div v-if="formData[field.fieldCode]" class="upload-preview">
-                  <img :src="resolveImagePath(formData[field.fieldCode])" :alt="field.fieldLabel" />
-                  <div class="upload-actions">
-                    <span>已上传</span>
-                    <el-button link type="danger" @click="formData[field.fieldCode] = ''">移除</el-button>
-                  </div>
-                </div>
-              </template>
-            </article>
-          </div>
-        </template>
-
-        <el-empty v-else description="请先完成症状描述与智能匹配，再开始填写专科问诊资料">
-          <div class="route-action-row">
-            <el-button plain :disabled="!selectedPatientId || !intakeChiefComplaint.trim()" @click="matchIntakeRoute('quick')">快速匹配</el-button>
-            <el-button type="primary" :disabled="!selectedPatientId || !intakeChiefComplaint.trim()" @click="matchIntakeRoute('ai')">智能匹配</el-button>
-          </div>
-        </el-empty>
-      </div>
-    </section>
-
-    <section ref="historySectionRef" class="history-card">
-      <div class="panel-head">
-        <div>
-          <span class="panel-kicker">历史记录</span>
-          <h3>问诊记录</h3>
-        </div>
-        <el-button @click="refreshRecords">刷新记录</el-button>
-      </div>
-
-      <div class="history-toolbar">
-        <el-input v-model="recordKeyword" clearable placeholder="搜索标题、分类、就诊人或消息" style="width: 260px" />
-        <el-select v-model="recordStatusFilter" clearable placeholder="全部状态" style="width: 150px">
-          <el-option label="已提交" value="submitted" />
-          <el-option label="已分诊" value="triaged" />
-          <el-option label="处理中" value="processing" />
-          <el-option label="已完成" value="completed" />
-        </el-select>
-        <el-select v-model="recordProgressFilter" style="width: 170px">
-          <el-option label="待评价" value="pending_feedback" />
-          <el-option label="全部进度" value="all" />
-          <el-option label="医生新回复" value="doctor_replied" />
-          <el-option label="待医生处理" value="waiting_doctor" />
-          <el-option label="医生处理中" value="doctor_processing" />
-          <el-option label="已完成" value="completed" />
-        </el-select>
-        <el-select v-model="recordFollowUpFilter" style="width: 170px">
-          <el-option label="全部随访" value="all" />
-          <el-option label="待随访" value="pending" />
-          <el-option label="今日到期" value="due_today" />
-          <el-option label="已逾期" value="overdue" />
-        </el-select>
-      </div>
-
-      <el-table :data="filteredRecords" :row-key="row => row.id" v-loading="historyLoading" border :row-class-name="recordRowClassName">
-        <el-table-column label="初步分诊" min-width="140" align="center">
-          <template #default="{ row }">
-            <span class="triage-badge" :style="triageBadgeStyle(row.triageLevelColor)">
-              {{ row.triageLevelName || '待评估' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="consultationNo" label="记录编号" min-width="170" />
-        <el-table-column prop="patientName" label="就诊人" min-width="120" />
-        <el-table-column prop="categoryName" label="分类" min-width="140" />
-        <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
-        <el-table-column label="状态" width="110" align="center">
-          <template #default="{ row }">
-            <el-tag type="warning" effect="light">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="收费" min-width="170">
-          <template #default="{ row }">
-            <div class="record-message-cell">
-              <el-tag :type="paymentStatusTagType(row.payment)" effect="light">{{ paymentStatusLabel(row.payment) }}</el-tag>
-              <span>{{ formatAmount(row.payment?.amount) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="智能分配" min-width="220">
-          <template #default="{ row }">
-            <div class="record-message-cell">
-              <strong>{{ smartDispatchStatusLabel(row.smartDispatch) }}</strong>
-              <span>{{ smartDispatchLine(row) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="沟通状态" min-width="220">
-          <template #default="{ row }">
-            <div class="record-message-cell">
-              <strong>{{ recordMessageStatus(row) }}</strong>
-              <span>{{ recordMessagePreview(row) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="问诊进度" min-width="180">
-          <template #default="{ row }">
-            <div class="record-message-cell">
-              <el-tag :type="recordProgressTagType(row)" effect="light">{{ recordProgressLabel(row) }}</el-tag>
-              <span>{{ recordProgressHint(row) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="随访提醒" min-width="180">
-          <template #default="{ row }">
-            <div class="record-message-cell">
-              <el-tag :type="followUpTagType(row)" effect="light">{{ followUpTagLabel(row) }}</el-tag>
-              <span>{{ followUpLine(row) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="healthSummary" label="健康摘要" min-width="220" show-overflow-tooltip />
-        <el-table-column label="提交时间" min-width="170">
-          <template #default="{ row }">
-            {{ formatDate(row.createTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="190" fixed="right" class-name="record-action-column">
-          <template #default="{ row }">
-            <div class="record-action-cell">
-              <el-button link type="primary" @click="openRecordDetail(row)">查看详情</el-button>
-              <el-button link type="success" @click="openTriageWorkspace(row.id)">智能导诊</el-button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-    </section>
+    <ConsultationRecordTable
+      ref="historySectionRef"
+      :records="filteredRecords"
+      :history-loading="historyLoading"
+      :helpers="recordTableHelpers"
+      v-model:recordKeyword="recordKeyword"
+      v-model:recordStatusFilter="recordStatusFilter"
+      v-model:recordProgressFilter="recordProgressFilter"
+      v-model:recordFollowUpFilter="recordFollowUpFilter"
+      @refresh-records="refreshRecords"
+      @open-record-detail="openRecordDetail"
+      @open-triage-workspace="openTriageWorkspace"
+    />
 
     <el-dialog v-model="detailVisible" title="问诊记录详情" width="900px" destroy-on-close>
       <div v-loading="detailLoading">
@@ -1792,6 +1298,9 @@ import { comparisonStatusClass, comparisonStatusLabel } from '@/triage/compariso
 import { normalizeSmartDispatch, smartDispatchHintText, smartDispatchStatusLabel, smartDispatchTagType } from '@/triage/dispatch'
 import { resolveDepartmentRoutingSnapshot, resolveTriageMessageInsight } from '@/triage/insight'
 import { isPendingServiceFeedbackRecord, serviceFeedbackBaseTime, serviceFeedbackReminderText } from '@/triage/reminder'
+import ConsultationIntakePanel from './components/ConsultationIntakePanel.vue'
+import ConsultationRecordTable from './components/ConsultationRecordTable.vue'
+import ConsultationRemindersPanel from './components/ConsultationRemindersPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -1959,6 +1468,80 @@ const visibleFields = computed(() => {
   const fields = template.value?.fields || []
   return fields.filter(field => isFieldVisible(field))
 })
+const reminderPanelState = computed(() => ({
+  pendingServiceFeedbackCount: pendingServiceFeedbackCount.value,
+  pendingServiceFeedbackRecords: pendingServiceFeedbackRecords.value,
+  unreadDoctorReplyCount: unreadDoctorReplyCount.value,
+  unreadReplyRecords: unreadReplyRecords.value,
+  waitingDoctorHandleCount: waitingDoctorHandleCount.value,
+  waitingDoctorRecords: waitingDoctorRecords.value,
+  pendingFollowUpCount: pendingFollowUpCount.value,
+  dueTodayFollowUpCount: dueTodayFollowUpCount.value,
+  overdueFollowUpCount: overdueFollowUpCount.value,
+  followUpReminderRecords: followUpReminderRecords.value
+}))
+const reminderPanelHelpers = {
+  formatDate,
+  getMessageSummary,
+  recordMessagePreview,
+  recordProgressHint,
+  smartDispatchStatusLabel,
+  followUpReminderItemClass,
+  followUpLine,
+  followUpTagLabel,
+  serviceFeedbackTimeText,
+  serviceFeedbackReminderText
+}
+const intakePanelState = computed(() => ({
+  patients: patients.value,
+  selectedPatient: selectedPatient.value,
+  currentHealthSummary: currentHealthSummary.value,
+  routingLoading: routingLoading.value,
+  submitting: submitting.value,
+  templateLoading: templateLoading.value,
+  currentRouteSummary: currentRouteSummary.value,
+  currentCategory: currentCategory.value,
+  routeModeLabel: routeModeLabel.value,
+  routeSelectionLabel: routeSelectionLabel.value,
+  routeDescriptionText: routeDescriptionText.value,
+  visibleFields: visibleFields.value,
+  formData,
+  uploadAction: uploadAction.value,
+  uploadHeaders: uploadHeaders.value,
+  template: template.value,
+  routeReady: routeReady.value
+}))
+const intakePanelHelpers = {
+  relationLabel,
+  genderLabel,
+  formatAmount,
+  fieldTypeLabel,
+  fieldOptions,
+  beforeImageUpload,
+  handleUploadSuccess,
+  handleUploadError,
+  resolveImagePath
+}
+const recordTableHelpers = {
+  triageBadgeStyle,
+  statusLabel,
+  paymentStatusTagType,
+  paymentStatusLabel,
+  formatAmount,
+  smartDispatchStatusLabel,
+  smartDispatchLine,
+  recordMessageStatus,
+  recordMessagePreview,
+  recordProgressTagType,
+  recordProgressLabel,
+  recordProgressHint,
+  followUpTagType,
+  followUpTagLabel,
+  followUpLine,
+  formatDate,
+  recordHasUnreadDoctorReply,
+  followUpState
+}
 const detailTriageMessages = computed(() => ensureArray(detailRecord.value?.triageSession?.messages).map(message => {
   const insight = resolveTriageMessageInsight(message)
   return {
